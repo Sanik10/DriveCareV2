@@ -6,46 +6,46 @@ export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ nullable: false, type: 'uuid' })  // Добавлен тип uuid
-  company_id: string;
+  @Column({ nullable: true, type: 'uuid' })  // Изменено: добавлен nullable: true
+  company_id: string | null;  // Изменено: добавлен union type с null
 
-  @Column({ nullable: false, type: 'varchar', length: 255 })  // Добавлен тип varchar с длиной
+  @Column({ nullable: false, type: 'varchar', length: 255 })
   email: string;
 
-  @Column({ nullable: false, type: 'varchar', length: 255 })  // Добавлен тип varchar с длиной
+  @Column({ nullable: false, type: 'varchar', length: 255 })
   password_hash: string;
 
-  @Column({ name: 'first_name', nullable: false, type: 'varchar', length: 100 })  // Добавлен тип varchar с длиной
+  @Column({ name: 'first_name', nullable: false, type: 'varchar', length: 100 })
   firstName: string;
 
-  @Column({ name: 'last_name', nullable: false, type: 'varchar', length: 100 })  // Добавлен тип varchar с длиной
+  @Column({ name: 'last_name', nullable: false, type: 'varchar', length: 100 })
   lastName: string;
 
-  @Column({ nullable: true, type: 'varchar', length: 50 })  // Добавлен тип varchar с длиной
+  @Column({ nullable: true, type: 'varchar', length: 50 })
   phone: string;
 
-  @Column({ name: 'avatar_url', nullable: true, type: 'varchar', length: 255 })  // Добавлен тип varchar с длиной
+  @Column({ name: 'avatar_url', nullable: true, type: 'varchar', length: 255 })
   avatarUrl: string;
 
-  @Column({ nullable: true, type: 'varchar', length: 100 })  // Добавлен тип varchar с длиной
+  @Column({ nullable: true, type: 'varchar', length: 100 })
   specialization: string;
 
-  @Column({ name: 'is_active', default: true, type: 'boolean' })  // Добавлен тип boolean
+  @Column({ name: 'is_active', default: true, type: 'boolean' })
   isActive: boolean;
 
-  @Column({ name: 'last_login_at', nullable: true, type: 'timestamp' })  // Добавлен тип timestamp
+  @Column({ name: 'last_login_at', nullable: true, type: 'timestamp' })
   lastLoginAt: Date;
 
   @ManyToOne(() => Role)
   @JoinColumn({ name: 'role_id' })
   role: Role;
 
-  @Column({ name: 'role_id', type: 'uuid' })  // Добавлен тип uuid
+  @Column({ name: 'role_id', type: 'uuid' })
   roleId: string;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })  // Добавлен тип timestamp
+  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })  // Добавлен тип timestamp
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
   updatedAt: Date;
 }

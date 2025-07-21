@@ -515,13 +515,13 @@ npm run typeorm migration:show
 psql -h localhost -p 5433 -U postgres -d drivecare
 
 # Подключение через Docker
-docker exec -it drivecarv2-postgres-1 psql -U postgres -d drivecare
+docker exec -it drivecarev2-postgres-1 psql -U postgres -d drivecare
 
 # Бэкап базы данных
-docker exec drivecarv2-postgres-1 pg_dump -U postgres drivecare > backup.sql
+docker exec drivecarev2-postgres-1 pg_dump -U postgres drivecare > backup.sql
 
 # Восстановление из бэкапа
-docker exec -i drivecarv2-postgres-1 psql -U postgres drivecare < backup.sql
+docker exec -i drivecarev2-postgres-1 psql -U postgres drivecare < backup.sql
 ```
 
 ---
