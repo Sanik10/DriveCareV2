@@ -1,12 +1,15 @@
-// src/customers/entities/customer.entity.ts
 import { 
   Entity, 
   Column, 
   PrimaryGeneratedColumn, 
   CreateDateColumn, 
   UpdateDateColumn,
-  OneToMany 
+  OneToMany,
+  ManyToOne,
+  JoinColumn,
+  Index
 } from 'typeorm';
+import { Company } from './company.entity';
 import { Vehicle } from './vehicle.entity';
 
 export enum CustomerType {
@@ -15,6 +18,9 @@ export enum CustomerType {
 }
 
 @Entity('customers')
+@Index(['companyId'])
+@Index(['email', 'companyId'], { unique: true })
+@Index(['isDeleted'])
 export class Customer {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -63,13 +69,22 @@ export class Customer {
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 
+  @Column({ name: 'is_deleted', type: 'boolean', default: false })
+  isDeleted: boolean;
+
+  @Column({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deletedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
   updatedAt: Date;
 
-  // Отношения
+  @ManyToOne(() => Company)
+  @JoinColumn({ name: 'company_id' })
+  company: Company;
+
   @OneToMany(() => Vehicle, vehicle => vehicle.customer)
   vehicles: Vehicle[];
 }

@@ -30,6 +30,23 @@ export enum AuditAction {
   SUBSCRIPTION_EXPIRED = 'SUBSCRIPTION_EXPIRED',
   SUBSCRIPTION_RENEWED = 'SUBSCRIPTION_RENEWED',
 
+  // Клиенты
+  CUSTOMER_CREATED = 'CUSTOMER_CREATED',
+  CUSTOMER_UPDATED = 'CUSTOMER_UPDATED',
+  CUSTOMER_STATUS_CHANGED = 'CUSTOMER_STATUS_CHANGED',
+  CUSTOMER_DELETED = 'CUSTOMER_DELETED',
+  CUSTOMER_VIEWED = 'CUSTOMER_VIEWED',
+
+  // 🔥 ДОБАВЛЕНО: Автомобили
+  VEHICLE_CREATED = 'VEHICLE_CREATED',
+  VEHICLE_UPDATED = 'VEHICLE_UPDATED',
+  VEHICLE_STATUS_CHANGED = 'VEHICLE_STATUS_CHANGED',
+  VEHICLE_DELETED = 'VEHICLE_DELETED',
+  VEHICLE_VIEWED = 'VEHICLE_VIEWED',
+  VEHICLE_SERVICE_COMPLETED = 'VEHICLE_SERVICE_COMPLETED',
+  VEHICLE_TRANSFERRED = 'VEHICLE_TRANSFERRED',
+  VEHICLE_MILEAGE_UPDATED = 'VEHICLE_MILEAGE_UPDATED',
+
   // Лимиты
   LIMIT_CHECK_FAILED = 'LIMIT_CHECK_FAILED',
   LIMIT_EXCEEDED = 'LIMIT_EXCEEDED',
@@ -41,7 +58,6 @@ export enum AuditLevel {
   ERROR = 'error',
 }
 
-// Расширенный интерфейс с полной обратной совместимостью
 interface AuditLogData {
   entityId?: string;
   entityType?: string;
@@ -53,13 +69,11 @@ interface AuditLogData {
     after?: any;
   };
   metadata?: Record<string, any>;
-  details?: Record<string, any>;  // Для auth модуля
+  details?: Record<string, any>;
   level?: AuditLevel;
-  status?: string;                // Для auth модуля (error, blocked, etc.)
+  status?: string;
   userAgent?: string;
   ipAddress?: string;
-  
-  // Дополнительные поля для полной совместимости
   [key: string]: any;
 }
 
@@ -73,14 +87,10 @@ export class AuditService {
       ...data,
     };
 
-    // Временно выводим в консоль, потом можно сохранять в БД
     console.log(`[AUDIT] ${action}:`, JSON.stringify(logEntry, null, 2));
-    
-    // TODO: Сохранить в audit_logs таблицу
-    // await this.auditLogRepository.save(logEntry);
   }
 
-  // Методы для аутентификации (существующие - полная совместимость)
+  // Методы для аутентификации (существующие)
   async logLogin(data: any): Promise<void> {
     this.log(AuditAction.USER_LOGIN, data);
   }
@@ -113,7 +123,7 @@ export class AuditService {
     this.log(AuditAction.USER_ALL_DEVICES_LOGOUT, data);
   }
 
-  // Новые методы для компаний (типизированные)
+  // Методы для компаний (существующие)
   async logCompanyCreated(data: AuditLogData): Promise<void> {
     this.log(AuditAction.COMPANY_CREATED, data);
   }
@@ -130,7 +140,7 @@ export class AuditService {
     this.log(AuditAction.COMPANY_DELETED, { ...data, level: AuditLevel.WARNING });
   }
 
-  // Методы для тарифов
+  // Методы для тарифов (существующие)
   async logTariffCreated(data: AuditLogData): Promise<void> {
     this.log(AuditAction.TARIFF_CREATED, data);
   }
@@ -147,7 +157,7 @@ export class AuditService {
     this.log(AuditAction.TARIFF_DELETED, { ...data, level: AuditLevel.WARNING });
   }
 
-  // Методы для подписок
+  // Методы для подписок (существующие)
   async logSubscriptionCreated(data: AuditLogData): Promise<void> {
     this.log(AuditAction.SUBSCRIPTION_CREATED, data);
   }
@@ -168,7 +178,61 @@ export class AuditService {
     this.log(AuditAction.SUBSCRIPTION_RENEWED, data);
   }
 
-  // Методы для лимитов
+  // Методы для клиентов (существующие)
+  async logCustomerCreated(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.CUSTOMER_CREATED, data);
+  }
+
+  async logCustomerUpdated(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.CUSTOMER_UPDATED, data);
+  }
+
+  async logCustomerStatusChanged(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.CUSTOMER_STATUS_CHANGED, data);
+  }
+
+  async logCustomerDeleted(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.CUSTOMER_DELETED, { ...data, level: AuditLevel.WARNING });
+  }
+
+  async logCustomerViewed(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.CUSTOMER_VIEWED, data);
+  }
+
+  // 🔥 НОВЫЕ: Методы для автомобилей
+  async logVehicleCreated(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.VEHICLE_CREATED, data);
+  }
+
+  async logVehicleUpdated(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.VEHICLE_UPDATED, data);
+  }
+
+  async logVehicleStatusChanged(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.VEHICLE_STATUS_CHANGED, data);
+  }
+
+  async logVehicleDeleted(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.VEHICLE_DELETED, { ...data, level: AuditLevel.WARNING });
+  }
+
+  async logVehicleViewed(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.VEHICLE_VIEWED, data);
+  }
+
+  async logVehicleServiceCompleted(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.VEHICLE_SERVICE_COMPLETED, data);
+  }
+
+  async logVehicleTransferred(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.VEHICLE_TRANSFERRED, data);
+  }
+
+  async logVehicleMileageUpdated(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.VEHICLE_MILEAGE_UPDATED, data);
+  }
+
+  // Методы для лимитов (существующие)
   async logLimitCheckFailed(data: AuditLogData): Promise<void> {
     this.log(AuditAction.LIMIT_CHECK_FAILED, { ...data, level: AuditLevel.ERROR });
   }

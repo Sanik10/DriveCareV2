@@ -7,12 +7,12 @@ export { Permission } from './permission.entity';
 
 // Company entities
 export { Company } from './company.entity';
-export { Subscription } from './subscription.entity';
+export { Subscription, SubscriptionStatus } from './subscription.entity';
 export { Tariff } from './tariff.entity';
 
 // Customer entities
-export { Customer } from './customer.entity';
-export { Vehicle } from './vehicle.entity';
+export { Customer, CustomerType } from './customer.entity';
+export { Vehicle, EngineType } from './vehicle.entity';
 export { VehicleBrand } from './vehicle-brand.entity';
 export { VehicleModel } from './vehicle-model.entity';
 export { VehicleType } from './vehicle-type.entity';

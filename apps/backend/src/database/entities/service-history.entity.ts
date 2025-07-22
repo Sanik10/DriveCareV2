@@ -1,4 +1,3 @@
-// src/service-history/entities/service-history.entity.ts
 import { 
   Entity, 
   Column, 
@@ -6,17 +5,26 @@ import {
   CreateDateColumn, 
   UpdateDateColumn,
   ManyToOne,
-  JoinColumn 
+  JoinColumn,
+  Index
 } from 'typeorm';
+import { Company } from './company.entity';
 import { Vehicle } from './vehicle.entity';
 
 @Entity('vehicles_service_history')
+@Index(['companyId'])
+@Index(['vehicleId'])
+@Index(['date'])
+@Index(['isDeleted'])
 export class VehicleServiceHistory {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ name: 'vehicle_id', type: 'uuid' })
   vehicleId: string;
+
+  @Column({ name: 'company_id', type: 'uuid' })
+  companyId: string;
 
   @Column({ name: 'order_id', type: 'uuid', nullable: true })
   orderId: string;
@@ -36,13 +44,22 @@ export class VehicleServiceHistory {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
+  @Column({ name: 'is_deleted', type: 'boolean', default: false })
+  isDeleted: boolean;
+
+  @Column({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deletedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
   updatedAt: Date;
 
-  // Отношения
+  @ManyToOne(() => Company)
+  @JoinColumn({ name: 'company_id' })
+  company: Company;
+
   @ManyToOne(() => Vehicle, vehicle => vehicle.serviceHistory)
   @JoinColumn({ name: 'vehicle_id' })
   vehicle: Vehicle;

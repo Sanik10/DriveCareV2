@@ -6,9 +6,12 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
-import { CompaniesModule } from './modules/companies/companies.module'; // 🔥 ДОБАВЛЕНО
-import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module'; // 🔥 ДОБАВЛЕНО
-import { TariffsModule } from './modules/tariffs/tariffs.module'; // 🔥 ДОБАВЛЕНО
+import { CompaniesModule } from './modules/companies/companies.module';
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { TariffsModule } from './modules/tariffs/tariffs.module';
+import { CustomersModule } from './modules/customers/customers.module'; // 🔥 ДОБАВЛЕНО
+import { VehiclesModule } from './modules/vehicles/vehicles.module'; // 🔥 ДОБАВЛЕНО
+import { VehiclesCatalogueModule } from './modules/vehicles-catalogue/vehicles-catalogue.module'; // 🔥 ДОБАВЛЕНО
 import { SeedsModule, SeedsService } from './database/seeds';
 
 @Module({
@@ -40,9 +43,12 @@ import { SeedsModule, SeedsService } from './database/seeds';
     // 🚀 ОСНОВНЫЕ МОДУЛИ В ПРАВИЛЬНОМ ПОРЯДКЕ
     AuthModule,           // Аутентификация - базовый модуль
     UsersModule,          // Пользователи
-    CompaniesModule,      // 🔥 Компании - основной модуль
-    TariffsModule,        // 🔥 Тарифы - нужны для подписок
-    SubscriptionsModule,  // 🔥 Подписки - зависят от компаний и тарифов
+    CompaniesModule,      // Компании - основной модуль
+    TariffsModule,        // Тарифы - нужны для подписок
+    SubscriptionsModule,  // Подписки - зависят от компаний и тарифов
+    CustomersModule,      // 🔥 Клиенты - нужны для автомобилей
+    VehiclesModule,       // 🔥 Автомобили - зависят от клиентов
+    VehiclesCatalogueModule, // 🔥 Каталог автомобилей - нужен для поиска
     SeedsModule,          // Seeds - последним для инициализации данных
   ],
   controllers: [AppController],

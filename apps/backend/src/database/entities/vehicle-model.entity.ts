@@ -1,17 +1,21 @@
-// src/vehicle-models/entities/vehicle-model.entity.ts
 import { 
   Entity, 
   Column, 
   PrimaryGeneratedColumn, 
   CreateDateColumn,
+  UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-  OneToMany 
+  OneToMany,
+  Index
 } from 'typeorm';
 import { VehicleBrand } from './vehicle-brand.entity';
 import { Vehicle } from './vehicle.entity';
 
 @Entity('vehicle_models')
+@Index(['brandId']) // 🔥 ДОБАВЛЕНО: Индекс для фильтрации по бренду
+@Index(['name', 'brandId'], { unique: true, where: 'is_deleted = false' }) // 🔥 ДОБАВЛЕНО: Уникальность модели в рамках бренда
+@Index(['isDeleted']) // 🔥 ДОБАВЛЕНО: Soft delete индекс
 export class VehicleModel {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -31,8 +35,22 @@ export class VehicleModel {
   @Column({ type: 'varchar', length: 50, nullable: true })
   class: string;
 
+  @Column({ name: 'is_active', type: 'boolean', default: true })
+  isActive: boolean;
+
+  // 🔥 ДОБАВЛЕНО: Soft Delete поддержка
+  @Column({ name: 'is_deleted', type: 'boolean', default: false })
+  isDeleted: boolean;
+
+  @Column({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deletedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
+
+  // 🔥 ДОБАВЛЕНО: UpdateDateColumn
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
+  updatedAt: Date;
 
   // Отношения
   @ManyToOne(() => VehicleBrand, brand => brand.models)

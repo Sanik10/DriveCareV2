@@ -57,6 +57,64 @@ export class TariffHasActiveSubscriptionsException extends BadRequestException {
   }
 }
 
+// ====== CUSTOMERS EXCEPTIONS ======
+export class CustomerNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Клиент с ID ${id} не найден`);
+  }
+}
+
+export class CustomerEmailAlreadyExistsException extends ConflictException {
+  constructor(email: string, companyId: string) {
+    super(`Клиент с email ${email} уже существует в компании ${companyId}`);
+  }
+}
+
+// ====== VEHICLES EXCEPTIONS ======
+export class VehicleNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Автомобиль с ID ${id} не найден`);
+  }
+}
+
+export class VehicleVinAlreadyExistsException extends ConflictException {
+  constructor(vin: string) {
+    super(`Автомобиль с VIN ${vin} уже зарегистрирован в системе`);
+  }
+}
+
+export class VehicleLicensePlateAlreadyExistsException extends ConflictException {
+  constructor(licensePlate: string, companyId: string) {
+    super(`Автомобиль с номером ${licensePlate} уже зарегистрирован в компании`);
+  }
+}
+
+// ====== SERVICE HISTORY EXCEPTIONS ======
+export class ServiceHistoryNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Запись истории обслуживания с ID ${id} не найдена`);
+  }
+}
+
+// ====== VEHICLE CATALOGS EXCEPTIONS ======
+export class VehicleBrandNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Бренд автомобиля с ID ${id} не найден`);
+  }
+}
+
+export class VehicleModelNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Модель автомобиля с ID ${id} не найдена`);
+  }
+}
+
+export class VehicleTypeNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Тип автомобиля с ID ${id} не найден`);
+  }
+}
+
 // ====== LIMITS EXCEPTIONS ======
 export class CompanyLimitExceededException extends ForbiddenException {
   constructor(resourceType: string, currentCount: number, maxAllowed: number) {

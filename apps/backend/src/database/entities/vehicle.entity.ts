@@ -1,4 +1,3 @@
-// src/vehicles/entities/vehicle.entity.ts
 import { 
   Entity, 
   Column, 
@@ -7,8 +6,10 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-  OneToMany 
+  OneToMany,
+  Index
 } from 'typeorm';
+import { Company } from './company.entity';
 import { Customer } from './customer.entity';
 import { VehicleModel } from './vehicle-model.entity';
 import { VehicleType } from './vehicle-type.entity';
@@ -22,6 +23,12 @@ export enum EngineType {
 }
 
 @Entity('vehicles')
+@Index(['companyId'])
+@Index(['customerId'])
+@Index(['vin'], { unique: true, where: 'vin IS NOT NULL AND is_deleted = false' })
+@Index(['licensePlate', 'companyId'], { unique: true, where: 'license_plate IS NOT NULL AND is_deleted = false' })
+@Index(['isDeleted'])
+@Index(['isActive']) // 🔥 ДОБАВЛЕНО: Индекс для isActive
 export class Vehicle {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -75,13 +82,26 @@ export class Vehicle {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
+  // 🔥 ДОБАВЛЕНО: Поле isActive для управления активностью
+  @Column({ name: 'is_active', type: 'boolean', default: true })
+  isActive: boolean;
+
+  @Column({ name: 'is_deleted', type: 'boolean', default: false })
+  isDeleted: boolean;
+
+  @Column({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deletedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
   updatedAt: Date;
 
-  // Отношения
+  @ManyToOne(() => Company)
+  @JoinColumn({ name: 'company_id' })
+  company: Company;
+
   @ManyToOne(() => Customer, customer => customer.vehicles)
   @JoinColumn({ name: 'customer_id' })
   customer: Customer;
