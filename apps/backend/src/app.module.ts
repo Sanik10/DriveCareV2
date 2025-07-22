@@ -6,7 +6,10 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
-import { SeedsModule, SeedsService } from './database/seeds'; // Импорт в AppModule
+import { CompaniesModule } from './modules/companies/companies.module'; // 🔥 ДОБАВЛЕНО
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module'; // 🔥 ДОБАВЛЕНО
+import { TariffsModule } from './modules/tariffs/tariffs.module'; // 🔥 ДОБАВЛЕНО
+import { SeedsModule, SeedsService } from './database/seeds';
 
 @Module({
   imports: [
@@ -34,10 +37,13 @@ import { SeedsModule, SeedsService } from './database/seeds'; // Импорт в
       ttl: 60000,
       limit: 100,
     }]),
-    // Модули
-    AuthModule,
-    UsersModule,
-    SeedsModule, // SeedsModule в AppModule, не в AuthModule!
+    // 🚀 ОСНОВНЫЕ МОДУЛИ В ПРАВИЛЬНОМ ПОРЯДКЕ
+    AuthModule,           // Аутентификация - базовый модуль
+    UsersModule,          // Пользователи
+    CompaniesModule,      // 🔥 Компании - основной модуль
+    TariffsModule,        // 🔥 Тарифы - нужны для подписок
+    SubscriptionsModule,  // 🔥 Подписки - зависят от компаний и тарифов
+    SeedsModule,          // Seeds - последним для инициализации данных
   ],
   controllers: [AppController],
   providers: [AppService],
