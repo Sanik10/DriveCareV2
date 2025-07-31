@@ -1,13 +1,16 @@
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
   
-  // Global prefix
-  app.setGlobalPrefix('api/v1');
+  // Dynamic API prefix
+  const apiPrefix = configService.get('API_PREFIX', 'api/v1');
+  app.setGlobalPrefix(apiPrefix);
   
   // Global validation pipe
   app.useGlobalPipes(new ValidationPipe({
@@ -15,18 +18,15 @@ async function bootstrap() {
     transform: true,
   }));
 
-  // Swagger configuration with JWT
+  // Dynamic Swagger configuration
+  const swaggerTitle = configService.get('SWAGGER_TITLE', 'DriveCare API');
+  const swaggerDescription = configService.get('SWAGGER_DESCRIPTION', 'API документация');
+  const appVersion = configService.get('APP_VERSION', '2.0');
+  
   const config = new DocumentBuilder()
-    .setTitle('DriveCare API')
-    .setDescription('Система управления автосервисом - API документация')
-    .setVersion('2.0')
-    .addTag('🔐 Аутентификация', 'Регистрация, вход, управление сессиями')
-    .addTag('👥 Пользователи', 'Управление пользователями')
-    .addTag('🏢 Компании', 'Управление компаниями')
-    .addTag('🚗 Клиенты', 'Управление клиентами и транспортом')
-    .addTag('📋 Заказы', 'Управление заказами и услугами')
-    .addTag('📦 Склад', 'Управление складом и запчастями')
-    // Добавляем JWT авторизацию
+    .setTitle(swaggerTitle)
+    .setDescription(swaggerDescription)
+    .setVersion(appVersion)
     .addBearerAuth(
       {
         type: 'http',
@@ -36,32 +36,37 @@ async function bootstrap() {
         description: 'Введите JWT токен',
         in: 'header',
       },
-      'JWT-auth', // Это ключ, который используется в @ApiBearerAuth('JWT-auth')
+      'JWT-auth',
     )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document, {
+  const swaggerPath = configService.get('SWAGGER_PATH', 'docs');
+  SwaggerModule.setup(swaggerPath, app, document, {
     swaggerOptions: {
-      persistAuthorization: true, // Сохраняет токен между перезагрузками страницы
+      persistAuthorization: true,
       tagsSorter: 'alpha',
       operationsSorter: 'alpha',
     },
-    customSiteTitle: 'DriveCare API Docs',
+    customSiteTitle: `${swaggerTitle} Docs`,
   });
 
-  // CORS
+  // Dynamic CORS origins
+  const corsOrigins = configService.get('CORS_ORIGINS', 'http://localhost:3000,http://localhost:5173')
+    .split(',')
+    .map(origin => origin.trim());
+
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    origin: corsOrigins,
     credentials: true,
   });
 
-  const port = process.env.PORT || 3001;
+  const port = configService.get('PORT', 3001);
   await app.listen(port);
 
-  console.log(`🚀 DriveCare API running on: http://localhost:${port}`);
-  console.log(`📚 API Docs: http://localhost:${port}/docs`);
-  console.log(`🔍 API Health: http://localhost:${port}/api/v1/health`);
+  console.log(`🚀 ${swaggerTitle} running on: http://localhost:${port}`);
+  console.log(`📚 API Docs: http://localhost:${port}/${swaggerPath}`);
+  console.log(`🔍 API Health: http://localhost:${port}/${apiPrefix}/health`);
 }
 
 bootstrap();

@@ -75,13 +75,13 @@ export const INVENTORY_CONSTANTS = {
   },
 
   ROLES: {
-    CAN_VIEW: ['owner', 'admin', 'manager', 'mechanic'],
-    CAN_UPDATE_QUANTITIES: ['owner', 'admin', 'manager'],
-    CAN_UPDATE_SETTINGS: ['owner', 'admin'],
-    CAN_DELETE: ['owner', 'admin'],
-    CAN_CREATE_ADJUSTMENTS: ['owner', 'admin', 'manager'],
-    CAN_VIEW_COSTS: ['owner', 'admin'],
-    CAN_MANAGE_SUPPLIERS: ['owner', 'admin', 'manager'],
+    CAN_VIEW: ['superadmin', 'owner', 'admin', 'manager', 'mechanic'], // 🔥 ДОБАВИЛИ superadmin
+    CAN_UPDATE_QUANTITIES: ['superadmin', 'owner', 'admin', 'manager'], // 🔥 ДОБАВИЛИ superadmin
+    CAN_UPDATE_SETTINGS: ['superadmin', 'owner', 'admin'], // 🔥 ДОБАВИЛИ superadmin
+    CAN_DELETE: ['superadmin', 'owner', 'admin'], // 🔥 ДОБАВИЛИ superadmin
+    CAN_CREATE_ADJUSTMENTS: ['superadmin', 'owner', 'admin', 'manager'],
+    CAN_VIEW_COSTS: ['superadmin', 'owner', 'admin'],
+    CAN_MANAGE_SUPPLIERS: ['superadmin', 'owner', 'admin', 'manager'],
   },
 
   AUDIT_ACTIONS: {
@@ -92,8 +92,6 @@ export const INVENTORY_CONSTANTS = {
     STOCK_ADJUSTED: 'stock_adjusted',
     RESERVATION_CREATED: 'reservation_created',
     RESERVATION_RELEASED: 'reservation_released',
-    ALERT_CREATED: 'inventory_alert_created',
-    ALERT_DISMISSED: 'inventory_alert_dismissed',
   },
 
   REPORTS: {

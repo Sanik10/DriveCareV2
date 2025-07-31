@@ -43,3 +43,5 @@ export const OrderResource = (param: string = 'id') => ResourceOwnership('order'
 export const InvoiceResource = (param: string = 'id') => ResourceOwnership('invoice', param);
 
 export const PaymentResource = (param: string = 'id') => ResourceOwnership('payment', param);
+
+export const SupplierResource = (param: string = 'id') => ResourceOwnership('supplier', param);

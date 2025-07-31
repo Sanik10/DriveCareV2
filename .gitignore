@@ -1,38 +1,444 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# 🚗 **DriveCare V2 - Comprehensive .gitignore**
+# Enterprise CRM для автосервисов с Security-First архитектурой
 
-# Dependencies
-node_modules
+# ===============================================
+# 📦 DEPENDENCIES & PACKAGE MANAGERS
+# ===============================================
+node_modules/
 .pnp
 .pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnpm-store/
+.npm
 
-# Local env files
+# ===============================================
+# 🔒 ENVIRONMENT & SECRETS (CRITICAL SECURITY)
+# ===============================================
+# Environment files
 .env
+.env.*
+!.env.example
+!.env.template
+
+# Docker environment overrides
 .env.local
+.env.development
 .env.development.local
+.env.test
 .env.test.local
+.env.production
 .env.production.local
 
-# Testing
-coverage
+# Security sensitive configs
+config/database.json
+config/secrets.json
+ormconfig.json
+.envrc
 
-# Turbo
-.turbo
+# SSL Certificates
+*.pem
+*.key
+*.crt
+*.cert
+*.pfx
+*.p12
 
-# Vercel
-.vercel
+# JWT Keys
+jwt-*.key
+*.private.key
+*.public.key
 
-# Build Outputs
-.next/
+# ===============================================
+# 🏗️ BUILD OUTPUTS & DISTRIBUTION
+# ===============================================
+# General build outputs
+build/
+dist/
 out/
-build
-dist
+.next/
+.nuxt/
+.output/
+.vercel/
+.turbo/
 
+# Backend specific (NestJS)
+apps/backend/dist/
+apps/backend/build/
 
-# Debug
+# Frontend specific (Next.js)
+apps/frontend/.next/
+apps/frontend/build/
+apps/frontend/out/
+
+# Static files
+public/uploads/
+public/temp/
+
+# ===============================================
+# 🧪 TESTING & COVERAGE
+# ===============================================
+coverage/
+nyc_output/
+.coverage/
+*.lcov
+.jest/
+test-results/
+junit.xml
+coverage.xml
+
+# E2E test artifacts
+test-results/
+playwright-report/
+test-output/
+
+# Cypress
+cypress/videos/
+cypress/screenshots/
+cypress/downloads/
+cypress/fixtures/generated/
+
+# ===============================================
+# 📊 LOGS & DEBUGGING
+# ===============================================
+# Application logs
+logs/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
-# Misc
+# Runtime logs
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Audit logs (exclude from version control)
+audit-logs/
+logs/audit/
+*.audit.log
+
+# PM2 logs
+pm2-logs/
+ecosystem.config.js.local
+
+# ===============================================
+# 🗄️ DATABASE & CACHE FILES
+# ===============================================
+# SQLite databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Database dumps & backups
+*.sql
+*.dump
+database-backup/
+db-dumps/
+backup-*.sql
+
+# Redis dumps
+dump.rdb
+*.rdb
+
+# MongoDB
+*.mongo
+
+# ===============================================
+# 🐳 DOCKER & CONTAINERS
+# ===============================================
+# Docker overrides
+docker-compose.override.yml
+docker-compose.local.yml
+docker-compose.dev.yml
+docker-compose.prod.yml
+
+# Docker volumes data
+.docker/
+docker-data/
+postgres-data/
+redis-data/
+
+# Dockerfile secrets
+Dockerfile.local
+.dockerignore.local
+
+# ===============================================
+# 💻 IDE & EDITOR FILES
+# ===============================================
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json.example
+!.vscode/extensions.json
+!.vscode/tasks.json.example
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.swp
+*.swo
+*~
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+.vim/
+.vimrc.local
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ===============================================
+# 🔧 DEVELOPMENT & TEMPORARY FILES
+# ===============================================
+# TypeScript incremental compilation
+*.tsbuildinfo
+.tscache/
+
+# ESLint cache
+.eslintcache
+
+# Prettier cache
+.prettiercache
+
+# Turbo cache
+.turbo/
+
+# Next.js cache
+.next/cache/
+
+# SWC cache
+.swc/
+
+# Storybook
+storybook-static/
+.storybook/build/
+
+# Temporary folders
+tmp/
+temp/
+.tmp/
+.temp/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# ===============================================
+# 📱 MOBILE & REACT NATIVE (Future-proofing)
+# ===============================================
+# Expo
+.expo/
+.expo-shared/
+
+# React Native
+.react-native/
+
+# Metro bundler
+.metro-health-check*
+
+# ===============================================
+# 🌐 FRONTEND SPECIFIC
+# ===============================================
+# Webpack
+.webpack/
+
+# Parcel
+.parcel-cache/
+
+# Gatsby
+.cache/
+public/
+
+# Vite
+.vite/
+
+# ===============================================
+# 📊 ANALYTICS & MONITORING
+# ===============================================
+# Bundle analyzer
+.bundle-analyzer/
+bundle-report.html
+webpack-bundle-analyzer-report.html
+
+# Lighthouse reports
+lighthouse-report/
+*.lighthouse.json
+
+# Performance profiles
+*.cpuprofile
+*.heapprofile
+*.heapsnapshot
+
+# ===============================================
+# 🔐 SECURITY & AUDIT FILES
+# ===============================================
+# Security scan results
+security-scan-results/
+vulnerability-report/
+audit-results/
+
+# OWASP reports
+owasp-report/
+
+# Dependency check
+dependency-check-report/
+
+# ===============================================
+# 🚀 DEPLOYMENT & PRODUCTION
+# ===============================================
+# PM2 ecosystem files (personalized)
+ecosystem.config.js.local
+pm2.config.js.local
+
+# Kubernetes secrets
+*-secret.yaml
+*.secret.yml
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# ===============================================
+# 🗂️ BACKUP & ARCHIVE FILES
+# ===============================================
+# Backup files
+*.backup
+*.bak
+*.orig
+*.rej
+*.patch
+
+# Archive files
+*.tar
+*.gz
+*.zip
+*.rar
+*.7z
+
+# ===============================================
+# 🖥️ OPERATING SYSTEM FILES
+# ===============================================
+# macOS
 .DS_Store
-*.pem
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ===============================================
+# 📸 MEDIA & ASSETS (Development only)
+# ===============================================
+# Development uploads
+uploads/dev/
+uploads/test/
+temp-uploads/
+
+# Generated images
+public/generated/
+static/generated/
+
+# ===============================================
+# 🔍 SEARCH & INDEXING
+# ===============================================
+# Elasticsearch
+.elasticsearch/
+
+# Algolia
+.algolia/
+
+# ===============================================
+# 📝 DOCUMENTATION TEMP FILES
+# ===============================================
+# Swagger generated files
+swagger-codegen/
+api-docs-temp/
+
+# GitBook
+_book/
+
+# ===============================================
+# 🧹 MISC TEMPORARY & CACHE FILES
+# ===============================================
+# General cache
+.cache/
+.sass-cache/
+.stylelintcache
+
+# Lock files for different environments
+package-lock.json.backup
+yarn.lock.backup
+
+# Nx
+.nx/cache
+
+# Rush
+common/temp/
+
+# ===============================================
+# 🚫 CUSTOM PROJECT EXCLUDES
+# ===============================================
+# DriveCare V2 specific temporary files
+drivecare-temp/
+test-company-data/
+demo-data/
+seed-exports/
+
+# Development tools outputs
+api-testing/
+postman-temp/
+insomnia-temp/
+
+# Performance testing
+load-test-results/
+stress-test-results/
+
+# Custom scripts output
+scripts/output/
+scripts/temp/
+
+# END OF .gitignore

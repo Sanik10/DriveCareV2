@@ -6,11 +6,9 @@ export const getDatabaseConfig = (configService: ConfigService): TypeOrmModuleOp
   host: configService.get('POSTGRES_HOST', 'localhost'),
   port: configService.get('POSTGRES_PORT', 5433),
   username: configService.get('POSTGRES_USERNAME', 'postgres'),
-  password: configService.get('POSTGRES_PASSWORD', '135137'),
+  password: configService.get('POSTGRES_PASSWORD'),
   database: configService.get('POSTGRES_DATABASE', 'drivecare'),
   entities: [__dirname + '/entities/*.entity{.ts,.js}'],
-  synchronize: true, // Принудительно включаем
-  logging: ['query', 'error', 'schema', 'warn'], // Включаем все логи
-  retryAttempts: 5,
-  retryDelay: 3000,
+  synchronize: configService.get('NODE_ENV') === 'development',
+  logging: configService.get('NODE_ENV') === 'development' ? ['error'] : false,
 });

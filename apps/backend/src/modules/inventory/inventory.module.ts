@@ -1,4 +1,4 @@
-// src/modules/inventory/inventory.module.ts
+// Обновление src/modules/inventory/inventory.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { InventoryController } from './inventory.controller';
@@ -11,6 +11,8 @@ import { InventoryMapperService } from './services/inventory-mapper.service';
 // 🔥 НОВОЕ: Импорт субмодулей
 import { PartsModule } from './parts/parts.module';
 import { StockMovementsModule } from './stock-movements/stock-movements.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
+import { InventoryAlertsModule } from './inventory-alerts/inventory-alerts.module'; // 🔥 ДОБАВЛЕНО
 
 import { 
   Inventory,
@@ -32,17 +34,19 @@ import { AuditService } from '../../common/audit/audit.service';
       Inventory,      
       Part,           
       PartCategory,   
-      StockMovement,  // 🔥 ВАЖНО: Добавляем StockMovement entity
+      StockMovement,
       InventoryAlert, 
       Supplier,       
       Company,        
       Order,          
       OrderPart,
-      User,           // 🔥 НОВОЕ: Для stock movements
+      User,
     ]),
     // 🔥 НОВОЕ: Подключаем субмодули
     PartsModule,
     StockMovementsModule,
+    SuppliersModule,
+    InventoryAlertsModule, // 🔥 ДОБАВЛЕНО
   ],
   controllers: [InventoryController],
   providers: [
@@ -59,7 +63,9 @@ import { AuditService } from '../../common/audit/audit.service';
     InventoryMapperService,
     // 🔥 НОВОЕ: Экспортируем субмодули для других модулей
     StockMovementsModule,
+    SuppliersModule,
     PartsModule,
+    InventoryAlertsModule, // 🔥 ДОБАВЛЕНО
   ],
 })
 export class InventoryModule {}

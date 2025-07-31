@@ -9,7 +9,8 @@ import {
   ValidationDataException,
   InventoryNotFoundException
 } from '../../../common/exceptions/domain.exceptions';
-import { INVENTORY_CONSTANTS } from '../constants/inventory.constants';
+import { Inject, forwardRef } from '@nestjs/common';
+import { AlertsBusinessService } from '../inventory-alerts/services/alerts-business.service'; // 🔥 ДОБАВИТЬ
 
 @Injectable()
 export class InventoryBusinessService {
@@ -18,6 +19,8 @@ export class InventoryBusinessService {
   constructor(
     private readonly inventoryDataService: InventoryDataService,
     private readonly auditService: AuditService,
+    @Inject(forwardRef(() => AlertsBusinessService))
+    private readonly alertsBusinessService: AlertsBusinessService,
   ) {}
 
   /**
@@ -411,5 +414,46 @@ export class InventoryBusinessService {
     });
 
     return changes;
+  }
+
+  /**
+   * 🔄 Обновление остатков с автоматическим созданием алертов
+   */
+  async updateInventoryWithAlerts(
+    inventoryId: string,
+    newQuantity: number,
+    userId: string,
+    movementId?: string
+  ): Promise<Inventory> {
+    // Получаем текущие данные
+    const currentInventory = await this.inventoryDataService.findById(inventoryId);
+    if (!currentInventory) {
+      throw new Error(`Inventory ${inventoryId} not found`);
+    }
+
+    const previousQuantity = currentInventory.quantity;
+
+    // Обновляем остатки
+    const updatedInventory = await this.inventoryDataService.updateQuantity(
+      inventoryId,
+      newQuantity
+    );
+
+    // 🔥 НОВОЕ: Автоматическое создание алертов при изменении остатков
+    try {
+      await this.alertsBusinessService.handleStockMovement(
+        currentInventory.partId,
+        currentInventory.companyId,
+        previousQuantity,
+        newQuantity,
+        movementId || '',
+        userId
+      );
+    } catch (error) {
+      this.logger.error(`Failed to handle stock movement alerts: ${error.message}`);
+      // Не прерываем основной процесс, только логируем ошибку
+    }
+
+    return updatedInventory;
   }
 }

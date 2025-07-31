@@ -322,3 +322,22 @@ export class ResourceNotFoundException extends NotFoundException {
     super(`Ресурс ${resourceType} с ID ${id} не найден`);
   }
 }
+
+// ====== SUPPLIERS EXCEPTIONS ======
+export class SupplierNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Поставщик с ID ${id} не найден`);
+  }
+}
+
+export class SupplierEmailAlreadyExistsException extends ConflictException {
+  constructor(email: string, companyId: string) {
+    super(`Поставщик с email ${email} уже существует в компании ${companyId}`);
+  }
+}
+
+export class SupplierTaxNumberAlreadyExistsException extends ConflictException {
+  constructor(taxNumber: string, companyId: string) {
+    super(`Поставщик с налоговым номером ${taxNumber} уже существует в компании ${companyId}`);
+  }
+}

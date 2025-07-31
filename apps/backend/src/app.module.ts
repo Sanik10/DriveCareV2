@@ -24,18 +24,18 @@ import { SeedsModule, SeedsService } from './database/seeds';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: '../../.env',
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        host: configService.get('DATABASE_HOST', 'localhost'),
-        port: configService.get('DATABASE_PORT', 5433),
-        username: configService.get('DATABASE_USERNAME', 'postgres'),
-        password: configService.get('DATABASE_PASSWORD', '135137'),
-        database: configService.get('DATABASE_NAME', 'drivecare'),
+        host: configService.get('POSTGRES_HOST'),
+        port: +configService.get('POSTGRES_PORT'),
+        username: configService.get('POSTGRES_USERNAME'),
+        password: configService.get('POSTGRES_PASSWORD'),
+        database: configService.get('POSTGRES_DATABASE'),
         entities: [__dirname + '/database/entities/*.entity{.ts,.js}'],
         synchronize: configService.get('NODE_ENV') !== 'production',
         logging: configService.get('NODE_ENV') === 'development',

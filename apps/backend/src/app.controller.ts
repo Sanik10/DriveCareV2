@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { AppService } from './app.service';
 import { SeedsService } from './database/seeds';
 
@@ -8,7 +9,8 @@ import { SeedsService } from './database/seeds';
 export class AppController {
   constructor(
     private readonly appService: AppService,
-    private readonly seedsService: SeedsService, // Добавляем SeedsService
+    private readonly seedsService: SeedsService,
+    private readonly configService: ConfigService,
   ) {}
 
   @Get()
@@ -22,8 +24,9 @@ export class AppController {
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      service: 'DriveCare API',
-      version: '2.0'
+      service: this.configService.get('SWAGGER_TITLE', 'DriveCare API'),
+      version: this.configService.get('APP_VERSION', '2.0'),
+      environment: this.configService.get('NODE_ENV', 'development'),
     };
   }
 
