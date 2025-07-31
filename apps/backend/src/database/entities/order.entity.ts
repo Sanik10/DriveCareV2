@@ -1,4 +1,21 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+// src/database/entities/order.entity.ts
+import { 
+  Entity, 
+  Column, 
+  PrimaryGeneratedColumn, 
+  CreateDateColumn, 
+  UpdateDateColumn,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+  Index
+} from 'typeorm';
+import { Company } from './company.entity';
+import { Customer } from './customer.entity';
+import { Vehicle } from './vehicle.entity';
+import { User } from './user.entity';
+import { OrderService } from './order-service.entity';
+import { OrderPart } from './order-part.entity';
 
 export enum OrderStatus {
   NEW = 'new',
@@ -9,6 +26,13 @@ export enum OrderStatus {
 }
 
 @Entity('orders')
+@Index(['companyId'])
+@Index(['customerId'])
+@Index(['vehicleId'])
+@Index(['status'])
+@Index(['createdBy'])
+@Index(['assignedTo'])
+@Index(['orderNumber'], { unique: true })
 export class Order {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -22,7 +46,7 @@ export class Order {
   @Column({ type: 'uuid' })
   vehicleId: string;
 
-  @Column({ type: 'varchar', length: 50 })
+  @Column({ type: 'varchar', length: 50, unique: true })
   orderNumber: string;
 
   @Column({ 
@@ -74,4 +98,31 @@ export class Order {
 
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
+
+  // 🔗 TypeORM Relationships
+  @ManyToOne(() => Company)
+  @JoinColumn({ name: 'companyId' })
+  company: Company;
+
+  @ManyToOne(() => Customer)
+  @JoinColumn({ name: 'customerId' })
+  customer: Customer;
+
+  @ManyToOne(() => Vehicle)
+  @JoinColumn({ name: 'vehicleId' })
+  vehicle: Vehicle;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'createdBy' })
+  createdByUser: User;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'assignedTo' })
+  assignedToUser: User;
+
+  @OneToMany(() => OrderService, orderService => orderService.order)
+  orderServices: OrderService[];
+
+  @OneToMany(() => OrderPart, orderPart => orderPart.order)
+  orderParts: OrderPart[];
 }

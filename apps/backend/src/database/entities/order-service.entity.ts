@@ -1,4 +1,17 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+// src/database/entities/order-service.entity.ts
+import { 
+  Entity, 
+  Column, 
+  PrimaryGeneratedColumn, 
+  CreateDateColumn, 
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index
+} from 'typeorm';
+import { Order } from './order.entity';
+import { Service } from './service.entity';
+import { User } from './user.entity';
 
 export enum OrderServiceStatus {
   PLANNED = 'planned',
@@ -7,6 +20,9 @@ export enum OrderServiceStatus {
 }
 
 @Entity('order_services')
+@Index(['orderId'])
+@Index(['serviceId'])
+@Index(['mechanicId'])
 export class OrderService {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -54,4 +70,17 @@ export class OrderService {
 
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
+
+  // 🔗 TypeORM Relationships
+  @ManyToOne(() => Order, order => order.orderServices)
+  @JoinColumn({ name: 'orderId' })
+  order: Order;
+
+  @ManyToOne(() => Service)
+  @JoinColumn({ name: 'serviceId' })
+  service: Service;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'mechanicId' })
+  mechanic: User;
 }

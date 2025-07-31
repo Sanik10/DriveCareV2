@@ -50,6 +50,67 @@ export enum AuditAction {
   // Лимиты
   LIMIT_CHECK_FAILED = 'LIMIT_CHECK_FAILED',
   LIMIT_EXCEEDED = 'LIMIT_EXCEEDED',
+
+  // ====== INVENTORY PARTS ====== (ДОБАВИТЬ)
+  PART_CREATED = 'PART_CREATED',
+  PART_UPDATED = 'PART_UPDATED', 
+  PART_DELETED = 'PART_DELETED',
+  PART_PRICE_CHANGED = 'PART_PRICE_CHANGED',
+  PART_STATUS_CHANGED = 'PART_STATUS_CHANGED',
+  PART_BULK_UPDATED = 'PART_BULK_UPDATED',
+  PART_VIEWED = 'PART_VIEWED',
+  PARTS_SEARCHED = 'PARTS_SEARCHED',
+  PARTS_BULK_UPDATED = 'PARTS_BULK_UPDATED',
+
+  // ====== INVENTORY ======
+  INVENTORY_UPDATED = 'INVENTORY_UPDATED',
+  RESERVATION_CREATED = 'RESERVATION_CREATED', 
+  RESERVATION_RELEASED = 'RESERVATION_RELEASED',
+  STOCK_RESERVED_FOR_ORDER = 'STOCK_RESERVED_FOR_ORDER',
+  STOCK_RELEASED_FROM_ORDER = 'STOCK_RELEASED_FROM_ORDER',
+
+  // ====== STOCK MOVEMENTS ======
+  STOCK_MOVEMENT_CREATED = 'STOCK_MOVEMENT_CREATED',
+  STOCK_MOVEMENT_UPDATED = 'STOCK_MOVEMENT_UPDATED',
+  STOCK_MOVEMENT_REVERSED = 'STOCK_MOVEMENT_REVERSED',
+  BULK_STOCK_MOVEMENTS_CREATED = 'BULK_STOCK_MOVEMENTS_CREATED',
+  BARCODE_SCAN_MOVEMENT = 'BARCODE_SCAN_MOVEMENT',
+  STOCK_ADJUSTMENT_CREATED = 'STOCK_ADJUSTMENT_CREATED',
+  STOCK_RECEIPT_CREATED = 'STOCK_RECEIPT_CREATED',
+  STOCK_ISSUE_CREATED = 'STOCK_ISSUE_CREATED',
+
+  // ====== ORDERS ======
+  ORDER_CREATED = 'ORDER_CREATED',
+  ORDER_UPDATED = 'ORDER_UPDATED',
+  ORDER_STATUS_CHANGED = 'ORDER_STATUS_CHANGED',
+  ORDER_CANCELED = 'ORDER_CANCELED',
+  ORDER_COMPLETED = 'ORDER_COMPLETED',
+  ORDER_MECHANIC_ASSIGNED = 'ORDER_MECHANIC_ASSIGNED',
+  ORDER_FINANCIALS_RECALCULATED = 'ORDER_FINANCIALS_RECALCULATED',
+  ORDER_VIEWED = 'ORDER_VIEWED',
+  ORDER_DELETED = 'ORDER_DELETED',
+
+  // ====== ORDER SERVICES ======
+  ORDER_SERVICE_ADDED = 'ORDER_SERVICE_ADDED',
+  ORDER_SERVICE_UPDATED = 'ORDER_SERVICE_UPDATED',
+  ORDER_SERVICE_REMOVED = 'ORDER_SERVICE_REMOVED',
+  ORDER_SERVICE_STATUS_CHANGED = 'ORDER_SERVICE_STATUS_CHANGED',
+
+  // ====== ORDER PARTS ======
+  ORDER_PART_ADDED = 'ORDER_PART_ADDED',
+  ORDER_PART_UPDATED = 'ORDER_PART_UPDATED',
+  ORDER_PART_REMOVED = 'ORDER_PART_REMOVED',
+
+  // ====== INVOICES ====== ✅ ДОБАВЛЕНО
+  INVOICE_CREATED = 'invoice_created',
+  INVOICE_UPDATED = 'invoice_updated', 
+  INVOICE_STATUS_CHANGED = 'invoice_status_changed',
+  INVOICE_CANCELED = 'invoice_canceled',
+  INVOICE_PAID = 'invoice_paid',
+  INVOICE_OVERDUE_DETECTED = 'invoice_overdue_detected',
+  INVOICE_PAYMENT_RECEIVED = 'invoice_payment_received',
+  INVOICE_AUTO_GENERATED_FROM_ORDER = 'invoice_auto_generated_from_order',
+  INVOICE_VIEWED = 'invoice_viewed',
 }
 
 export enum AuditLevel {
@@ -239,5 +300,42 @@ export class AuditService {
 
   async logLimitExceeded(data: AuditLogData): Promise<void> {
     this.log(AuditAction.LIMIT_EXCEEDED, { ...data, level: AuditLevel.WARNING });
+  }
+
+  // 🔥 НОВЫЕ: Методы для заказов
+  async logOrderCreated(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.ORDER_CREATED, data);
+  }
+
+  async logOrderUpdated(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.ORDER_UPDATED, data);
+  }
+
+  async logOrderStatusChanged(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.ORDER_STATUS_CHANGED, data);
+  }
+
+  async logOrderCanceled(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.ORDER_CANCELED, { ...data, level: AuditLevel.WARNING });
+  }
+
+  async logOrderCompleted(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.ORDER_COMPLETED, data);
+  }
+
+  async logOrderMechanicAssigned(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.ORDER_MECHANIC_ASSIGNED, data);
+  }
+
+  async logOrderFinancialsRecalculated(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.ORDER_FINANCIALS_RECALCULATED, data);
+  }
+
+  async logOrderViewed(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.ORDER_VIEWED, data);
+  }
+
+  async logOrderDeleted(data: AuditLogData): Promise<void> {
+    this.log(AuditAction.ORDER_DELETED, { ...data, level: AuditLevel.WARNING });
   }
 }

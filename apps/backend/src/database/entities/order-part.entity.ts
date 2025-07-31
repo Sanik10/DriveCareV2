@@ -1,6 +1,20 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+// src/database/entities/order-part.entity.ts
+import { 
+  Entity, 
+  Column, 
+  PrimaryGeneratedColumn, 
+  CreateDateColumn, 
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index
+} from 'typeorm';
+import { Order } from './order.entity';
+import { Part } from './part.entity';
 
 @Entity('order_parts')
+@Index(['orderId'])
+@Index(['partId'])
 export class OrderPart {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -31,4 +45,13 @@ export class OrderPart {
 
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
+
+  // 🔗 TypeORM Relationships
+  @ManyToOne(() => Order, order => order.orderParts)
+  @JoinColumn({ name: 'orderId' })
+  order: Order;
+
+  @ManyToOne(() => Part)
+  @JoinColumn({ name: 'partId' })
+  part: Part;
 }

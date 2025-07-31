@@ -1,4 +1,8 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+// src/database/entities/invoice.entity.ts (ДОПОЛНЕННАЯ ВЕРСИЯ)
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn, Index } from 'typeorm';
+import { Order } from './order.entity';
+import { Payment } from './payment.entity';
+import { Company } from './company.entity';
 
 export enum InvoiceStatus {
   ISSUED = 'issued',
@@ -7,6 +11,11 @@ export enum InvoiceStatus {
 }
 
 @Entity('invoices')
+@Index(['companyId'])
+@Index(['orderId'])
+@Index(['status'])
+@Index(['dueDate'])
+@Index(['invoiceNumber'], { unique: true })
 export class Invoice {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -51,4 +60,16 @@ export class Invoice {
 
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
+
+  // 🔗 TypeORM Relationships
+  @ManyToOne(() => Company)
+  @JoinColumn({ name: 'companyId' })
+  company: Company;
+
+  @ManyToOne(() => Order)
+  @JoinColumn({ name: 'orderId' })
+  order: Order;
+
+  @OneToMany(() => Payment, payment => payment.invoice)
+  payments: Payment[];
 }

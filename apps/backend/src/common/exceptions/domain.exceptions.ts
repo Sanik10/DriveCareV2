@@ -143,3 +143,182 @@ export class ValidationDataException extends BadRequestException {
     super(`Ошибка валидации поля "${field}": ${reason}`);
   }
 }
+
+// ====== SERVICES EXCEPTIONS ======
+export class ServiceNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Услуга с ID ${id} не найдена`);
+  }
+}
+
+export class ServiceCategoryNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Категория услуг с ID ${id} не найдена`);
+  }
+}
+
+export class ServiceCategoryInUseException extends BadRequestException {
+  constructor(categoryId: string) {
+    super(`Категория ${categoryId} используется услугами и не может быть удалена`);
+  }
+}
+
+export class ServiceNotAvailableException extends BadRequestException {
+  constructor(serviceId: string) {
+    super(`Услуга ${serviceId} недоступна для заказа`);
+  }
+}
+
+// ====== PAYMENT METHODS EXCEPTIONS ======
+export class PaymentMethodNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Способ оплаты с ID ${id} не найден`);
+  }
+}
+
+export class PaymentMethodInUseException extends BadRequestException {
+  constructor(paymentMethodId: string) {
+    super(`Способ оплаты ${paymentMethodId} используется и не может быть удален`);
+  }
+}
+
+// ====== WORK SCHEDULES EXCEPTIONS ======
+export class WorkScheduleNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Расписание работы с ID ${id} не найдено`);
+  }
+}
+
+export class WorkScheduleConflictException extends BadRequestException {
+  constructor(userId: string, dayOfWeek: number) {
+    super(`Конфликт расписания: у пользователя ${userId} уже есть расписание на ${dayOfWeek} день недели`);
+  }
+}
+
+// ====== APPOINTMENTS EXCEPTIONS ======
+export class AppointmentNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Запись с ID ${id} не найдена`);
+  }
+}
+
+export class AppointmentConflictException extends BadRequestException {
+  constructor(startTime: string, endTime: string) {
+    super(`Конфликт записи: временной слот ${startTime}-${endTime} уже занят`);
+  }
+}
+
+export class InsufficientCapacityException extends BadRequestException {
+  constructor(serviceId: string, requestedTime: string) {
+    super(`Недостаточно мощностей для услуги ${serviceId} на время ${requestedTime}`);
+  }
+}
+
+// ====== ORDERS EXCEPTIONS ======
+export class OrderNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Заказ с ID ${id} не найден`);
+  }
+}
+
+export class OrderStatusTransitionException extends BadRequestException {
+  constructor(from: string, to: string) {
+    super(`Невозможно изменить статус заказа с "${from}" на "${to}"`);
+  }
+}
+
+// ====== INVOICES & PAYMENTS EXCEPTIONS ======
+export class InvoiceNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Счет с ID ${id} не найден`);
+  }
+}
+
+export class InvoiceAlreadyPaidException extends BadRequestException {
+  constructor(invoiceNumber: string) {
+    super(`Счет ${invoiceNumber} уже оплачен`);
+  }
+}
+
+export class PaymentNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Платеж с ID ${id} не найден`);
+  }
+}
+
+export class PaymentProcessingException extends BadRequestException {
+  constructor(reason: string) {
+    super(`Ошибка обработки платежа: ${reason}`);
+  }
+}
+
+// ====== ORDER SERVICES EXCEPTIONS ======
+export class OrderServiceNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Услуга в заказе с ID ${id} не найдена`);
+  }
+}
+
+export class OrderServiceStatusTransitionException extends BadRequestException {
+  constructor(from: string, to: string) {
+    super(`Невозможно изменить статус услуги с "${from}" на "${to}"`);
+  }
+}
+
+// ====== ORDER PARTS EXCEPTIONS ======
+export class OrderPartNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Запчасть в заказе с ID ${id} не найдена`);
+  }
+}
+
+// ====== INVENTORY EXCEPTIONS ======
+export class InventoryNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Позиция склада с ID ${id} не найдена`);
+  }
+}
+
+export class InsufficientStockException extends BadRequestException {
+  constructor(partId: string, available: number, requested: number) {
+    super(`Недостаточно запчастей на складе. Запчасть ${partId}: доступно ${available}, требуется ${requested}`);
+  }
+}
+
+export class StockMovementNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Движение по складу с ID ${id} не найдено`);
+  }
+}
+
+export class ReservationNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Резервирование с ID ${id} не найдено`);
+  }
+}
+
+export class ReservationExpiredException extends BadRequestException {
+  constructor(reservationId: string) {
+    super(`Резервирование ${reservationId} истекло`);
+  }
+}
+
+// ====== PARTS EXCEPTIONS ======
+export class PartNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Запчасть с ID ${id} не найдена`);
+  }
+}
+
+export class PartCategoryNotFoundException extends NotFoundException {
+  constructor(id: string) {
+    super(`Категория запчастей с ID ${id} не найдена`);
+  }
+}
+
+// ====== GENERAL EXCEPTIONS ======
+export class ResourceNotFoundException extends NotFoundException {
+  constructor(resourceType: string, id: string) {
+    super(`Ресурс ${resourceType} с ID ${id} не найден`);
+  }
+}

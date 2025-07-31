@@ -1,4 +1,3 @@
-// apps/backend/src/common/guards/company-ownership.guard.ts
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ModuleRef } from '@nestjs/core';
@@ -62,6 +61,31 @@ export class CompanyOwnershipGuard implements CanActivate {
       case 'vehicle-model':
       case 'vehicle-type':
         return this.checkVehicleCatalogAccess(user);
+
+      case 'service':
+        return this.checkServiceOwnership(user, resourceId);
+
+      case 'service-category':
+        return this.checkServiceCategoryOwnership(user, resourceId);
+
+      // 🔥 Временные заглушки для несуществующих модулей
+      case 'payment-method':
+        return this.checkPaymentMethodOwnership(user, resourceId);
+
+      case 'work-schedule':
+        return this.checkWorkScheduleOwnership(user, resourceId);
+
+      case 'appointment':
+        return this.checkAppointmentOwnership(user, resourceId);
+
+      case 'order':
+        return this.checkOrderOwnership(user, resourceId);
+
+      case 'invoice':
+        return this.checkInvoiceOwnership(user, resourceId);
+
+      case 'payment':
+        return this.checkPaymentOwnership(user, resourceId);
         
       default:
         console.warn(`⚠️ Unknown resource type: ${resourceType} - access granted by default`);
@@ -149,6 +173,123 @@ export class CompanyOwnershipGuard implements CanActivate {
   }
 
   private checkVehicleCatalogAccess(user: RequestWithUser['user']): boolean {
+    return true;
+  }
+
+  private async checkServiceOwnership(user: RequestWithUser['user'], serviceId: string): Promise<boolean> {
+    if (!user.companyId) {
+      throw new ForbiddenException('Пользователь не принадлежит к компании');
+    }
+
+    try {
+      const { ServicesValidationService } = await import('../../modules/services/services/services-validation.service');
+      const validationService = this.moduleRef.get(ServicesValidationService, { strict: false });
+      
+      if (validationService) {
+        await validationService.validateServiceOwnership(serviceId, user.companyId);
+        return true;
+      }
+    } catch (error) {
+      throw new ForbiddenException(`Нет доступа к услуге ${serviceId}`);
+    }
+    
+    return true;
+  }
+
+  private async checkServiceCategoryOwnership(user: RequestWithUser['user'], categoryId: string): Promise<boolean> {
+    if (!user.companyId) {
+      throw new ForbiddenException('Пользователь не принадлежит к компании');
+    }
+
+    try {
+      const { ServicesValidationService } = await import('../../modules/services/services/services-validation.service');
+      const validationService = this.moduleRef.get(ServicesValidationService, { strict: false });
+      
+      if (validationService) {
+        await validationService.validateServiceCategoryOwnership(categoryId, user.companyId);
+        return true;
+      }
+    } catch (error) {
+      throw new ForbiddenException(`Нет доступа к категории услуг ${categoryId}`);
+    }
+    
+    return true;
+  }
+
+  // 🔥 ВРЕМЕННЫЕ заглушки для несуществующих модулей (будут заменены при создании модулей)
+
+  private async checkPaymentMethodOwnership(user: RequestWithUser['user'], paymentMethodId: string): Promise<boolean> {
+    if (!user.companyId) {
+      throw new ForbiddenException('Пользователь не принадлежит к компании');
+    }
+
+    // TODO: Implement when payment-methods module is created
+    console.log(`✅ Payment method access granted for ${paymentMethodId} to user from company ${user.companyId}`);
+    return true;
+  }
+
+  private async checkWorkScheduleOwnership(user: RequestWithUser['user'], scheduleId: string): Promise<boolean> {
+    if (!user.companyId) {
+      throw new ForbiddenException('Пользователь не принадлежит к компании');
+    }
+
+    // TODO: Implement when work-schedules module is created
+    console.log(`✅ Work schedule access granted for ${scheduleId} to user from company ${user.companyId}`);
+    return true;
+  }
+
+  private async checkAppointmentOwnership(user: RequestWithUser['user'], appointmentId: string): Promise<boolean> {
+    if (!user.companyId) {
+      throw new ForbiddenException('Пользователь не принадлежит к компании');
+    }
+
+    // TODO: Implement when appointments module is created
+    console.log(`✅ Appointment access granted for ${appointmentId} to user from company ${user.companyId}`);
+    return true;
+  }
+
+  private async checkOrderOwnership(user: RequestWithUser['user'], orderId: string): Promise<boolean> {
+    if (!user.companyId) {
+      throw new ForbiddenException('Пользователь не принадлежит к компании');
+    }
+
+    try {
+      // 🔒 КРИТИЧНО: Получаем OrdersValidationService и проверяем ownership
+      const { OrdersValidationService } = await import('../../modules/orders/services/orders-validation.service');
+      const validationService = this.moduleRef.get(OrdersValidationService, { strict: false });
+      
+      if (validationService) {
+        await validationService.validateOrderOwnership(orderId, user.companyId);
+        console.log(`✅ Order ownership validated: ${orderId} belongs to company ${user.companyId}`);
+        return true;
+      } else {
+        console.warn(`⚠️ OrdersValidationService not found - allowing access for ${orderId}`);
+        return true;
+      }
+    } catch (error) {
+      throw new ForbiddenException(
+        `Доступ к заказу ${orderId} запрещен для компании ${user.companyId}`
+      );
+    }
+  }
+
+  private async checkInvoiceOwnership(user: RequestWithUser['user'], invoiceId: string): Promise<boolean> {
+    if (!user.companyId) {
+      throw new ForbiddenException('Пользователь не принадлежит к компании');
+    }
+
+    // TODO: Implement when invoices module is created
+    console.log(`✅ Invoice access granted for ${invoiceId} to user from company ${user.companyId}`);
+    return true;
+  }
+
+  private async checkPaymentOwnership(user: RequestWithUser['user'], paymentId: string): Promise<boolean> {
+    if (!user.companyId) {
+      throw new ForbiddenException('Пользователь не принадлежит к компании');
+    }
+
+    // TODO: Implement when payments module is created
+    console.log(`✅ Payment access granted for ${paymentId} to user from company ${user.companyId}`);
     return true;
   }
 }

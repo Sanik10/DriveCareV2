@@ -9,9 +9,15 @@ import { UsersModule } from './modules/users/users.module';
 import { CompaniesModule } from './modules/companies/companies.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { TariffsModule } from './modules/tariffs/tariffs.module';
-import { CustomersModule } from './modules/customers/customers.module'; // 🔥 ДОБАВЛЕНО
-import { VehiclesModule } from './modules/vehicles/vehicles.module'; // 🔥 ДОБАВЛЕНО
-import { VehiclesCatalogueModule } from './modules/vehicles-catalogue/vehicles-catalogue.module'; // 🔥 ДОБАВЛЕНО
+import { CustomersModule } from './modules/customers/customers.module';
+import { VehiclesModule } from './modules/vehicles/vehicles.module';
+import { VehiclesCatalogueModule } from './modules/vehicles-catalogue/vehicles-catalogue.module';
+import { AppointmentsModule } from './modules/appointments/appointments.module';
+import { WorkSchedulesModule } from './modules/work-schedules/work-schedules.module';
+import { InventoryModule } from './modules/inventory/inventory.module'; // 🔥 ДОБАВЛЕНО
+import { OrdersModule } from './modules/orders/orders.module';
+import { InvoicesModule } from './modules/invoices/invoices.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { SeedsModule, SeedsService } from './database/seeds';
 
 @Module({
@@ -46,9 +52,15 @@ import { SeedsModule, SeedsService } from './database/seeds';
     CompaniesModule,      // Компании - основной модуль
     TariffsModule,        // Тарифы - нужны для подписок
     SubscriptionsModule,  // Подписки - зависят от компаний и тарифов
-    CustomersModule,      // 🔥 Клиенты - нужны для автомобилей
-    VehiclesModule,       // 🔥 Автомобили - зависят от клиентов
-    VehiclesCatalogueModule, // 🔥 Каталог автомобилей - нужен для поиска
+    CustomersModule,      // Клиенты - нужны для автомобилей
+    VehiclesModule,       // Автомобили - зависят от клиентов
+    VehiclesCatalogueModule, // Каталог автомобилей - нужен для поиска
+    WorkSchedulesModule,   // Расписание работы - нужен для работы с автомобилями
+    AppointmentsModule,    // Записи - основной модуль
+    InventoryModule,      // 🔥 Склад и запчасти - нужен для заказов
+    OrdersModule,         // Заказы - зависят от инвентаря
+    InvoicesModule,       // Счета - зависят от заказов
+    PaymentsModule,       // Платежи - зависят от счетов
     SeedsModule,          // Seeds - последним для инициализации данных
   ],
   controllers: [AppController],

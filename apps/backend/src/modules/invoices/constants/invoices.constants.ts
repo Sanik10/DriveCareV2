@@ -1,0 +1,89 @@
+// src/modules/invoices/constants/invoices.constants.ts (ПОЛНОСТЬЮ ИСПРАВЛЕННЫЙ)
+import { InvoiceStatus } from '../../../database/entities/invoice.entity';
+import { AuditAction } from '../../../common/audit/audit.service'; // ✅ ДОБАВЛЕН ИМПОРТ
+
+export const INVOICES_CONSTANTS = {
+  DEFAULTS: {
+    PAGE_SIZE: 20,
+    MAX_ITEMS: 100,
+    STATUS: InvoiceStatus.ISSUED,
+    TAX_RATE: 0.20, // 20% НДС
+    PAYMENT_TERMS_DAYS: 30, // Срок оплаты по умолчанию
+  },
+  
+  VALIDATION: {
+    INVOICE_NUMBER: {
+      MIN_LENGTH: 10,
+      MAX_LENGTH: 50,
+      PATTERN: /^INV-\d{4}-\d{5}$/, // INV-YYYY-NNNNN
+    },
+    AMOUNT: {
+      MIN: 0.01,
+      MAX: 10000000, // 10 млн рублей
+    },
+    DUE_DATE: {
+      MIN_DAYS_FROM_NOW: 1,
+      MAX_DAYS_FROM_NOW: 365,
+    },
+    NOTES: {
+      MAX_LENGTH: 1000,
+    },
+  },
+
+  STATUS_TRANSITIONS: {
+    [InvoiceStatus.ISSUED]: [InvoiceStatus.PAID, InvoiceStatus.CANCELED] as InvoiceStatus[],
+    [InvoiceStatus.PAID]: [] as InvoiceStatus[],
+    [InvoiceStatus.CANCELED]: [] as InvoiceStatus[],
+  },
+
+  ROLES: {
+    CAN_CREATE: ['owner', 'admin', 'manager'],
+    CAN_UPDATE: ['owner', 'admin', 'manager'],
+    CAN_DELETE: ['owner', 'admin'],
+    CAN_CHANGE_STATUS: ['owner', 'admin', 'manager'],
+    CAN_VIEW_ALL: ['owner', 'admin', 'manager'],
+    CAN_CANCEL: ['owner', 'admin', 'manager'],
+  },
+
+  // ✅ ИСПРАВЛЕНО: Используем enum значения вместо строк
+  AUDIT_ACTIONS: {
+    CREATED: AuditAction.INVOICE_CREATED,
+    UPDATED: AuditAction.INVOICE_UPDATED,
+    STATUS_CHANGED: AuditAction.INVOICE_STATUS_CHANGED,
+    CANCELED: AuditAction.INVOICE_CANCELED,
+    PAID: AuditAction.INVOICE_PAID,
+    OVERDUE_DETECTED: AuditAction.INVOICE_OVERDUE_DETECTED,
+    PAYMENT_RECEIVED: AuditAction.INVOICE_PAYMENT_RECEIVED,
+    AUTO_GENERATED: AuditAction.INVOICE_AUTO_GENERATED_FROM_ORDER,
+    VIEWED: AuditAction.INVOICE_VIEWED,
+  },
+
+  BUSINESS_RULES: {
+    AUTO_CALCULATE_TAX: true,
+    AUTO_GENERATE_INVOICE_NUMBER: true,
+    ALLOW_EDIT_PAID_INVOICES: false,
+    SEND_NOTIFICATIONS_ON_STATUS_CHANGE: true,
+    AUTO_MARK_PAID_ON_FULL_PAYMENT: true,
+    OVERDUE_WARNING_DAYS: 3,
+    AUTO_CANCEL_OVERDUE_DAYS: 90,
+    ALLOW_PARTIAL_PAYMENTS: true,
+  },
+
+  LIMITS: {
+    MAX_INVOICES_FREE: 50,
+    MAX_INVOICES_BASIC: 500,
+    MAX_INVOICES_PREMIUM: 10000,
+  },
+} as const;
+
+export const INVOICE_STATUS_DISPLAY = {
+  [InvoiceStatus.ISSUED]: 'Выставлен',
+  [InvoiceStatus.PAID]: 'Оплачен', 
+  [InvoiceStatus.CANCELED]: 'Отменен',
+} as const;
+
+export const INVOICE_STATUS_COLORS = {
+  [InvoiceStatus.ISSUED]: '#f59e0b', // yellow
+  [InvoiceStatus.PAID]: '#10b981',   // green
+  [InvoiceStatus.CANCELED]: '#ef4444', // red
+} as const;

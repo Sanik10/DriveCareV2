@@ -18,7 +18,6 @@ export const SubscriptionResource = () => ResourceOwnership('subscription', 'id'
 
 export const CustomerResource = (param: string = 'id') => ResourceOwnership('customer', param);
 
-// 🔥 ДОБАВЛЕНО: Vehicle decorators
 export const VehicleResource = (param: string = 'id') => ResourceOwnership('vehicle', param);
 
 export const ServiceHistoryResource = (param: string = 'id') => ResourceOwnership('service-history', param);
@@ -28,3 +27,19 @@ export const VehicleBrandResource = (param: string = 'id') => ResourceOwnership(
 export const VehicleModelResource = (param: string = 'id') => ResourceOwnership('vehicle-model', param);
 
 export const VehicleTypeResource = (param: string = 'id') => ResourceOwnership('vehicle-type', param);
+
+export const ServiceResource = (param: string = 'id') => ResourceOwnership('service', param);
+
+export const ServiceCategoryResource = (param: string = 'id') => ResourceOwnership('service-category', param);
+
+export const PaymentMethodResource = (param: string = 'id') => ResourceOwnership('payment-method', param);
+
+export const WorkScheduleResource = (param: string = 'id') => ResourceOwnership('work-schedule', param);
+
+export const AppointmentResource = (param: string = 'id') => ResourceOwnership('appointment', param);
+
+export const OrderResource = (param: string = 'id') => ResourceOwnership('order', param);
+
+export const InvoiceResource = (param: string = 'id') => ResourceOwnership('invoice', param);
+
+export const PaymentResource = (param: string = 'id') => ResourceOwnership('payment', param);

@@ -1,3 +1,4 @@
+// src/database/entities/index.ts
 // Base entities
 export { User } from './user.entity';
 export { Role } from './role.entity';
@@ -22,8 +23,11 @@ export { VehicleServiceHistory } from './service-history.entity';
 export { Order } from './order.entity';
 export { OrderService } from './order-service.entity';
 export { OrderPart } from './order-part.entity';
-export { Appointment } from './appointment.entity';
+export { Appointment, AppointmentStatus, AppointmentPriority } from './appointment.entity';
 export { WorkSchedule } from './work-schedule.entity';
+
+// 🔥 ДОБАВЛЯЕМ ЭТУ СТРОКУ:
+export { ScheduleException, ExceptionType, ExceptionStatus } from './schedule-exception.entity';
 
 // Service entities
 export { Service } from './service.entity';
