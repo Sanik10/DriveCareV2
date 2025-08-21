@@ -1,7 +1,14 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+// path: apps/backend/src/database/entities/audit-log.entity.ts
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 export enum AuditAction {
-  // Существующие значения
   USER_LOGIN = 'user_login',
   USER_LOGIN_FAILED = 'user_login_failed',
   USER_LOGIN_BLOCKED = 'user_login_blocked',
@@ -21,7 +28,7 @@ export enum AuditAction {
   PERMISSION_REVOKED = 'permission_revoked',
   ACCESS_DENIED = 'access_denied',
   RATE_LIMIT_EXCEEDED = 'rate_limit_exceeded',
-  API_ERROR = 'api_error', // Добавляем новое действие для логирования API ошибок
+  API_ERROR = 'api_error',
 }
 
 export enum AuditLevel {
@@ -32,6 +39,7 @@ export enum AuditLevel {
 }
 
 @Entity('audit_logs')
+@Index('idx_audit_company_created_at', ['companyId', 'createdAt'])
 export class AuditLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -42,11 +50,11 @@ export class AuditLog {
   @Column({ name: 'company_id', type: 'uuid', nullable: true })
   companyId: string | null;
 
-  @Column({ name: 'action', type: 'varchar', length: 100 })
+  @Column({ name: 'action', type: 'varchar', length: 150 })
   action: string;
 
-  @Column({ name: 'level', type: 'varchar', default: AuditLevel.INFO })
-  level: AuditLevel;
+  @Column({ name: 'level', type: 'varchar', length: 16, default: AuditLevel.INFO })
+  level: 'info' | 'warning' | 'error' | 'critical';
 
   @Column({ name: 'ip_address', type: 'varchar', length: 45, nullable: true })
   ipAddress: string | null;
@@ -54,27 +62,35 @@ export class AuditLog {
   @Column({ name: 'user_agent', type: 'text', nullable: true })
   userAgent: string | null;
 
-  @Column({ name: 'resource_id', type: 'varchar', nullable: true })
+  @Column({ name: 'resource_id', type: 'varchar', length: 150, nullable: true })
   resourceId: string | null;
 
-  @Column({ name: 'resource_type', type: 'varchar', nullable: true })
+  @Column({ name: 'resource_type', type: 'varchar', length: 150, nullable: true })
   resourceType: string | null;
 
   @Column({ name: 'details', type: 'jsonb', nullable: true })
   details: Record<string, any> | null;
 
-  @Column({ name: 'status', type: 'varchar', default: 'success' })
+  @Column({ name: 'status', type: 'varchar', length: 32, default: 'success' })
   status: string;
 
-  @Column({ name: 'service', type: 'varchar', nullable: true })
+  @Column({ name: 'service', type: 'varchar', length: 64, nullable: true })
   service: string | null;
 
-  @Column({ name: 'device_id', type: 'varchar', nullable: true })
+  @Column({ name: 'device_id', type: 'varchar', length: 150, nullable: true })
   deviceId: string | null;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
+  // Tamper-evident chain
+  @Column({ name: 'chain_prev', type: 'varchar', length: 128, nullable: true })
+  chainPrev: string | null;
+
+  @Index('uq_audit_chain_curr', { unique: true })
+  @Column({ name: 'chain_curr', type: 'varchar', length: 128 })
+  chainCurr: string;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 }

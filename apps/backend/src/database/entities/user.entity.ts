@@ -6,10 +6,10 @@ export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ nullable: true, type: 'uuid' })  // Изменено: добавлен nullable: true
-  company_id: string | null;  // Изменено: добавлен union type с null
+  @Column({ nullable: true, type: 'uuid' })
+  company_id: string | null;
 
-  @Column({ nullable: false, type: 'varchar', length: 255 })
+  @Column({ nullable: false, type: 'varchar', length: 255, unique: true })
   email: string;
 
   @Column({ nullable: false, type: 'varchar', length: 255 })
@@ -42,6 +42,13 @@ export class User {
 
   @Column({ name: 'role_id', type: 'uuid' })
   roleId: string;
+
+  // 2FA
+  @Column({ name: 'two_factor_enabled', type: 'boolean', default: false })
+  twoFactorEnabled: boolean;
+
+  @Column({ name: 'two_factor_secret', type: 'varchar', length: 255, nullable: true, select: false })
+  twoFactorSecret: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;

@@ -3,11 +3,11 @@ import { SubscriptionsDataService } from './services/subscriptions-data.service'
 import { SubscriptionsBusinessService } from './services/subscriptions-business.service';
 import { SubscriptionsValidationService } from './services/subscriptions-validation.service';
 import { SubscriptionLimitsService } from './services/subscription-limits.service';
-import { SubscriptionsMapperService } from './services/subscriptions-mapper.service'; // 🔥 ДОБАВЛЕНО
+import { SubscriptionsMapperService } from './services/subscriptions-mapper.service';
 import { CreateSubscriptionDto } from './dto/request/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/request/update-subscription.dto';
 import { SubscriptionResponseDto } from './dto/response/subscription-response.dto';
-import { SubscriptionStatus, PaginatedSubscriptionsResult, TariffLimits } from './types/subscriptions.types'; // 🔥 ДОБАВЛЕНО TariffLimits
+import { SubscriptionStatus, PaginatedSubscriptionsResult, TariffLimits } from './types/subscriptions.types';
 import { SUBSCRIPTIONS_CONSTANTS } from './constants/subscriptions.constants';
 
 @Injectable()
@@ -19,24 +19,25 @@ export class SubscriptionsService {
     private readonly subscriptionsBusinessService: SubscriptionsBusinessService,
     private readonly subscriptionsValidationService: SubscriptionsValidationService,
     private readonly subscriptionLimitsService: SubscriptionLimitsService,
-    private readonly subscriptionsMapperService: SubscriptionsMapperService, // 🔥 ДОБАВЛЕНО
+    private readonly subscriptionsMapperService: SubscriptionsMapperService,
   ) {}
 
   /**
-   * Создание новой подписки
+   * Создание новой подписки (companyId подставляется в контроллере из req.user.companyId)
    */
-  async create(createSubscriptionDto: CreateSubscriptionDto): Promise<SubscriptionResponseDto> {
+  async create(createSubscriptionDto: CreateSubscriptionDto, idempotencyKey?: string): Promise<SubscriptionResponseDto> {
     this.logger.log(`Создание новой подписки для компании: ${createSubscriptionDto.companyId}`);
 
-    // Валидация данных
     await this.subscriptionsValidationService.validateCreateData(createSubscriptionDto);
 
-    // Создание через бизнес-сервис
-    const subscription = await this.subscriptionsBusinessService.createSubscription(createSubscriptionDto);
+    const subscription = await this.subscriptionsBusinessService.createSubscription(
+      createSubscriptionDto,
+      idempotencyKey,
+    );
 
     this.logger.log(`Подписка успешно создана: ${subscription.id} для компании ${createSubscriptionDto.companyId}`);
 
-    return this.subscriptionsMapperService.mapToResponseDto(subscription); // 🔥 ИСПРАВЛЕНО: используем MapperService
+    return this.subscriptionsMapperService.mapToResponseDto(subscription);
   }
 
   /**
@@ -46,19 +47,25 @@ export class SubscriptionsService {
     companyId: string,
     page: number = 1,
     limit: number = SUBSCRIPTIONS_CONSTANTS.DEFAULTS.PAGE_SIZE,
-    status?: SubscriptionStatus
+    status?: SubscriptionStatus,
   ): Promise<PaginatedSubscriptionsResult> {
-    this.logger.log(`Поиск подписок для компании: ${companyId}, страница: ${page}, лимит: ${limit}, статус: ${status}`);
+    this.logger.log(
+      `Поиск подписок для компании: ${companyId}, страница: ${page}, лимит: ${limit}, статус: ${status}`,
+    );
 
-    // Проверяем существование компании
     await this.subscriptionsValidationService.validateCompanyExists(companyId);
 
-    const [subscriptions, total] = await this.subscriptionsDataService.findByCompany(companyId, page, limit, status);
+    const [subscriptions, total] = await this.subscriptionsDataService.findByCompany(
+      companyId,
+      page,
+      limit,
+      status,
+    );
 
     const totalPages = Math.ceil(total / limit);
 
     return {
-      items: this.subscriptionsMapperService.mapArrayToResponseDto(subscriptions), // 🔥 ИСПРАВЛЕНО: используем MapperService
+      items: this.subscriptionsMapperService.mapArrayToResponseDto(subscriptions),
       total,
       page,
       limit,
@@ -73,8 +80,8 @@ export class SubscriptionsService {
     this.logger.log(`Поиск активной подписки для компании: ${companyId}`);
 
     const subscription = await this.subscriptionsDataService.findActiveByCompany(companyId);
-    
-    return subscription ? this.subscriptionsMapperService.mapToResponseDto(subscription) : null; // 🔥 ИСПРАВЛЕНО: используем MapperService
+
+    return subscription ? this.subscriptionsMapperService.mapToResponseDto(subscription) : null;
   }
 
   /**
@@ -85,7 +92,7 @@ export class SubscriptionsService {
 
     const subscription = await this.subscriptionsValidationService.validateSubscriptionExists(id);
 
-    return this.subscriptionsMapperService.mapToResponseDto(subscription); // 🔥 ИСПРАВЛЕНО: используем MapperService
+    return this.subscriptionsMapperService.mapToResponseDto(subscription);
   }
 
   /**
@@ -94,15 +101,16 @@ export class SubscriptionsService {
   async update(id: string, updateSubscriptionDto: UpdateSubscriptionDto): Promise<SubscriptionResponseDto> {
     this.logger.log(`Обновление подписки: ${id}`);
 
-    // Валидация данных
     await this.subscriptionsValidationService.validateUpdateData(id, updateSubscriptionDto);
 
-    // Обновление через бизнес-сервис
-    const updatedSubscription = await this.subscriptionsBusinessService.updateSubscription(id, updateSubscriptionDto);
+    const updatedSubscription = await this.subscriptionsBusinessService.updateSubscription(
+      id,
+      updateSubscriptionDto,
+    );
 
     this.logger.log(`Подписка успешно обновлена: ${id}`);
 
-    return this.subscriptionsMapperService.mapToResponseDto(updatedSubscription); // 🔥 ИСПРАВЛЕНО: используем MapperService
+    return this.subscriptionsMapperService.mapToResponseDto(updatedSubscription);
   }
 
   /**
@@ -111,12 +119,11 @@ export class SubscriptionsService {
   async cancel(id: string): Promise<SubscriptionResponseDto> {
     this.logger.log(`Отмена подписки: ${id}`);
 
-    // Отмена через бизнес-сервис
     const canceledSubscription = await this.subscriptionsBusinessService.cancelSubscription(id);
 
     this.logger.log(`Подписка успешно отменена: ${id}`);
 
-    return this.subscriptionsMapperService.mapToResponseDto(canceledSubscription); // 🔥 ИСПРАВЛЕНО: используем MapperService
+    return this.subscriptionsMapperService.mapToResponseDto(canceledSubscription);
   }
 
   /**
@@ -159,9 +166,12 @@ export class SubscriptionsService {
   }
 
   /**
-   * 🔥 ИСПРАВЛЕНО: Строгие типы для проверки множественных лимитов
+   * Проверка нескольких лимитов за один вызов
    */
-  async checkMultipleLimits(companyId: string, checks: Array<{ type: keyof TariffLimits; currentCount: number; increment?: number }>) {
+  async checkMultipleLimits(
+    companyId: string,
+    checks: Array<{ type: keyof TariffLimits; currentCount: number; increment?: number }>,
+  ) {
     return this.subscriptionLimitsService.checkMultipleLimits(companyId, checks);
   }
 
@@ -174,9 +184,11 @@ export class SubscriptionsService {
   }
 
   /**
-   * 🔥 УЛУЧШЕНО: Получение информации об активной подписке с использованием MapperService
+   * Получение краткой информации об активной подписке
    */
-  async getActiveSubscriptionInfo(companyId: string): Promise<{ id: string; tariffName: string; endDate: Date } | null> {
+  async getActiveSubscriptionInfo(
+    companyId: string,
+  ): Promise<{ id: string; tariffName: string; endDate: Date } | null> {
     const subscription = await this.subscriptionsDataService.findActiveByCompany(companyId);
     if (!subscription) return null;
 
@@ -189,7 +201,7 @@ export class SubscriptionsService {
   }
 
   /**
-   * 🔥 НОВОЕ: Получение статистики подписок компании
+   * Получение агрегированной статистики подписок компании (без загрузки большого массива)
    */
   async getCompanySubscriptionStats(companyId: string): Promise<{
     active: number;
@@ -197,32 +209,20 @@ export class SubscriptionsService {
     canceled: number;
     total: number;
   }> {
-    const [allSubscriptions] = await this.subscriptionsDataService.findByCompany(companyId, 1, 1000);
-    
-    const stats = {
-      active: 0,
-      expired: 0,
-      canceled: 0,
-      total: allSubscriptions.length,
-    };
+    const counts = await this.subscriptionsDataService.countByStatus(companyId);
 
-    allSubscriptions.forEach(subscription => {
-      switch (subscription.status) {
-        case SubscriptionStatus.ACTIVE:
-          stats.active++;
-          break;
-        case SubscriptionStatus.EXPIRED:
-          stats.expired++;
-          break;
-        case SubscriptionStatus.CANCELED:
-          stats.canceled++;
-          break;
-      }
-    });
+    const active = counts[SubscriptionStatus.ACTIVE] || 0;
+    const expired = counts[SubscriptionStatus.EXPIRED] || 0;
+    const canceled = counts[SubscriptionStatus.CANCELED] || 0;
 
-    return stats;
+    const total =
+      (counts[SubscriptionStatus.ACTIVE] || 0) +
+      (counts[SubscriptionStatus.PENDING] || 0) +
+      (counts[SubscriptionStatus.SUSPENDED] || 0) +
+      (counts[SubscriptionStatus.CANCELED] || 0) +
+      (counts[SubscriptionStatus.EXPIRED] || 0) +
+      (counts[SubscriptionStatus.INACTIVE] || 0);
+
+    return { active, expired, canceled, total };
   }
-
-  // 🔥 УДАЛЕНО: Приватный метод mapToResponseDto
-  // Теперь вся логика маппинга в SubscriptionsMapperService
 }

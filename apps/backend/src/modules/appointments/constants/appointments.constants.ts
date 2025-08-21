@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/appointments/constants/appointments.constants.ts
 import { AppointmentStatus } from '../../../database/entities';
 
 export const APPOINTMENTS_CONSTANTS = {
@@ -63,25 +64,25 @@ export const APPOINTMENTS_CONSTANTS = {
   },
   STATUSES: {
     ACTIVE_STATUSES: [
-      AppointmentStatus.DRAFT, 
-      AppointmentStatus.SCHEDULED, 
-      AppointmentStatus.CONFIRMED, 
-      AppointmentStatus.IN_PROGRESS
+      AppointmentStatus.DRAFT,
+      AppointmentStatus.SCHEDULED,
+      AppointmentStatus.CONFIRMED,
+      AppointmentStatus.IN_PROGRESS,
     ] as AppointmentStatus[],
     COMPLETED_STATUSES: [
-      AppointmentStatus.COMPLETED, 
-      AppointmentStatus.CANCELED, 
-      AppointmentStatus.NO_SHOW
+      AppointmentStatus.COMPLETED,
+      AppointmentStatus.CANCELED,
+      AppointmentStatus.NO_SHOW,
     ] as AppointmentStatus[],
     EDITABLE_STATUSES: [
-      AppointmentStatus.DRAFT, 
-      AppointmentStatus.SCHEDULED, 
-      AppointmentStatus.CONFIRMED
+      AppointmentStatus.DRAFT,
+      AppointmentStatus.SCHEDULED,
+      AppointmentStatus.CONFIRMED,
     ] as AppointmentStatus[],
     CANCELLABLE_STATUSES: [
-      AppointmentStatus.DRAFT, 
-      AppointmentStatus.SCHEDULED, 
-      AppointmentStatus.CONFIRMED
+      AppointmentStatus.DRAFT,
+      AppointmentStatus.SCHEDULED,
+      AppointmentStatus.CONFIRMED,
     ] as AppointmentStatus[],
   },
   RATING: {
@@ -98,7 +99,7 @@ export const STATUS_TRANSITIONS = {
   [AppointmentStatus.CONFIRMED]: [AppointmentStatus.IN_PROGRESS, AppointmentStatus.CANCELED, AppointmentStatus.NO_SHOW, AppointmentStatus.RESCHEDULED],
   [AppointmentStatus.IN_PROGRESS]: [AppointmentStatus.COMPLETED, AppointmentStatus.CANCELED],
   [AppointmentStatus.COMPLETED]: [], // final state
-  [AppointmentStatus.CANCELED]: [], // final state  
+  [AppointmentStatus.CANCELED]: [], // final state
   [AppointmentStatus.NO_SHOW]: [], // final state
   [AppointmentStatus.RESCHEDULED]: [AppointmentStatus.SCHEDULED], // creates new appointment
 } as const;

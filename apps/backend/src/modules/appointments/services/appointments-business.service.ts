@@ -1,3 +1,4 @@
+// path: src/appointments/appointments.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { AppointmentsDataService } from './appointments-data.service';
 import { Appointment, AppointmentStatus } from '../../../database/entities';

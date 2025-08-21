@@ -1,7 +1,8 @@
+// path: apps/backend/src/modules/appointments/services/appointments-data.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, In } from 'typeorm';
-import { Appointment, AppointmentStatus } from '../../../database/entities';
+import { Between, In, Repository, DeepPartial } from 'typeorm';
+import { Appointment, AppointmentPriority, AppointmentStatus } from '../../../database/entities';
 import { CreateAppointmentData, UpdateAppointmentData, AppointmentFilter } from '../types/appointments.types';
 import { IAppointmentsDataService } from '../interfaces/appointments.interface';
 import { APPOINTMENTS_CONSTANTS } from '../constants/appointments.constants';
@@ -14,15 +15,38 @@ export class AppointmentsDataService implements IAppointmentsDataService {
   ) {}
 
   /**
-   * Создание новой записи
+   * Создание новой записи (безопасное маппирование типов, decimal → string)
    */
   async create(data: CreateAppointmentData): Promise<Appointment> {
-    const appointment = this.appointmentsRepository.create(data);
+    const entityData: DeepPartial<Appointment> = {
+      companyId: data.companyId,
+      customerId: data.customerId,
+      vehicleId: data.vehicleId,
+      mechanicId: data.mechanicId,
+      startTime: data.startTime,
+      endTime: data.endTime,
+      estimatedDuration: data.estimatedDuration,
+      serviceIds: data.serviceIds || [],
+      status: data.status ?? AppointmentStatus.DRAFT,
+      priority: data.priority ?? AppointmentPriority.NORMAL,
+      description: data.description ?? null,
+      customerNotes: data.customerNotes ?? null,
+      mechanicNotes: null,
+      contactPhone: data.contactPhone ?? null,
+      contactEmail: data.contactEmail ?? null,
+      estimatedCost: data.estimatedCost != null ? String(data.estimatedCost) : null,
+      finalCost: null,
+      reminderSent: false,
+      confirmationSent: false,
+      isDeleted: false,
+    };
+
+    const appointment = this.appointmentsRepository.create(entityData);
     return this.appointmentsRepository.save(appointment);
   }
 
   /**
-   * Получение всех записей
+   * Получение всех записей (служебно; не используйте без фильтра по companyId)
    */
   async findAll(): Promise<Appointment[]> {
     return this.appointmentsRepository.find({
@@ -47,8 +71,8 @@ export class AppointmentsDataService implements IAppointmentsDataService {
    */
   async findByIdForCompany(id: string, companyId: string): Promise<Appointment | null> {
     return this.appointmentsRepository.findOne({
-      where: { 
-        id, 
+      where: {
+        id,
         companyId,
         isDeleted: false,
       },
@@ -60,7 +84,8 @@ export class AppointmentsDataService implements IAppointmentsDataService {
    * 🔒 Поиск с фильтрами и обязательной безопасностью
    */
   async findWithFilters(filter: AppointmentFilter): Promise<[Appointment[], number]> {
-    const query = this.appointmentsRepository.createQueryBuilder('appointment')
+    const query = this.appointmentsRepository
+      .createQueryBuilder('appointment')
       .leftJoinAndSelect('appointment.customer', 'customer')
       .leftJoinAndSelect('appointment.vehicle', 'vehicle')
       .leftJoinAndSelect('appointment.mechanic', 'mechanic')
@@ -69,8 +94,8 @@ export class AppointmentsDataService implements IAppointmentsDataService {
 
     // 🔒 ОБЯЗАТЕЛЬНАЯ фильтрация по companyId
     if (filter.companyId) {
-      query.andWhere('appointment.companyId = :companyId', { 
-        companyId: filter.companyId 
+      query.andWhere('appointment.companyId = :companyId', {
+        companyId: filter.companyId,
       });
     }
 
@@ -78,8 +103,8 @@ export class AppointmentsDataService implements IAppointmentsDataService {
     if (filter.search) {
       query.andWhere(
         '(customer.firstName ILIKE :search OR customer.lastName ILIKE :search OR ' +
-        'appointment.description ILIKE :search OR appointment.customerNotes ILIKE :search)',
-        { search: `%${filter.search}%` }
+          'appointment.description ILIKE :search OR appointment.customerNotes ILIKE :search)',
+        { search: `%${filter.search}%` },
       );
     }
 
@@ -95,29 +120,29 @@ export class AppointmentsDataService implements IAppointmentsDataService {
 
     // Фильтр по мастеру
     if (filter.mechanicId) {
-      query.andWhere('appointment.mechanicId = :mechanicId', { 
-        mechanicId: filter.mechanicId 
+      query.andWhere('appointment.mechanicId = :mechanicId', {
+        mechanicId: filter.mechanicId,
       });
     }
 
     // Фильтр по клиенту
     if (filter.customerId) {
-      query.andWhere('appointment.customerId = :customerId', { 
-        customerId: filter.customerId 
+      query.andWhere('appointment.customerId = :customerId', {
+        customerId: filter.customerId,
       });
     }
 
     // Фильтр по автомобилю
     if (filter.vehicleId) {
-      query.andWhere('appointment.vehicleId = :vehicleId', { 
-        vehicleId: filter.vehicleId 
+      query.andWhere('appointment.vehicleId = :vehicleId', {
+        vehicleId: filter.vehicleId,
       });
     }
 
     // Фильтр по услуге
     if (filter.serviceId) {
-      query.andWhere('appointment.serviceIds @> :serviceId', { 
-        serviceId: JSON.stringify([filter.serviceId])
+      query.andWhere('appointment.serviceIds @> :serviceId', {
+        serviceId: JSON.stringify([filter.serviceId]),
       });
     }
 
@@ -128,18 +153,18 @@ export class AppointmentsDataService implements IAppointmentsDataService {
         dateTo: filter.dateTo,
       });
     } else if (filter.dateFrom) {
-      query.andWhere('appointment.startTime >= :dateFrom', { 
-        dateFrom: filter.dateFrom 
+      query.andWhere('appointment.startTime >= :dateFrom', {
+        dateFrom: filter.dateFrom,
       });
     } else if (filter.dateTo) {
-      query.andWhere('appointment.startTime <= :dateTo', { 
-        dateTo: filter.dateTo 
+      query.andWhere('appointment.startTime <= :dateTo', {
+        dateTo: filter.dateTo,
       });
     }
 
-    // Сортировка
+    // Сортировка (whitelist)
     const sortField = this.mapSortField(filter.sortField || 'startTime');
-    query.orderBy(sortField, filter.sortOrder?.toUpperCase() as 'ASC' | 'DESC' || 'ASC');
+    query.orderBy(sortField, (filter.sortOrder?.toUpperCase() as 'ASC' | 'DESC') || 'ASC');
 
     // Пагинация
     if (filter.page && filter.limit) {
@@ -151,32 +176,48 @@ export class AppointmentsDataService implements IAppointmentsDataService {
   }
 
   /**
-   * Обновление записи
+   * Обновление записи (mass-assignment safe + decimal → string)
    */
   async update(id: string, data: UpdateAppointmentData): Promise<Appointment> {
     const updateData: Partial<Appointment> = {};
-    
-    // Безопасное копирование только разрешенных полей
     const allowedFields = [
-      'mechanicId', 'startTime', 'endTime', 'estimatedDuration', 'serviceIds',
-      'priority', 'description', 'customerNotes', 'mechanicNotes', 
-      'contactPhone', 'contactEmail', 'estimatedCost', 'finalCost',
-      'rating', 'feedback'
-    ];
+      'mechanicId',
+      'startTime',
+      'endTime',
+      'estimatedDuration',
+      'serviceIds',
+      'priority',
+      'description',
+      'customerNotes',
+      'mechanicNotes',
+      'contactPhone',
+      'contactEmail',
+      'estimatedCost',
+      'finalCost',
+      'rating',
+      'feedback',
+      'actualDuration',
+      'reminderSent',
+      'confirmationSent',
+    ] as const;
 
-    allowedFields.forEach(field => {
-      if (data[field] !== undefined) {
-        updateData[field] = data[field];
+    allowedFields.forEach((field) => {
+      if ((data as any)[field] !== undefined) {
+        if (field === 'estimatedCost' || field === 'finalCost') {
+          (updateData as any)[field] = (data as any)[field] != null ? String((data as any)[field]) : null;
+        } else {
+          (updateData as any)[field] = (data as any)[field];
+        }
       }
     });
 
     await this.appointmentsRepository.update(id, updateData);
-    
+
     const updatedAppointment = await this.findById(id);
     if (!updatedAppointment) {
       throw new Error(`Appointment with id ${id} not found after update`);
     }
-    
+
     return updatedAppointment;
   }
 
@@ -191,7 +232,7 @@ export class AppointmentsDataService implements IAppointmentsDataService {
    * Мягкое удаление записи
    */
   async softDelete(id: string): Promise<void> {
-    await this.appointmentsRepository.update(id, { 
+    await this.appointmentsRepository.update(id, {
       isDeleted: true,
       deletedAt: new Date(),
     });
@@ -202,8 +243,8 @@ export class AppointmentsDataService implements IAppointmentsDataService {
    */
   async findByCustomer(customerId: string, companyId: string): Promise<Appointment[]> {
     return this.appointmentsRepository.find({
-      where: { 
-        customerId, 
+      where: {
+        customerId,
         companyId,
         isDeleted: false,
       },
@@ -213,12 +254,13 @@ export class AppointmentsDataService implements IAppointmentsDataService {
   }
 
   /**
-   * Поиск записей мастера в диапазоне дат
+   * Поиск записей мастера в диапазоне дат (🔒 с companyId)
    */
-  async findByMechanic(mechanicId: string, dateFrom: Date, dateTo: Date): Promise<Appointment[]> {
+  async findByMechanic(mechanicId: string, companyId: string, dateFrom: Date, dateTo: Date): Promise<Appointment[]> {
     return this.appointmentsRepository.find({
       where: {
         mechanicId,
+        companyId,
         startTime: Between(dateFrom, dateTo),
         isDeleted: false,
         status: In(APPOINTMENTS_CONSTANTS.STATUSES.ACTIVE_STATUSES),
@@ -246,38 +288,56 @@ export class AppointmentsDataService implements IAppointmentsDataService {
   /**
    * Подсчет записей по статусу
    */
-  async countByStatus(companyId: string, status: string): Promise<number> {
+  async countByStatus(companyId: string, status: AppointmentStatus): Promise<number> {
     return this.appointmentsRepository.count({
-      where: { 
-        companyId, 
-        status: status as AppointmentStatus,
+      where: {
+        companyId,
+        status,
         isDeleted: false,
       },
     });
   }
 
   /**
-   * 🔍 Поиск конфликтов расписания
+   * Список mechanicId компании (по активным/будущим записям)
+   */
+  async getMechanicIdsByCompany(companyId: string): Promise<string[]> {
+    const rows = await this.appointmentsRepository
+      .createQueryBuilder('a')
+      .select('DISTINCT a.mechanicId', 'mechanicId')
+      .where('a.companyId = :companyId', { companyId })
+      .andWhere('a.isDeleted = false')
+      .getRawMany<{ mechanicId: string }>();
+    return rows.map((r) => r.mechanicId).filter(Boolean);
+  }
+
+  /**
+   * 🔍 Поиск конфликтов расписания (с учётом компании, если указана)
    */
   async findConflicts(
-    mechanicId: string, 
-    startTime: Date, 
-    endTime: Date, 
-    excludeAppointmentId?: string
+    mechanicId: string,
+    startTime: Date,
+    endTime: Date,
+    excludeAppointmentId?: string,
+    companyId?: string,
   ): Promise<Appointment[]> {
-    const query = this.appointmentsRepository.createQueryBuilder('appointment')
+    const query = this.appointmentsRepository
+      .createQueryBuilder('appointment')
       .where('appointment.mechanicId = :mechanicId', { mechanicId })
       .andWhere('appointment.isDeleted = :isDeleted', { isDeleted: false })
-      .andWhere('appointment.status IN (:...activeStatuses)', { 
-        activeStatuses: APPOINTMENTS_CONSTANTS.STATUSES.ACTIVE_STATUSES 
+      .andWhere('appointment.status IN (:...activeStatuses)', {
+        activeStatuses: APPOINTMENTS_CONSTANTS.STATUSES.ACTIVE_STATUSES,
       })
-      .andWhere(
-        '(appointment.startTime < :endTime AND appointment.endTime > :startTime)',
-        { startTime, endTime }
-      );
+      .andWhere('(appointment.startTime < :endTime AND appointment.endTime > :startTime)', {
+        startTime,
+        endTime,
+      });
 
     if (excludeAppointmentId) {
       query.andWhere('appointment.id != :excludeId', { excludeId: excludeAppointmentId });
+    }
+    if (companyId) {
+      query.andWhere('appointment.companyId = :companyId', { companyId });
     }
 
     return query.getMany();
@@ -291,6 +351,55 @@ export class AppointmentsDataService implements IAppointmentsDataService {
       where: { id, companyId, isDeleted: false },
     });
     return count > 0;
+  }
+
+  /**
+   * Агрегированная статистика по компании
+   */
+  async getStats(companyId: string): Promise<{
+    total: number;
+    byStatus: Record<string, number>;
+    completionRate: number;
+    averageRating: number;
+    averageDuration: number;
+    noShowRate: number;
+  }> {
+    const total = await this.appointmentsRepository.count({ where: { companyId, isDeleted: false } });
+
+    const byStatusRows = await this.appointmentsRepository
+      .createQueryBuilder('a')
+      .select('a.status', 'status')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('a.companyId = :companyId AND a.isDeleted = false', { companyId })
+      .groupBy('a.status')
+      .getRawMany<{ status: string; cnt: string }>();
+    const byStatus: Record<string, number> = {};
+    byStatusRows.forEach((r) => (byStatus[r.status] = parseInt(r.cnt, 10)));
+
+    const completed = byStatus['completed'] || 0;
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    const ratingRow = await this.appointmentsRepository
+      .createQueryBuilder('a')
+      .select('AVG(a.rating)', 'avg')
+      .where('a.companyId = :companyId AND a.isDeleted = false AND a.rating IS NOT NULL', { companyId })
+      .getRawOne<{ avg: string }>();
+    const averageRating = ratingRow?.avg ? Math.round(parseFloat(ratingRow.avg) * 100) / 100 : 0;
+
+    const durationRow = await this.appointmentsRepository
+      .createQueryBuilder('a')
+      .select('AVG(a.actualDuration)', 'avg')
+      .where(
+        'a.companyId = :companyId AND a.isDeleted = false AND a.actualDuration IS NOT NULL AND a.status = :status',
+        { companyId, status: AppointmentStatus.COMPLETED },
+      )
+      .getRawOne<{ avg: string }>();
+    const averageDuration = durationRow?.avg ? Math.round(parseFloat(durationRow.avg)) : 0;
+
+    const noShow = byStatus[AppointmentStatus.NO_SHOW] || 0;
+    const noShowRate = total > 0 ? Math.round((noShow / total) * 100) : 0;
+
+    return { total, byStatus, completionRate, averageRating, averageDuration, noShowRate };
   }
 
   /**

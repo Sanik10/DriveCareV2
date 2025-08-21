@@ -3,23 +3,19 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SuppliersDataService } from './suppliers-data.service';
 import { SuppliersValidationService } from './suppliers-validation.service';
 import { Supplier } from '../../../../database/entities';
-import { 
-  CreateSupplierData, 
+import {
+  CreateSupplierData,
   UpdateSupplierData,
   SupplierRatingData,
   BulkSupplierResult,
   SupplierAnalytics,
   TopSupplierMetrics,
-  SupplierRating
+  SupplierRating,
 } from '../types/suppliers.types';
 import { BulkSuppliersDto } from '../dto/request/bulk-suppliers.dto';
 import { RequestWithUser } from '../../../auth/interfaces/request-with-user.interface';
 import { AuditService, AuditAction } from '../../../../common/audit/audit.service';
-import { 
-  SupplierNotFoundException,
-  ValidationDataException 
-} from '../../../../common/exceptions/domain.exceptions';
-import { SUPPLIER_CONSTRAINTS } from '../types/suppliers.types';
+import { SupplierNotFoundException } from '../../../../common/exceptions/domain.exceptions';
 
 @Injectable()
 export class SuppliersBusinessService {
@@ -31,6 +27,27 @@ export class SuppliersBusinessService {
     private readonly auditService: AuditService,
   ) {}
 
+  private maskEmail(email?: string | null) {
+    if (!email) return undefined;
+    const [name, domain] = email.split('@');
+    if (!domain) return '***';
+    const maskedName = name.length <= 2 ? '*'.repeat(name.length) : name[0] + '***' + name.slice(-1);
+    return `${maskedName}@${domain}`;
+    }
+
+  private maskPhone(phone?: string | null) {
+    if (!phone) return undefined;
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 6) return '***';
+    return phone.replace(/\d(?=\d{4})/g, '*');
+  }
+
+  private maskName(name?: string | null) {
+    if (!name) return undefined;
+    if (name.length <= 2) return '*'.repeat(name.length);
+    return name[0] + '***' + name.slice(-1);
+  }
+
   /**
    * 📝 Создание нового поставщика с бизнес-логикой
    */
@@ -38,10 +55,9 @@ export class SuppliersBusinessService {
     this.logger.log(`Creating supplier: ${data.name} for company ${data.companyId}`);
 
     const supplier = await this.suppliersDataService.create(data);
-    
+
     this.logger.log(`Created supplier: ${supplier.name} (${supplier.id}) for company ${supplier.companyId}`);
-    
-    // 🔥 Audit логирование
+
     await this.auditService.log(AuditAction.SUPPLIER_CREATED, {
       entityType: 'Supplier',
       entityId: supplier.id,
@@ -49,16 +65,16 @@ export class SuppliersBusinessService {
       userId: user.id,
       metadata: {
         supplierName: supplier.name,
-        contactName: supplier.contactName,
-        email: supplier.email,
-        phone: supplier.phone,
+        contactName: this.maskName(supplier.contactName || undefined),
+        email: this.maskEmail(supplier.email || undefined),
+        phone: this.maskPhone(supplier.phone || undefined),
         supplierType: data.supplierType,
         city: supplier.city,
         country: supplier.country,
         initialStatus: supplier.isActive,
       },
-      changes: { 
-        after: this.sanitizeSupplierData(supplier) 
+      changes: {
+        after: this.sanitizeSupplierData(supplier),
       },
     });
 
@@ -68,31 +84,25 @@ export class SuppliersBusinessService {
   /**
    * 📝 Обновление поставщика с бизнес-логикой
    */
-  async updateSupplier(
-    id: string, 
-    data: UpdateSupplierData, 
-    user: RequestWithUser['user']
-  ): Promise<Supplier> {
+  async updateSupplier(id: string, data: UpdateSupplierData, user: RequestWithUser['user']): Promise<Supplier> {
     this.logger.log(`Updating supplier: ${id}`);
 
     const oldSupplier = await this.suppliersDataService.findById(id);
     const updatedSupplier = await this.suppliersDataService.update(id, data);
-    
+
     this.logger.log(`Updated supplier: ${updatedSupplier.name} (${updatedSupplier.id})`);
-    
-    // Определяем изменения для аудита
+
     const changes = this.detectChanges(oldSupplier, updatedSupplier);
-    const isContactInfoChange = changes.email || changes.phone || changes.contactName;
-    const isAddressChange = changes.address || changes.city || changes.country;
-    
-    // 🔥 Audit логирование
-    const auditAction = isContactInfoChange 
-      ? 'SUPPLIER_CONTACT_UPDATED' 
-      : isAddressChange 
-        ? 'SUPPLIER_ADDRESS_UPDATED'
-        : AuditAction.SUPPLIER_UPDATED;
-    
-    await this.auditService.log(auditAction as any, {
+    const isContactInfoChange = !!(changes.email || changes.phone || changes.contactName);
+    const isAddressChange = !!(changes.address || changes.city || changes.country);
+
+    const auditAction = isContactInfoChange
+      ? AuditAction.SUPPLIER_CONTACT_UPDATED
+      : isAddressChange
+      ? AuditAction.SUPPLIER_ADDRESS_UPDATED
+      : AuditAction.SUPPLIER_UPDATED;
+
+    await this.auditService.log(auditAction, {
       entityType: 'Supplier',
       entityId: updatedSupplier.id,
       companyId: updatedSupplier.companyId,
@@ -120,14 +130,13 @@ export class SuppliersBusinessService {
     this.logger.log(`Deactivating supplier: ${id}`);
 
     const supplier = await this.suppliersDataService.findById(id);
-    
+
     await this.suppliersDataService.softDelete(id);
-    
+
     const deactivatedSupplier = await this.suppliersDataService.findById(id);
-    
+
     this.logger.log(`Deactivated supplier: ${supplier?.name} (${id})`);
-    
-    // 🔥 Audit логирование
+
     await this.auditService.log(AuditAction.SUPPLIER_DEACTIVATED, {
       entityType: 'Supplier',
       entityId: id,
@@ -135,8 +144,8 @@ export class SuppliersBusinessService {
       userId: user.id,
       metadata: {
         supplierName: supplier?.name,
-        contactName: supplier?.contactName,
-        email: supplier?.email,
+        contactName: this.maskName(supplier?.contactName || undefined),
+        email: this.maskEmail(supplier?.email || undefined),
         action: 'deactivated',
         hasOrderHistory: await this.suppliersDataService.hasOrderHistory(id, user.companyId),
       },
@@ -155,21 +164,18 @@ export class SuppliersBusinessService {
   async rateSupplier(
     id: string,
     ratingData: SupplierRatingData,
-    user: RequestWithUser['user']
+    user: RequestWithUser['user'],
   ): Promise<SupplierRating> {
     this.logger.log(`Rating supplier: ${id} by user: ${user.id}`);
 
     const supplier = await this.suppliersDataService.findById(id);
-    
+
     if (!supplier) {
       throw new SupplierNotFoundException(id);
     }
 
-    // 📊 Расчет общего рейтинга
     const averageRating = this.calculateAverageRating(ratingData);
 
-    // TODO: Создание записи в таблице supplier_ratings
-    // Пока создаем объект для возврата
     const rating: SupplierRating = {
       id: `rating-${Date.now()}`,
       supplierId: id,
@@ -184,8 +190,7 @@ export class SuppliersBusinessService {
       createdAt: new Date(),
     };
 
-    // 🔥 Audit логирование
-    await this.auditService.log('SUPPLIER_RATED' as any, {
+    await this.auditService.log(AuditAction.SUPPLIER_RATED, {
       entityType: 'SupplierRating',
       entityId: rating.id,
       companyId: user.companyId,
@@ -218,8 +223,7 @@ export class SuppliersBusinessService {
 
     const priceComparison = await this.suppliersDataService.comparePartPrices(partId, companyId);
 
-    // 🔥 Audit логирование поиска цен
-    await this.auditService.log('SUPPLIER_PRICE_COMPARISON' as any, {
+    await this.auditService.log(AuditAction.SUPPLIER_PRICE_COMPARISON, {
       entityType: 'PriceComparison',
       companyId,
       metadata: {
@@ -241,7 +245,7 @@ export class SuppliersBusinessService {
   async getSupplierAnalytics(
     id: string,
     period: 'month' | 'quarter' | 'year',
-    companyId: string
+    companyId: string,
   ): Promise<Partial<SupplierAnalytics>> {
     this.logger.log(`Getting analytics for supplier: ${id}, period: ${period}`);
 
@@ -252,18 +256,13 @@ export class SuppliersBusinessService {
       throw new SupplierNotFoundException(id);
     }
 
-    // 📊 Дополнительные расчеты
     const enhancedAnalytics: Partial<SupplierAnalytics> = {
       ...analytics,
       supplierName: supplier.name,
       period,
-      // TODO: Добавить расчет рейтинговых данных
-      // currentRating: await this.calculateCurrentRating(id),
-      // ratingTrend: await this.calculateRatingTrend(id, period),
     };
 
-    // 🔥 Audit логирование просмотра аналитики
-    await this.auditService.log('SUPPLIER_ANALYTICS_VIEWED' as any, {
+    await this.auditService.log(AuditAction.SUPPLIER_ANALYTICS_VIEWED, {
       entityType: 'SupplierAnalytics',
       entityId: id,
       companyId,
@@ -282,10 +281,7 @@ export class SuppliersBusinessService {
   /**
    * 📦 Массовые операции с поставщиками
    */
-  async bulkOperations(
-    bulkData: BulkSuppliersDto,
-    user: RequestWithUser['user']
-  ): Promise<BulkSupplierResult> {
+  async bulkOperations(bulkData: BulkSuppliersDto, user: RequestWithUser['user']): Promise<BulkSupplierResult> {
     this.logger.log(`Bulk operation: ${bulkData.operation} for ${bulkData.suppliers.length} suppliers`);
 
     const results: BulkSupplierResult['results'] = [];
@@ -293,15 +289,14 @@ export class SuppliersBusinessService {
     let failureCount = 0;
     const startTime = Date.now();
 
-    // 📦 Обрабатываем каждого поставщика
     for (const [index, supplierItem] of bulkData.suppliers.entries()) {
       const identifier = supplierItem.id || supplierItem.email || supplierItem.taxNumber || `item-${index}`;
-      
+
       try {
         let supplierId: string | undefined;
 
         switch (bulkData.operation) {
-          case 'create':
+          case 'create': {
             const createData: CreateSupplierData = {
               ...supplierItem,
               companyId: user.companyId,
@@ -312,66 +307,57 @@ export class SuppliersBusinessService {
             const createdSupplier = await this.createSupplier(createData, user);
             supplierId = createdSupplier.id;
             break;
-
-          case 'update':
+          }
+          case 'update': {
             if (!supplierItem.id) {
               throw new Error('ID поставщика обязателен для операции обновления');
             }
             const updatedSupplier = await this.updateSupplier(supplierItem.id, supplierItem, user);
             supplierId = updatedSupplier.id;
             break;
-
-          case 'deactivate':
+          }
+          case 'deactivate': {
             if (!supplierItem.id) {
               throw new Error('ID поставщика обязателен для деактивации');
             }
             await this.deactivateSupplier(supplierItem.id, user);
             supplierId = supplierItem.id;
             break;
-
-          case 'activate':
+          }
+          case 'activate': {
             if (!supplierItem.id) {
               throw new Error('ID поставщика обязателен для активации');
             }
-            // TODO: Реализовать активацию
             await this.suppliersDataService.update(supplierItem.id, { isActive: true });
             supplierId = supplierItem.id;
             break;
+          }
         }
 
-        results.push({
-          identifier,
-          success: true,
-          supplierId,
-        });
-
+        results.push({ identifier, success: true, supplierId });
         successCount++;
-
-      } catch (error) {
+      } catch (error: any) {
         results.push({
           identifier,
           success: false,
           error: error instanceof Error ? error.message : 'Неизвестная ошибка',
         });
-
         failureCount++;
-        this.logger.error(`Failed bulk operation for supplier ${identifier}: ${error}`);
+        this.logger.error(`Failed bulk operation for supplier ${identifier}: ${error?.message || error}`);
       }
     }
 
     const processingTime = Date.now() - startTime;
 
-    // 📊 Группировка ошибок
     const errorGroups: Record<string, number> = {};
-    results.forEach(result => {
+    results.forEach((result) => {
       if (!result.success && result.error) {
-        const errorType = this.categorizeError(result.error);
-        errorGroups[errorType] = (errorGroups[errorType] || 0) + 1;
+        const type = this.categorizeError(result.error);
+        errorGroups[type] = (errorGroups[type] || 0) + 1;
       }
     });
 
-    // 🔥 Audit логирование bulk операции
-    await this.auditService.log('SUPPLIERS_BULK_OPERATION' as any, {
+    await this.auditService.log(AuditAction.SUPPLIERS_BULK_OPERATION, {
       entityType: 'BulkSupplierOperation',
       entityId: `bulk-${Date.now()}`,
       companyId: user.companyId,
@@ -402,173 +388,32 @@ export class SuppliersBusinessService {
     };
   }
 
-  /**
-   * 🔍 Поиск лучшего поставщика для запчасти
-   */
-  async findBestSupplierForPart(
-    partId: string,
-    prioritize: 'price' | 'quality' | 'delivery',
-    companyId: string
-  ): Promise<any> {
-    this.logger.log(`Finding best supplier for part: ${partId}, prioritize: ${prioritize}`);
-
-    // 🔍 Получаем всех поставщиков для этой запчасти
-    const suppliers = await this.suppliersDataService.findActiveSuppliersForPart(partId, companyId);
-    
-    if (suppliers.length === 0) {
-      return {
-        partId,
-        bestSupplier: null,
-        alternatives: [],
-        message: 'Активные поставщики для данной запчасти не найдены',
-      };
-    }
-
-    // 📊 Анализируем каждого поставщика
-    const supplierScores = await Promise.all(
-      suppliers.map(async (supplier) => {
-        const stats = await this.suppliersDataService.getSupplierStatistics(supplier.id, companyId);
-        
-        // 📊 Расчет score на основе приоритета
-        const score = this.calculateSupplierScore(
-          {
-            price: 80, // TODO: Получить реальную цену
-            quality: stats.onTimeDeliveryRate,
-            delivery: Math.max(0, 100 - stats.averageDeliveryTime * 10),
-            reliability: stats.onTimeDeliveryRate,
-          },
-          prioritize
-        );
-
-        return {
-          id: supplier.id,
-          name: supplier.name,
-          price: 80, // TODO: Получить реальную цену
-          rating: 4.2, // TODO: Получить реальный рейтинг
-          deliveryTime: stats.averageDeliveryTime,
-          score,
-        };
-      })
-    );
-
-    // Сортируем по score
-    supplierScores.sort((a, b) => b.score - a.score);
-
-    const bestSupplier = supplierScores[0];
-    const alternatives = supplierScores.slice(1, 4); // Топ 3 альтернативы
-
-    // 🔥 Audit логирование поиска
-    await this.auditService.log('BEST_SUPPLIER_SEARCH' as any, {
-      entityType: 'SupplierRecommendation',
-      companyId,
-      metadata: {
-        partId,
-        prioritize,
-        candidatesCount: suppliers.length,
-        bestSupplierId: bestSupplier.id,
-        bestSupplierScore: bestSupplier.score,
-        searchCriteria: prioritize,
-      },
-    });
-
-    return {
-      partId,
-      bestSupplier,
-      alternatives: alternatives.map(alt => ({
-        id: alt.id,
-        name: alt.name,
-        score: alt.score,
-        mainAdvantage: this.determineMainAdvantage(alt, prioritize),
-      })),
-    };
-  }
-
-  /**
-   * 📈 Топ поставщики компании
-   */
-  async getTopPerformers(
-    companyId: string,
-    period: 'month' | 'quarter' | 'year',
-    limit: number
-  ): Promise<TopSupplierMetrics[]> {
-    this.logger.log(`Getting top performers for company: ${companyId}, period: ${period}`);
-
-    const topSuppliers = await this.suppliersDataService.getTopPerformers(companyId, period, limit);
-
-    // 🔥 Audit логирование просмотра топа
-    await this.auditService.log('TOP_SUPPLIERS_VIEWED' as any, {
-      entityType: 'TopSuppliersReport',
-      companyId,
-      metadata: {
-        period,
-        limit,
-        topSuppliersCount: topSuppliers.length,
-        reportType: 'performance_ranking',
-      },
-    });
-
-    return topSuppliers;
-  }
-
-  /**
-   * 📊 Расчет среднего рейтинга
-   */
   private calculateAverageRating(ratingData: SupplierRatingData): number {
-    const ratings = [
-      ratingData.qualityRating,
-      ratingData.deliveryRating,
-      ratingData.priceRating,
-    ];
-
-    if (ratingData.communicationRating !== undefined) {
-      ratings.push(ratingData.communicationRating);
-    }
-
-    const sum = ratings.reduce((acc, rating) => acc + rating, 0);
+    const ratings = [ratingData.qualityRating, ratingData.deliveryRating, ratingData.priceRating];
+    if (ratingData.communicationRating !== undefined) ratings.push(ratingData.communicationRating);
+    const sum = ratings.reduce((acc, r) => acc + r, 0);
     return Math.round((sum / ratings.length) * 100) / 100;
   }
 
-  /**
-   * 📊 Расчет score поставщика
-   */
-  private calculateSupplierScore(
-    metrics: {
-      price: number;
-      quality: number;
-      delivery: number;
-      reliability: number;
-    },
-    prioritize: 'price' | 'quality' | 'delivery'
-  ): number {
-    const weights = {
-      price: prioritize === 'price' ? 0.5 : 0.2,
-      quality: prioritize === 'quality' ? 0.5 : 0.2,
-      delivery: prioritize === 'delivery' ? 0.5 : 0.2,
-      reliability: 0.1,
-    };
-
-    const score = 
-      metrics.price * weights.price +
-      metrics.quality * weights.quality +
-      metrics.delivery * weights.delivery +
-      metrics.reliability * weights.reliability;
-
-    return Math.round(score * 100) / 100;
+  private sanitizeSupplierData(supplier: Supplier | null): Partial<Supplier> {
+    if (!supplier) return {};
+    const { id, name, contactName, email, phone, address, city, country, website, notes, isActive, companyId, createdAt, updatedAt } =
+      supplier;
+    return { id, name, contactName, email, phone, address, city, country, website, notes, isActive, companyId, createdAt, updatedAt };
   }
 
-  /**
-   * 🎯 Определение главного преимущества поставщика
-   */
-  private determineMainAdvantage(supplier: any, prioritize: string): string {
-    if (prioritize === 'price') return 'Лучшая цена';
-    if (prioritize === 'quality') return 'Высокое качество';
-    if (prioritize === 'delivery') return 'Быстрая доставка';
-    return 'Надежность';
+  private detectChanges(original: Supplier | null, updated: Supplier): Record<string, any> {
+    if (!original) return {};
+    const changes: Record<string, any> = {};
+    const fields = ['name', 'contactName', 'email', 'phone', 'address', 'city', 'country', 'website', 'notes', 'isActive'];
+    fields.forEach((field) => {
+      if ((original as any)[field] !== (updated as any)[field]) {
+        changes[field] = { from: (original as any)[field], to: (updated as any)[field] };
+      }
+    });
+    return changes;
   }
 
-  /**
-   * 📊 Категоризация ошибок для группировки
-   */
   private categorizeError(error: string): string {
     if (error.includes('email')) return 'email_validation';
     if (error.includes('налоговый')) return 'tax_number_validation';
@@ -576,46 +421,5 @@ export class SuppliersBusinessService {
     if (error.includes('права')) return 'permissions';
     if (error.includes('существует')) return 'duplicate_data';
     return 'other';
-  }
-
-  /**
-   * 🧹 Очистка данных поставщика для аудита
-   */
-  private sanitizeSupplierData(supplier: Supplier | null): Partial<Supplier> {
-    if (!supplier) return {};
-    
-    const { 
-      id, name, contactName, email, phone, address, city, country,
-      website, notes, isActive, companyId, createdAt, updatedAt 
-    } = supplier;
-    
-    return { 
-      id, name, contactName, email, phone, address, city, country,
-      website, notes, isActive, companyId, createdAt, updatedAt 
-    };
-  }
-
-  /**
-   * 📊 Определение изменений для аудита
-   */
-  private detectChanges(original: Supplier | null, updated: Supplier): Record<string, any> {
-    if (!original) return {};
-    
-    const changes: Record<string, any> = {};
-    const fields = [
-      'name', 'contactName', 'email', 'phone', 'address', 
-      'city', 'country', 'website', 'notes', 'isActive'
-    ];
-    
-    fields.forEach(field => {
-      if (original[field] !== updated[field]) {
-        changes[field] = {
-          from: original[field],
-          to: updated[field],
-        };
-      }
-    });
-
-    return changes;
   }
 }

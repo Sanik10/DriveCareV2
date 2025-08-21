@@ -1,0 +1,9 @@
+# // path: .husky/pre-commit
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Проверка трекера
+npm run tracker:sync || exit 1
+
+# (Опционально) Запуск тестов, если нужно
+# npm test || exit 1

@@ -1,6 +1,6 @@
-// src/modules/invoices/types/invoices.types.ts (ДОПОЛНЕННАЯ ВЕРСИЯ)
+// src/modules/invoices/types/invoices.types.ts (КРИТИЧЕСКИ ИСПРАВЛЕННЫЙ)
 import { InvoiceStatus } from '../../../database/entities/invoice.entity';
-import { AuthRole } from '../../auth/types/auth.types'; // 🔥 ДОБАВЛЕН ИМПОРТ
+import { AuthRole } from '../../auth/types/auth.types';
 
 export { InvoiceStatus } from '../../../database/entities/invoice.entity';
 
@@ -45,11 +45,10 @@ export interface UpdateInvoiceData {
   notes?: string;
 }
 
-// 🔥 ИСПРАВЛЕНО: Используем правильный тип роли и добавляем недостающие поля
 export interface UserWithCompany {
   id: string;
   email: string;
-  role: AuthRole; // Используем правильный enum
+  role: AuthRole;
   companyId: string;
   firstName?: string;
   lastName?: string;
@@ -62,6 +61,7 @@ export interface InvoiceCalculationResult {
   taxPercentage: number;
 }
 
+// ✅ ИСПРАВЛЕНО: Убрано дублирование - оставлена только одна версия
 export interface OverdueInvoicesReport {
   totalOverdue: number;
   totalAmount: number;
@@ -83,16 +83,4 @@ export interface InvoiceStatistics {
   pendingAmount: number;
   overdueAmount: number;
   overdueCount: number;
-}
-
-export interface OverdueInvoicesReport {
-  totalOverdue: number;
-  totalAmount: number;
-  byCustomer: Array<{
-    customerId: string;
-    customerName: string;
-    count: number;
-    totalAmount: number;
-    oldestInvoiceDate: Date;
-  }>;
 }

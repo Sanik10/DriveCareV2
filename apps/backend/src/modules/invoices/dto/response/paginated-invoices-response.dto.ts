@@ -1,5 +1,6 @@
-// src/modules/invoices/dto/response/paginated-invoices-response.dto.ts
+// src/modules/invoices/dto/response/paginated-invoices-response.dto.ts (КРИТИЧЕСКИ ИСПРАВЛЕННЫЙ)
 import { ApiProperty } from '@nestjs/swagger';
+import { Exclude, Expose } from 'class-transformer';
 import { InvoiceResponseDto } from './invoice-response.dto';
 
 export class PaginatedInvoicesResponseDto {
@@ -24,16 +25,33 @@ export class PaginatedInvoicesResponseDto {
   @ApiProperty({ description: 'Есть ли предыдущая страница' })
   hasPrev: boolean;
 
-  // 📊 Дополнительная статистика для админки
-  @ApiProperty({ description: 'Общая сумма всех счетов' })
+  // 🔒 КРИТИЧЕСКАЯ ЗАЩИТА: Финансовая статистика только для определенных ролей
+  @ApiProperty({ description: 'Общая сумма всех счетов (только для manager+)' })
+  @Exclude() // По умолчанию скрыто от cashier и mechanic
+  @Expose({ groups: ['company_owner', 'company_admin', 'manager'] })
   totalAmount: number;
 
-  @ApiProperty({ description: 'Сумма оплаченных счетов' })
+  @ApiProperty({ description: 'Сумма оплаченных счетов (только для manager+)' })
+  @Exclude() // По умолчанию скрыто
+  @Expose({ groups: ['company_owner', 'company_admin', 'manager'] })
   paidAmount: number;
 
-  @ApiProperty({ description: 'Сумма неоплаченных счетов' })
+  @ApiProperty({ description: 'Сумма неоплаченных счетов (только для manager+)' })
+  @Exclude() // По умолчанию скрыто
+  @Expose({ groups: ['company_owner', 'company_admin', 'manager'] })
   pendingAmount: number;
 
   @ApiProperty({ description: 'Количество просроченных счетов' })
-  overdueCount: number;
+  overdueCount: number; // Это может видеть даже cashier для работы
+
+  // 🔒 ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Детальная статистика только для топ-ролей
+  @ApiProperty({ description: 'Средняя сумма счета (только для owner/admin)' })
+  @Exclude()
+  @Expose({ groups: ['company_owner', 'company_admin'] })
+  averageAmount?: number;
+
+  @ApiProperty({ description: 'Процент просроченных счетов (только для owner/admin)' })
+  @Exclude()
+  @Expose({ groups: ['company_owner', 'company_admin'] })
+  overduePercentage?: number;
 }

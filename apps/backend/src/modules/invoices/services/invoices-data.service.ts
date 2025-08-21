@@ -1,10 +1,11 @@
-// src/modules/invoices/services/invoices-data.service.ts (ПОЛНЫЙ ФАЙЛ)
+// src/modules/invoices/services/invoices-data.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, Like, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import { Repository, LessThan, DeepPartial } from 'typeorm';
 import { Invoice } from '../../../database/entities';
 import { InvoiceStatus } from '../../../database/entities/invoice.entity';
 import { CreateInvoiceData, UpdateInvoiceData, InvoiceFilter, InvoiceStatistics } from '../types/invoices.types';
+import { INVOICES_CONSTANTS } from '../constants/invoices.constants';
 
 @Injectable()
 export class InvoicesDataService {
@@ -15,37 +16,26 @@ export class InvoicesDataService {
     private readonly invoiceRepository: Repository<Invoice>,
   ) {}
 
-  /**
-   * 💾 Создание счета
-   */
   async create(data: CreateInvoiceData): Promise<Invoice> {
-    const invoice = this.invoiceRepository.create(data);
+    // Явно подсказываем TS, что создаём одиночную сущность, а не массив
+    const invoice = this.invoiceRepository.create(data as DeepPartial<Invoice>);
     return this.invoiceRepository.save(invoice);
   }
 
-  /**
-   * 🔍 Поиск по ID
-   */
   async findById(id: string): Promise<Invoice | null> {
     return this.invoiceRepository.findOne({
       where: { id },
-      relations: ['order', 'company', 'payments'],
+      relations: ['order', 'order.customer', 'order.vehicle', 'company', 'payments', 'payments.paymentMethod'],
     });
   }
 
-  /**
-   * 🔒 Поиск по ID для компании
-   */
   async findByIdForCompany(id: string, companyId: string): Promise<Invoice | null> {
     return this.invoiceRepository.findOne({
       where: { id, companyId },
-      relations: ['order', 'company', 'payments'],
+      relations: ['order', 'order.customer', 'order.vehicle', 'company', 'payments', 'payments.paymentMethod'],
     });
   }
 
-  /**
-   * 🔍 Поиск по заказу для компании
-   */
   async findByOrderIdForCompany(orderId: string, companyId: string): Promise<Invoice | null> {
     return this.invoiceRepository.findOne({
       where: { orderId, companyId },
@@ -53,39 +43,35 @@ export class InvoicesDataService {
     });
   }
 
-  /**
-   * ✏️ Обновление счета
-   */
   async update(id: string, data: UpdateInvoiceData): Promise<Invoice> {
-    await this.invoiceRepository.update(id, data);
-    return this.findById(id)!;
+    await this.invoiceRepository.update(id, data as any);
+    const updated = await this.findById(id);
+    if (!updated) throw new Error(`Invoice with id ${id} not found after update`);
+    return updated;
   }
 
-  /**
-   * 🔍 Поиск с фильтрами
-   */
   async findWithFilters(filter: InvoiceFilter): Promise<[Invoice[], number]> {
-    const query = this.invoiceRepository.createQueryBuilder('invoice')
+    const query = this.invoiceRepository
+      .createQueryBuilder('invoice')
       .leftJoinAndSelect('invoice.order', 'order')
+      .leftJoinAndSelect('order.customer', 'customer')
+      .leftJoinAndSelect('order.vehicle', 'vehicle')
       .leftJoinAndSelect('invoice.company', 'company')
-      .leftJoinAndSelect('invoice.payments', 'payments');
+      .leftJoinAndSelect('invoice.payments', 'payments')
+      .leftJoinAndSelect('payments.paymentMethod', 'paymentMethod');
 
-    // Фильтрация по компании
     if (filter.companyId) {
       query.andWhere('invoice.companyId = :companyId', { companyId: filter.companyId });
     }
 
-    // Фильтрация по заказу
     if (filter.orderId) {
       query.andWhere('invoice.orderId = :orderId', { orderId: filter.orderId });
     }
 
-    // Фильтрация по статусу
     if (filter.status) {
       query.andWhere('invoice.status = :status', { status: filter.status });
     }
 
-    // Фильтрация по датам выставления
     if (filter.dateFrom) {
       query.andWhere('invoice.issueDate >= :dateFrom', { dateFrom: filter.dateFrom });
     }
@@ -93,7 +79,6 @@ export class InvoicesDataService {
       query.andWhere('invoice.issueDate <= :dateTo', { dateTo: filter.dateTo });
     }
 
-    // Фильтрация по срокам оплаты
     if (filter.dueDateFrom) {
       query.andWhere('invoice.dueDate >= :dueDateFrom', { dueDateFrom: filter.dueDateFrom });
     }
@@ -101,7 +86,6 @@ export class InvoicesDataService {
       query.andWhere('invoice.dueDate <= :dueDateTo', { dueDateTo: filter.dueDateTo });
     }
 
-    // Фильтрация по сумме
     if (filter.amountFrom !== undefined) {
       query.andWhere('invoice.totalAmount >= :amountFrom', { amountFrom: filter.amountFrom });
     }
@@ -109,100 +93,90 @@ export class InvoicesDataService {
       query.andWhere('invoice.totalAmount <= :amountTo', { amountTo: filter.amountTo });
     }
 
-    // Поиск по тексту
     if (filter.search) {
-      query.andWhere(
-        '(invoice.invoiceNumber ILIKE :search OR invoice.notes ILIKE :search)',
-        { search: `%${filter.search}%` }
-      );
+      query.andWhere('(invoice.invoiceNumber ILIKE :search OR invoice.notes ILIKE :search)', {
+        search: `%${filter.search}%`,
+      });
     }
 
-    // Фильтрация просроченных
     if (filter.includeOverdue !== undefined) {
       const now = new Date();
       if (filter.includeOverdue) {
-        query.andWhere('invoice.dueDate < :now AND invoice.status = :issuedStatus', { 
-          now, 
-          issuedStatus: InvoiceStatus.ISSUED 
+        query.andWhere('invoice.dueDate < :now AND invoice.status = :issuedStatus', {
+          now,
+          issuedStatus: InvoiceStatus.ISSUED,
         });
       } else {
-        query.andWhere('(invoice.dueDate >= :now OR invoice.status != :issuedStatus)', { 
-          now, 
-          issuedStatus: InvoiceStatus.ISSUED 
+        query.andWhere('(invoice.dueDate >= :now OR invoice.status != :issuedStatus)', {
+          now,
+          issuedStatus: InvoiceStatus.ISSUED,
         });
       }
     }
 
-    // Сортировка
     const sortField = filter.sortField || 'createdAt';
-    const sortOrder = filter.sortOrder || 'DESC';
-    query.orderBy(`invoice.${sortField}`, sortOrder.toUpperCase() as 'ASC' | 'DESC');
+    const sortOrder = (filter.sortOrder || 'DESC').toUpperCase() as 'ASC' | 'DESC';
+    query.orderBy(this.mapSortField(sortField), sortOrder);
 
-    // Пагинация
-    if (filter.page && filter.limit) {
-      const skip = (filter.page - 1) * filter.limit;
-      query.skip(skip).take(filter.limit);
-    } else if (filter.limit) {
-      query.take(filter.limit);
+    const take = Math.min(filter.limit ?? INVOICES_CONSTANTS.DEFAULTS.PAGE_SIZE, INVOICES_CONSTANTS.DEFAULTS.MAX_ITEMS);
+    if (filter.page) {
+      const skip = (filter.page - 1) * take;
+      query.skip(skip).take(take);
+    } else {
+      query.take(take);
     }
 
     return query.getManyAndCount();
   }
 
-  /**
-   * 🚨 Получение просроченных счетов
-   */
   async findOverdueInvoices(companyId: string): Promise<Invoice[]> {
     const now = new Date();
-    
     return this.invoiceRepository.find({
       where: {
         companyId,
         status: InvoiceStatus.ISSUED,
         dueDate: LessThan(now),
-      },
-      relations: ['order', 'company'],
-      order: {
-        dueDate: 'ASC',
-      },
+      } as any,
+      relations: ['order', 'order.customer', 'company'],
+      order: { dueDate: 'ASC' },
     });
   }
 
-  /**
-   * 📊 Получение статистики счетов
-   */
   async getInvoicesStatistics(companyId: string): Promise<InvoiceStatistics> {
-    const baseQuery = this.invoiceRepository.createQueryBuilder('invoice')
-      .where('invoice.companyId = :companyId', { companyId });
+    const baseQB = this.invoiceRepository.createQueryBuilder('invoice').where('invoice.companyId = :companyId', {
+      companyId,
+    });
 
-    // Общее количество
-    const total = await baseQuery.getCount();
+    const total = await baseQB.getCount();
 
-    // По статусам
-    const statusStats = await baseQuery
+    const statusStats = await this.invoiceRepository
+      .createQueryBuilder('invoice')
       .select('invoice.status', 'status')
       .addSelect('COUNT(*)', 'count')
+      .where('invoice.companyId = :companyId', { companyId })
       .groupBy('invoice.status')
       .getRawMany();
 
-    const byStatus = statusStats.reduce((acc, stat) => {
-      acc[stat.status] = parseInt(stat.count);
+    const byStatus = statusStats.reduce((acc, row) => {
+      acc[row.status] = parseInt(row.count, 10);
       return acc;
     }, {} as Record<string, number>);
 
-    // За текущий месяц
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    const thisMonth = await baseQuery
+    const thisMonth = await this.invoiceRepository
+      .createQueryBuilder('invoice')
+      .where('invoice.companyId = :companyId', { companyId })
       .andWhere('invoice.createdAt >= :startOfMonth', { startOfMonth })
       .getCount();
 
-    // Суммы
-    const amountStats = await baseQuery
+    const amountStats = await this.invoiceRepository
+      .createQueryBuilder('invoice')
       .select('invoice.status', 'status')
       .addSelect('COALESCE(SUM(invoice.totalAmount), 0)', 'total')
+      .where('invoice.companyId = :companyId', { companyId })
       .groupBy('invoice.status')
       .getRawMany();
 
@@ -210,31 +184,30 @@ export class InvoicesDataService {
     let paidAmount = 0;
     let pendingAmount = 0;
 
-    amountStats.forEach(stat => {
-      const amount = parseFloat(stat.total);
-      totalAmount += amount;
-      
-      if (stat.status === InvoiceStatus.PAID) {
-        paidAmount += amount;
-      } else if (stat.status === InvoiceStatus.ISSUED) {
-        pendingAmount += amount;
-      }
+    amountStats.forEach((row) => {
+      const amt = parseFloat(row.total || '0');
+      totalAmount += amt;
+      if (row.status === InvoiceStatus.PAID) paidAmount += amt;
+      if (row.status === InvoiceStatus.ISSUED) pendingAmount += amt;
     });
 
-    // Просроченные
     const now = new Date();
-    const overdueCount = await baseQuery
+    const overdueCount = await this.invoiceRepository
+      .createQueryBuilder('invoice')
+      .where('invoice.companyId = :companyId', { companyId })
       .andWhere('invoice.status = :status', { status: InvoiceStatus.ISSUED })
       .andWhere('invoice.dueDate < :now', { now })
       .getCount();
 
-    const overdueAmountResult = await baseQuery
+    const overdueAmountRow = await this.invoiceRepository
+      .createQueryBuilder('invoice')
+      .select('COALESCE(SUM(invoice.totalAmount), 0)', 'total')
+      .where('invoice.companyId = :companyId', { companyId })
       .andWhere('invoice.status = :status', { status: InvoiceStatus.ISSUED })
       .andWhere('invoice.dueDate < :now', { now })
-      .select('COALESCE(SUM(invoice.totalAmount), 0)', 'total')
       .getRawOne();
 
-    const overdueAmount = parseFloat(overdueAmountResult.total || '0');
+    const overdueAmount = parseFloat(overdueAmountRow?.total || '0');
 
     return {
       total,
@@ -248,36 +221,42 @@ export class InvoicesDataService {
     };
   }
 
-  /**
-   * 📊 Количество счетов компании
-   */
   async getInvoicesCountForCompany(companyId: string): Promise<number> {
-    return this.invoiceRepository.count({
-      where: { companyId },
-    });
+    return this.invoiceRepository.count({ where: { companyId } });
   }
 
-  /**
-   * 🎯 Генерация номера счета
-   */
   async generateInvoiceNumber(companyId: string): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `INV-${year}-`;
-    
-    // Поиск последнего номера за год
-    const lastInvoice = await this.invoiceRepository
+
+    const last = await this.invoiceRepository
       .createQueryBuilder('invoice')
       .where('invoice.companyId = :companyId', { companyId })
       .andWhere('invoice.invoiceNumber LIKE :prefix', { prefix: `${prefix}%` })
       .orderBy('invoice.invoiceNumber', 'DESC')
       .getOne();
 
-    let nextNumber = 1;
-    if (lastInvoice) {
-      const lastNumber = parseInt(lastInvoice.invoiceNumber.split('-')[2]);
-      nextNumber = lastNumber + 1;
+    let next = 1;
+    if (last) {
+      const parts = last.invoiceNumber.split('-');
+      const lastNum = parseInt(parts[2], 10);
+      if (!isNaN(lastNum)) next = lastNum + 1;
     }
 
-    return `${prefix}${nextNumber.toString().padStart(5, '0')}`;
+    return `${prefix}${next.toString().padStart(5, '0')}`;
+  }
+
+  private mapSortField(field: string): string {
+    const map: Record<string, string> = {
+      createdAt: 'invoice.createdAt',
+      updatedAt: 'invoice.updatedAt',
+      issueDate: 'invoice.issueDate',
+      dueDate: 'invoice.dueDate',
+      totalAmount: 'invoice.totalAmount',
+      amount: 'invoice.amount',
+      invoiceNumber: 'invoice.invoiceNumber',
+      status: 'invoice.status',
+    };
+    return map[field] || 'invoice.createdAt';
   }
 }

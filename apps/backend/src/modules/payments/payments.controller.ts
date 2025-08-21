@@ -1,4 +1,4 @@
-// src/modules/payments/payments.controller.ts - ПРОФЕССИОНАЛЬНАЯ ДОКУМЕНТАЦИЯ:
+// src/modules/payments/payments.controller.ts (✅ SECURITY GUARDS ADDED)
 
 import {
   Controller,
@@ -10,6 +10,8 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UsePipes,
   Request,
   Logger,
   ParseUUIDPipe,
@@ -41,6 +43,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CompanyOwnershipGuard } from '../../common/guards/company-ownership.guard';
+// ✅ ДОБАВЛЕНЫ SECURITY INTERCEPTORS И PIPES
+import { AuditLoggingInterceptor } from '../../common/interceptors/audit-logging.interceptor';
+import { EnhancedValidationPipe } from '../../common/pipes/enhanced-validation.pipe';
 import { PaymentsService } from './payments.service';
 import { RecordPaymentDto } from './dto/request/record-payment.dto';
 import { RefundPaymentDto } from './dto/request/refund-payment.dto';
@@ -58,6 +63,9 @@ import { PAYMENTS_CONSTANTS } from './constants/payments.constants';
 @ApiSecurity('JWT')
 @Controller('payments')
 @UseGuards(JwtAuthGuard, RolesGuard, CompanyOwnershipGuard)
+// ✅ ДОБАВЛЕНЫ ГЛОБАЛЬНЫЕ SECURITY INTERCEPTORS И PIPES
+@UseInterceptors(AuditLoggingInterceptor)
+@UsePipes(EnhancedValidationPipe)
 export class PaymentsController {
   private readonly logger = new Logger(PaymentsController.name);
 
@@ -82,7 +90,7 @@ export class PaymentsController {
     • 🎭 Различные способы оплаты (наличные, карты, переводы)
     • 📋 Автоматическое обновление статуса счета
     
-    **Роли:** admin, manager, owner, superadmin
+    **Роли:** company_admin, manager, company_owner, superadmin
     **Лимиты:** 50 платежей в час на компанию
     `
   })
@@ -203,7 +211,7 @@ export class PaymentsController {
     
     **Сортировка:** по дате, сумме, статусу, создания
     **Пагинация:** до 100 элементов на страницу
-    **Роли:** admin, manager, owner, superadmin, mechanic (ограниченный доступ)
+    **Роли:** company_admin, manager, company_owner, superadmin
     `
   })
   @ApiQuery({
@@ -349,7 +357,7 @@ export class PaymentsController {
     • 💰 Основные данные платежа (сумма, валюта, статус)
     • 📋 Связанный счет (invoice) и заказ
     • 💳 Информация о способе оплаты
-    • 🌐 Данные платежного шлюза
+    • 🌐 Данные платежного шлюза (безопасные)
     • 📊 История изменений статуса
     • 💱 Данные валютного обмена (если применимо)
     
@@ -403,14 +411,14 @@ export class PaymentsController {
     • 🔍 Обновление ID транзакции
     • 📝 Редактирование примечаний
     • 🌐 Обновление данных платежного шлюза
-    • 📋 Изменение метаданных
+    • 📋 Изменение безопасных метаданных
     
     **Ограничения:**
     • Финальные статусы (processed, refunded) имеют ограниченные возможности изменения
     • Автоматическая валидация переходов между статусами
     • Аудит всех изменений
     
-    **Роли:** admin, manager, owner, superadmin
+    **Роли:** company_admin, manager, company_owner, superadmin
     `
   })
   @ApiParam({
@@ -436,10 +444,6 @@ export class PaymentsController {
         description: 'Добавление информации от платежного шлюза',
         value: {
           gatewayTransactionId: 'sberbank_12345',
-          gatewayResponse: {
-            status: 'approved',
-            authCode: 'ABC123'
-          },
           gatewayFee: 150.00
         }
       },
@@ -500,7 +504,7 @@ export class PaymentsController {
     • Максимальный срок возврата: ${PAYMENTS_CONSTANTS.DEFAULTS.MAX_REFUND_DAYS} дней
     • Крупные возвраты требуют подтверждения владельца
     
-    **Роли:** admin, owner, superadmin (НЕ manager/mechanic)
+    **Роли:** company_admin, company_owner, superadmin (НЕ manager/mechanic)
     `
   })
   @ApiParam({
@@ -597,7 +601,7 @@ export class PaymentsController {
     • ⚡ Скорость обработки платежей
     • 🎯 Показатели успешности и возвратов
     
-    **Роли:** admin, owner, superadmin (финансовые отчеты)
+    **Роли:** company_admin, company_owner, superadmin (финансовые отчеты)
     **Кэширование:** 15 минут
     `
   })
@@ -637,7 +641,7 @@ export class PaymentsController {
     • 💱 Разбивка по валютам
     
     **Обновление:** в реальном времени
-    **Роли:** admin, manager, owner, superadmin
+    **Роли:** company_admin, manager, company_owner, superadmin
     `
   })
   @ApiResponse({
@@ -661,7 +665,8 @@ export class PaymentsController {
    * 🗑️ Удаление платежа (только для админов/владельцев)
    */
   @Delete(':id')
-  @Roles('superadmin', 'owner', 'admin')
+  // ✅ ИСПРАВЛЕНО: Новые роли вместо старых
+  @Roles('superadmin', 'company_owner', 'company_admin')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ 
     summary: '🚨 Удалить платеж (ОПАСНО)',
@@ -679,7 +684,7 @@ export class PaymentsController {
     • Сохраняется запись в аудит-логе
     • Требует подтверждения высокого уровня
     
-    **Роли:** admin, owner, superadmin
+    **Роли:** company_admin, company_owner, superadmin
     `
   })
   @ApiParam({
@@ -718,7 +723,8 @@ export class PaymentsController {
    * 🚨 Обработка просроченных платежей (только для системных задач)
    */
   @Post('system/process-overdue')
-  @Roles('superadmin', 'owner', 'admin')
+  // ✅ ИСПРАВЛЕНО: Новые роли вместо старых
+  @Roles('superadmin', 'company_owner', 'company_admin')
   @ApiOperation({ 
     summary: '🤖 Обработать просроченные платежи',
     description: `
@@ -732,7 +738,7 @@ export class PaymentsController {
     • 📊 Генерация отчета по обработке
     
     **Периодичность:** рекомендуется запускать каждый час
-    **Роли:** admin, owner, superadmin
+    **Роли:** company_admin, company_owner, superadmin
     `
   })
   @ApiResponse({

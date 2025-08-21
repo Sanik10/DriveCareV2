@@ -1,31 +1,93 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { RoleDto } from './role.dto';
 
+/**
+ * 🔐 USER RESPONSE DTO
+ * 
+ * CRITICAL SECURITY: company_id удален из response!
+ * Это предотвращает information disclosure атаки
+ */
 export class UserResponseDto {
-  @ApiProperty({ example: 'uuid', description: 'ID пользователя' })
+  @ApiProperty({ 
+    example: '123e4567-e89b-12d3-a456-426614174000', 
+    description: 'Уникальный идентификатор пользователя',
+    format: 'uuid'
+  })
   id: string;
 
-  @ApiProperty({ example: 'user@example.com', description: 'Email' })
+  @ApiProperty({ 
+    example: 'mechanic@autoservice.ru', 
+    description: 'Email адрес пользователя',
+    format: 'email'
+  })
   email: string;
 
-  @ApiProperty({ example: 'John', description: 'Имя' })
+  @ApiProperty({ 
+    example: 'Алексей', 
+    description: 'Имя пользователя',
+    minLength: 1,
+    maxLength: 50
+  })
   firstName: string;
 
-  @ApiProperty({ example: 'Doe', description: 'Фамилия' })
+  @ApiProperty({ 
+    example: 'Механиков', 
+    description: 'Фамилия пользователя',
+    minLength: 1,
+    maxLength: 50
+  })
   lastName: string;
 
-  @ApiProperty({ example: '+7 999 123 45 67', description: 'Телефон' })
-  phone: string;
+  @ApiProperty({ 
+    example: '+79991234567', 
+    description: 'Номер телефона в российском формате',
+    required: false,
+    pattern: '^\\+7[0-9]{10}$'
+  })
+  phone?: string;
 
-  @ApiProperty({ example: true, description: 'Активен ли пользователь' })
+  @ApiProperty({ 
+    example: 'Специалист по двигателям', 
+    description: 'Профессиональная специализация сотрудника',
+    required: false,
+    maxLength: 100
+  })
+  specialization?: string;
+
+  @ApiProperty({ 
+    example: true, 
+    description: 'Статус активности пользователя (true = активен, false = заблокирован)',
+    type: 'boolean'
+  })
   isActive: boolean;
 
-  @ApiProperty({ description: 'Роль пользователя', type: RoleDto })
+  @ApiProperty({ 
+    description: 'Роль пользователя в системе', 
+    type: RoleDto,
+    example: {
+      id: '123e4567-e89b-12d3-a456-426614174000',
+      name: 'mechanic'
+    }
+  })
   role: RoleDto;
 
-  @ApiProperty({ example: 'uuid', description: 'ID компании', required: false }) // Изменено: добавлен required: false
-  company_id: string | null; // Изменено: добавлен union type с null
+  // 🔐 CRITICAL SECURITY FIX: company_id УДАЛЕН!
+  // Ранее: company_id: string | null; 
+  // Причина удаления: Предотвращение information disclosure атак
+  // Multi-tenant безопасность: ID компании не должен быть доступен клиенту
 
-  @ApiProperty({ example: '2025-01-01T00:00:00Z', description: 'Дата создания' })
+  @ApiProperty({ 
+    example: '2025-01-06T10:30:00.000Z', 
+    description: 'Дата и время создания аккаунта пользователя',
+    format: 'date-time'
+  })
   createdAt: Date;
+
+  @ApiProperty({ 
+    example: '2025-01-06T09:15:00.000Z', 
+    description: 'Дата и время последнего входа в систему',
+    format: 'date-time',
+    required: false
+  })
+  lastLoginAt?: Date;
 }

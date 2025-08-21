@@ -1,8 +1,9 @@
-// src/modules/invoices/dto/response/invoice-response.dto.ts
+// src/modules/invoices/dto/response/invoice-response.dto.ts (КРИТИЧЕСКИ ИСПРАВЛЕННЫЙ)
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Exclude, Expose, Transform } from 'class-transformer';
 import { InvoiceStatus } from '../../types/invoices.types';
 
-// Вложенные типы для связанных данных
+// 🔒 ЗАЩИЩЕННЫЕ ВЛОЖЕННЫЕ ТИПЫ
 class OrderInfo {
   @ApiProperty({ description: 'ID заказа' })
   id: string;
@@ -33,10 +34,15 @@ class CustomerInfo {
   @ApiPropertyOptional({ description: 'Название компании' })
   companyName?: string;
 
-  @ApiProperty({ description: 'Email клиента' })
+  // 🔒 КРИТИЧЕСКАЯ ЗАЩИТА: PII данные только для определенных ролей
+  @ApiProperty({ description: 'Email клиента (только для manager+)' })
+  @Exclude() // По умолчанию скрыто
+  @Expose({ groups: ['company_owner', 'company_admin', 'manager'] })
   email: string;
 
-  @ApiProperty({ description: 'Телефон клиента' })
+  @ApiProperty({ description: 'Телефон клиента (только для manager+)' })
+  @Exclude() // По умолчанию скрыто
+  @Expose({ groups: ['company_owner', 'company_admin', 'manager'] })
   phone: string;
 
   @ApiProperty({ description: 'Тип клиента', enum: ['individual', 'company'] })
@@ -70,7 +76,10 @@ class CompanyInfo {
   @ApiPropertyOptional({ description: 'Юридическое название' })
   legalName?: string;
 
-  @ApiPropertyOptional({ description: 'ИНН' })
+  // 🔒 КРИТИЧЕСКАЯ ЗАЩИТА: Sensitive business data только для топ-ролей
+  @ApiPropertyOptional({ description: 'ИНН (только для owner/admin)' })
+  @Exclude() // По умолчанию скрыто
+  @Expose({ groups: ['company_owner', 'company_admin'] })
   taxNumber?: string;
 
   @ApiPropertyOptional({ description: 'Адрес' })

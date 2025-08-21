@@ -1,3 +1,4 @@
+// apps/backend/src/modules/customers/constants/customers.constants.ts
 import { AuditAction } from '../../../common/audit/audit.service';
 
 export const CUSTOMERS_CONSTANTS = {
@@ -39,6 +40,21 @@ export const CUSTOMERS_CONSTANTS = {
     STATUS_CHANGED: 'Изменен статус клиента',
     NOT_FOUND: 'Клиент не найден',
     ACCESS_DENIED: 'Отказано в доступе к клиенту',
+  },
+
+  // 152‑ФЗ: минимизация ПДн — кто может видеть полные ПДн
+  PII: {
+    VISIBLE_ROLES: [
+      'superadmin',
+      'platform_admin',
+      'owner',
+      'company_owner',
+      'admin',
+      'company_admin',
+      'manager',
+      'cashier',
+      'service_advisor',
+    ],
   },
 } as const;
 

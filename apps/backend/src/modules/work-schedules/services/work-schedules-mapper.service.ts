@@ -1,20 +1,16 @@
-// src/modules/work-schedules/services/work-schedules-mapper.service.ts
+// path: apps/backend/src/modules/work-schedules/services/work-schedules-mapper.service.ts
 import { Injectable } from '@nestjs/common';
 import { WorkSchedule, ScheduleException } from '../../../database/entities';
 import { ScheduleResponseDto } from '../dto/response/schedule-response.dto';
 import { IWorkSchedulesMapperService } from '../interfaces/work-schedules.interface';
 import { DAY_NAMES } from '../constants/work-schedules.constants';
+import { ExceptionResponseDto } from '../dto/response/exception-response.dto';
 
 @Injectable()
 export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
-  
-  /**
-   * 🎯 Основной маппинг WorkSchedule → ScheduleResponseDto
-   */
   mapScheduleToResponseDto(schedule: WorkSchedule): ScheduleResponseDto {
-    // 🔥 Парсим JSON поля обратно в массивы
-    const skillMatrix = schedule.skillMatrix ? JSON.parse(schedule.skillMatrix) : [];
-    const preferredDaysOff = schedule.preferredDaysOff ? JSON.parse(schedule.preferredDaysOff) : [];
+    const skillMatrix = this.safeNormalizeArray<string>(schedule.skillMatrix, []);
+    const preferredDaysOff = this.safeNormalizeArray<number>(schedule.preferredDaysOff, []);
 
     return {
       id: schedule.id,
@@ -27,30 +23,23 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
       isDayOff: schedule.isDayOff,
       breakStartTime: schedule.breakStartTime,
       breakEndTime: schedule.breakEndTime,
-      efficiency: schedule.efficiency,
-      skillMatrix: skillMatrix,
+      efficiency: schedule.efficiency as unknown as number,
+      skillMatrix,
       shiftType: schedule.shiftType,
       maxConsecutiveDays: schedule.maxConsecutiveDays,
-      preferredDaysOff: preferredDaysOff,
+      preferredDaysOff,
       isActive: schedule.isActive,
-      // 🔥 Вычисляемые поля
       workingHours: this.calculateWorkingHours(schedule),
       createdAt: schedule.createdAt,
       updatedAt: schedule.updatedAt,
     };
   }
 
-  /**
-   * 🎯 Массовый маппинг
-   */
   mapScheduleArrayToResponseDto(schedules: WorkSchedule[]): ScheduleResponseDto[] {
-    return schedules.map(schedule => this.mapScheduleToResponseDto(schedule));
+    return schedules.map((schedule) => this.mapScheduleToResponseDto(schedule));
   }
 
-  /**
-   * 🎯 Маппинг ScheduleException → ResponseDto
-   */
-  mapExceptionToResponseDto(exception: ScheduleException): any {
+  mapExceptionToResponseDto(exception: ScheduleException): ExceptionResponseDto {
     return {
       id: exception.id,
       companyId: exception.companyId,
@@ -59,32 +48,25 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
       startDate: exception.startDate,
       endDate: exception.endDate,
       isFullDay: exception.isFullDay,
-      startTime: exception.startTime,
-      endTime: exception.endTime,
-      reason: exception.reason,
+      startTime: exception.startTime || undefined,
+      endTime: exception.endTime || undefined,
+      reason: exception.reason || undefined,
       status: exception.status,
-      approvedBy: exception.approvedBy,
-      approvedAt: exception.approvedAt,
-      rejectionReason: exception.rejectionReason,
-      affectedAppointments: exception.affectedAppointments,
+      approvedBy: exception.approvedBy || undefined,
+      approvedAt: exception.approvedAt || undefined,
+      rejectionReason: exception.rejectionReason || undefined,
+      affectedAppointments: this.safeNormalizeArray<string>(exception.affectedAppointments, []),
       createdAt: exception.createdAt,
       updatedAt: exception.updatedAt,
     };
   }
 
-  /**
-   * 🎯 Массовый маппинг исключений
-   */
-  mapExceptionArrayToResponseDto(exceptions: ScheduleException[]): any[] {
-    return exceptions.map(exception => this.mapExceptionToResponseDto(exception));
+  mapExceptionArrayToResponseDto(exceptions: ScheduleException[]): ExceptionResponseDto[] {
+    return exceptions.map((exception) => this.mapExceptionToResponseDto(exception));
   }
 
-  /**
-   * 🎯 Маппинг с информацией о пользователе (для расширенных случаев)
-   */
   mapScheduleWithUserInfo(schedule: WorkSchedule, userInfo?: any): ScheduleResponseDto {
     const baseDto = this.mapScheduleToResponseDto(schedule);
-    
     if (userInfo) {
       baseDto.user = {
         firstName: userInfo.firstName || '',
@@ -93,17 +75,12 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
         avatarUrl: userInfo.avatarUrl || null,
       };
     }
-
     return baseDto;
   }
 
-  /**
-   * 🎯 Для выпадающих списков
-   */
   mapToSelectOption(schedule: WorkSchedule): { value: string; label: string; disabled: boolean } {
     const dayName = DAY_NAMES[schedule.dayOfWeek] || 'Неизвестно';
     const timeRange = `${schedule.startTime} - ${schedule.endTime}`;
-    
     return {
       value: schedule.id,
       label: `${dayName}: ${timeRange}`,
@@ -111,13 +88,10 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
     };
   }
 
-  /**
-   * 🎯 Базовая информация (для других модулей)
-   */
-  mapToBasicInfo(schedule: WorkSchedule): { 
-    id: string; 
-    userId: string; 
-    dayOfWeek: number; 
+  mapToBasicInfo(schedule: WorkSchedule): {
+    id: string;
+    userId: string;
+    dayOfWeek: number;
     companyId: string;
     timeRange: string;
     isActive: boolean;
@@ -132,9 +106,6 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
     };
   }
 
-  /**
-   * 🔒 Приватные вспомогательные методы
-   */
   private calculateWorkingHours(schedule: WorkSchedule): {
     totalHours: number;
     effectiveHours: number;
@@ -146,27 +117,41 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
 
     const startMinutes = this.timeToMinutes(schedule.startTime);
     const endMinutes = this.timeToMinutes(schedule.endTime);
-    const totalMinutes = endMinutes - startMinutes;
+    const totalMinutes = Math.max(0, endMinutes - startMinutes);
     const totalHours = totalMinutes / 60;
 
     let breakHours = 0;
     if (schedule.breakStartTime && schedule.breakEndTime) {
       const breakStartMinutes = this.timeToMinutes(schedule.breakStartTime);
       const breakEndMinutes = this.timeToMinutes(schedule.breakEndTime);
-      breakHours = (breakEndMinutes - breakStartMinutes) / 60;
+      breakHours = Math.max(0, (breakEndMinutes - breakStartMinutes) / 60);
     }
 
-    const effectiveHours = totalHours - breakHours;
+    const effectiveHours = Math.max(0, totalHours - breakHours);
 
     return {
-      totalHours: Math.max(0, totalHours),
-      effectiveHours: Math.max(0, effectiveHours),
-      breakHours: Math.max(0, breakHours),
+      totalHours,
+      effectiveHours,
+      breakHours,
     };
   }
 
   private timeToMinutes(time: string): number {
     const [hours, minutes] = time.split(':').map(Number);
-    return hours * 60 + minutes;
+    return (hours || 0) * 60 + (minutes || 0);
+  }
+
+  private safeNormalizeArray<T>(value: unknown, fallback: T[]): T[] {
+    if (!value) return fallback;
+    if (Array.isArray(value)) return value as T[];
+    try {
+      if (typeof value === 'string') {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? (parsed as T[]) : fallback;
+      }
+      return fallback;
+    } catch {
+      return fallback;
+    }
   }
 }

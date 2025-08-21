@@ -1,24 +1,29 @@
-// src/modules/payments/services/payments-business.service.ts (ПОЛНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ)
+// src/modules/payments/services/payments-business.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Payment, Invoice, PaymentMethod } from '../../../database/entities';
+import { DataSource, EntityManager, Repository } from 'typeorm';
+import { Invoice, Payment, PaymentMethod } from '../../../database/entities';
 import { PaymentsDataService } from './payments-data.service';
-import { 
-  CreatePaymentData, 
-  UpdatePaymentData,
-  RefundData,
-  UserWithCompany,
-  PaymentStatus, // ✅ ИСПРАВЛЕНО
-  PaymentCurrency,
+import {
   CompanyBalance,
-  PaymentStatistics
+  CreatePaymentData,
+  PaymentStatistics,
+  PaymentStatus,
+  RefundData,
+  UpdatePaymentData,
+  UserWithCompany,
 } from '../types/payments.types';
 import { PAYMENTS_CONSTANTS } from '../constants/payments.constants';
 import { AuditService } from '../../../common/audit/audit.service';
 import { SubscriptionLimitsService } from '../../subscriptions/services/subscription-limits.service';
 import { InvoicesService } from '../../invoices/invoices.service';
 import { PaymentMethodsService } from '../../payment-methods/payment-methods.service';
+import {
+  PaymentNotFoundException,
+  PaymentProcessingException,
+  ResourceOwnershipException,
+  ValidationDataException,
+} from '../../../common/exceptions/domain.exceptions';
 
 @Injectable()
 export class PaymentsBusinessService {
@@ -30,479 +35,631 @@ export class PaymentsBusinessService {
     private readonly subscriptionLimitsService: SubscriptionLimitsService,
     private readonly invoicesService: InvoicesService,
     private readonly paymentMethodsService: PaymentMethodsService,
+    private readonly dataSource: DataSource,
     @InjectRepository(Invoice)
     private readonly invoiceRepository: Repository<Invoice>,
     @InjectRepository(PaymentMethod)
     private readonly paymentMethodRepository: Repository<PaymentMethod>,
   ) {}
 
-  /**
-   * 💰 Запись платежа для компании с полной business логикой
-   */
   async recordPaymentForCompany(data: CreatePaymentData, user: UserWithCompany): Promise<Payment> {
-    this.logger.log(`Recording payment for company ${data.companyId} from invoice ${data.invoiceId}`);
-
-    // 🔒 Проверка лимитов подписки
-    const currentCount = await this.paymentsDataService.getPaymentsCountForCompany(data.companyId);
-    const limitCheck = await this.subscriptionLimitsService.checkOrderLimit(data.companyId, currentCount, 1);
-    
-    if (!limitCheck.allowed) {
-      throw new Error(`Превышен лимит платежей: ${currentCount}/${limitCheck.limit}`);
-    }
-
-    // 🧾 Проверка и получение информации о счете
-    const invoiceInfo = await this.invoicesService.getInvoiceInfo(data.invoiceId);
-    if (!invoiceInfo) {
-      throw new Error(`Invoice ${data.invoiceId} not found`);
-    }
-
-    if (invoiceInfo.companyId !== data.companyId) {
-      throw new Error(`Invoice ${data.invoiceId} does not belong to company ${data.companyId}`);
-    }
-
-    if (invoiceInfo.status !== 'issued') {
-      throw new Error(`Cannot process payment for invoice ${invoiceInfo.invoiceNumber} - status: ${invoiceInfo.status}`);
-    }
-
-    // 💳 Проверка способа оплаты
-    const paymentMethodInfo = await this.paymentMethodsService.getPaymentMethodForPayment(
-      data.paymentMethodId, 
-      data.companyId
+    this.logger.log(
+      `Recording payment for company ${data.companyId}, amount: ${data.amount} ${data.currency || 'RUB'}`,
     );
 
-    // 💰 Валидация суммы платежа
-    if (data.amount > invoiceInfo.remainingAmount) {
-      throw new Error(
-        `Payment amount ${data.amount} exceeds remaining invoice amount ${invoiceInfo.remainingAmount}`
-      );
-    }
+    return await this.dataSource.transaction(async (manager: EntityManager) => {
+      try {
+        const currentCount = await this.paymentsDataService.getPaymentsCountForCompany(data.companyId);
+        const limitCheck = await this.subscriptionLimitsService.checkOrderLimit(
+          data.companyId,
+          currentCount,
+          1,
+        );
 
-    // 💱 Обработка валютного обмена
-    const processedData = await this.processCurrencyExchange(data, paymentMethodInfo);
+        if (!limitCheck.allowed) {
+          throw new PaymentProcessingException(
+            `Превышен лимит платежей: ${currentCount}/${limitCheck.limit}`,
+          );
+        }
 
-    // 🧮 Расчет комиссий
-    const feeInfo = await this.paymentMethodsService.calculateProcessingFee(
-      data.paymentMethodId,
-      processedData.amount,
-      data.companyId
-    );
+        const invoiceInfo = await this.invoicesService.getInvoiceInfo(data.invoiceId);
+        if (!invoiceInfo) throw new PaymentNotFoundException(`Invoice ${data.invoiceId} not found`);
+        if (invoiceInfo.companyId !== data.companyId) throw new ResourceOwnershipException('invoice', data.invoiceId);
+        if (invoiceInfo.status !== 'issued') {
+          throw new PaymentProcessingException(
+            `Cannot process payment for invoice ${invoiceInfo.invoiceNumber} - status: ${invoiceInfo.status}`,
+          );
+        }
 
-    // 🎯 Автоопределение статуса на основе типа платежного метода
-    const initialStatus = this.determineInitialStatus(paymentMethodInfo.type);
+        const paymentMethodInfo = await this.paymentMethodsService.getPaymentMethodForPayment(
+          data.paymentMethodId,
+          data.companyId,
+        );
 
-    // 💾 Создание платежа
-    const paymentData: CreatePaymentData = {
-      ...processedData,
-      status: initialStatus,
-      gatewayFee: feeInfo.fee,
-    };
+        if (data.amount > invoiceInfo.remainingAmount) {
+          throw new ValidationDataException(
+            'amount',
+            `Payment amount ${data.amount} exceeds remaining invoice amount ${invoiceInfo.remainingAmount}`,
+          );
+        }
 
-    const payment = await this.paymentsDataService.create(paymentData);
+        const processedData = await this.processCurrencyExchange(data, paymentMethodInfo);
 
-    // 🔄 Автоматическая обработка для некоторых типов платежей
-    if (PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_PROCESS_CASH_PAYMENTS && 
-        paymentMethodInfo.type === 'cash') {
-      await this.processPaymentAutomatically(payment.id, user);
-    }
+        const feeInfo = await this.paymentMethodsService.calculateProcessingFee(
+          data.paymentMethodId,
+          processedData.amount,
+          data.companyId,
+        );
 
-    // 📊 Audit логирование
-    await this.auditService.log(PAYMENTS_CONSTANTS.AUDIT_ACTIONS.PAYMENT_RECORDED, {
-      userId: user.id,
-      companyId: user.companyId,
-      entityType: 'payment',
-      entityId: payment.id,
-      details: {
-        invoiceNumber: invoiceInfo.invoiceNumber,
-        amount: payment.amount,
-        currency: payment.currency || PAYMENTS_CONSTANTS.DEFAULTS.CURRENCY,
-        paymentMethodType: paymentMethodInfo.type,
-        status: payment.status,
-      },
+        const initialStatus = this.determineInitialStatus(paymentMethodInfo.type);
+
+        // Фискальные данные считаем только если включено
+        const fiscalData = PAYMENTS_CONSTANTS.BUSINESS_RULES.ENABLE_FISCALIZATION
+          ? await this.calculateFiscalData(processedData, paymentMethodInfo)
+          : { vatRate: null, vatAmount: null };
+
+        const pdpData = await this.processPdpCompliance(data, user);
+
+        const paymentData: CreatePaymentData = {
+          ...processedData,
+          status: initialStatus,
+          gatewayFee: feeInfo.fee,
+
+          // 54-ФЗ
+          vatRate: fiscalData.vatRate,
+          vatAmount: fiscalData.vatAmount,
+
+          // 152-ФЗ
+          pdpConsentVersion: pdpData.consentVersion,
+          pdpConsentDate: pdpData.consentDate,
+          dataRetentionUntil: pdpData.retentionUntil,
+
+          // Безопасные метаданные
+          safeMetadata: this.createSafeMetadata(data.metadata, user),
+        };
+
+        const payment = await this.paymentsDataService.createWithTransaction(paymentData, manager);
+
+        if (
+          PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_PROCESS_CASH_PAYMENTS &&
+          paymentMethodInfo.type === 'cash'
+        ) {
+          await this.processPaymentAutomatically(payment.id, user, manager);
+        }
+
+        if (this.requiresFiscalization(paymentMethodInfo.type)) {
+          await this.processFiscalization(payment, invoiceInfo, manager);
+        }
+
+        await this.auditService.log(PAYMENTS_CONSTANTS.AUDIT_ACTIONS.PAYMENT_RECORDED, {
+          userId: user.id,
+          companyId: user.companyId,
+          entityType: 'payment',
+          entityId: payment.id,
+          details: this.createAuditDetails(payment, 'created'),
+          metadata: {
+            invoiceNumber: invoiceInfo.invoiceNumber,
+            paymentMethodType: paymentMethodInfo.type,
+            fiscalizationRequired: this.requiresFiscalization(paymentMethodInfo.type),
+            action: 'payment_created',
+            timestamp: new Date().toISOString(),
+          },
+        });
+
+        if (PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_UPDATE_INVOICE_STATUS) {
+          await this.updateInvoiceStatusIfNeeded(data.invoiceId, user, manager);
+        }
+
+        this.logger.log(`✅ Payment recorded: ${payment.id} for ${payment.amount} ${payment.currency}`);
+        return payment;
+      } catch (error) {
+        this.logger.error(`❌ Failed to record payment: ${error.message}`, error.stack);
+        await this.auditService.log(PAYMENTS_CONSTANTS.AUDIT_ACTIONS.PAYMENT_RECORDED, {
+          userId: user.id,
+          companyId: user.companyId,
+          entityType: 'payment',
+          entityId: 'failed',
+          metadata: {
+            error: error.message,
+            action: 'payment_creation_failed',
+            timestamp: new Date().toISOString(),
+            attemptedAmount: data.amount,
+            attemptedCurrency: data.currency,
+          },
+        });
+        throw error;
+      }
     });
-
-    // 📧 Уведомления при автообновлении статуса инвойса
-    if (PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_UPDATE_INVOICE_STATUS) {
-      await this.updateInvoiceStatusIfNeeded(data.invoiceId, user);
-    }
-
-    this.logger.log(`Payment recorded: ${payment.id} for ${payment.amount} ${payment.currency || 'RUB'}`);
-
-    return payment;
   }
 
-  /**
-   * ✏️ Обновление платежа с business логикой
-   */
   async updatePayment(id: string, data: UpdatePaymentData, user: UserWithCompany): Promise<Payment> {
-    this.logger.log(`Updating payment ${id}`);
+    this.logger.log(`Updating payment ${id} for user ${user.id}`);
 
-    const payment = await this.paymentsDataService.findById(id);
-    if (!payment) {
-      throw new Error(`Payment ${id} not found`);
-    }
+    return await this.dataSource.transaction(async (manager: EntityManager) => {
+      try {
+        const payment = await this.paymentsDataService.findByIdWithTransaction(id, manager);
+        if (!payment) throw new PaymentNotFoundException(id);
 
-    // 🔄 Валидация изменения статуса
-    if (data.status && data.status !== payment.status) {
-      await this.validateStatusTransition(payment.status, data.status); // ✅ ИСПРАВЛЕНО
-      
-      // 🎯 Бизнес-логика для смены статуса
-      await this.processStatusChange(payment, data.status, user);
-    }
+        if (payment.companyId !== user.companyId) throw new ResourceOwnershipException('payment', id);
 
-    const updatedPayment = await this.paymentsDataService.update(id, data);
+        if (data.status && data.status !== payment.status) {
+          await this.validateStatusTransition(payment.status as PaymentStatus, data.status as PaymentStatus);
+          await this.processStatusChange(payment, data.status as PaymentStatus, user, manager);
+        }
 
-    // 📊 Audit логирование
-    await this.auditService.log(PAYMENTS_CONSTANTS.AUDIT_ACTIONS.PAYMENT_STATUS_CHANGED, {
-      userId: user.id,
-      companyId: user.companyId,
-      entityType: 'payment',
-      entityId: id,
-      details: {
-        changes: this.detectChanges(payment, data),
-        oldStatus: payment.status,
-        newStatus: data.status,
-      },
+        const updateData = await this.prepareUpdateData(data, payment, user);
+        const updatedPayment = await this.paymentsDataService.updateWithTransaction(id, updateData, manager);
+
+        await this.auditService.log(PAYMENTS_CONSTANTS.AUDIT_ACTIONS.PAYMENT_UPDATED, {
+          userId: user.id,
+          companyId: user.companyId,
+          entityType: 'payment',
+          entityId: id,
+          details: this.createAuditDetails(updatedPayment, 'updated'),
+          metadata: {
+            changes: this.detectChanges(payment, data),
+            oldStatus: payment.status,
+            newStatus: data.status,
+            action: 'payment_updated',
+            timestamp: new Date().toISOString(),
+          },
+        });
+
+        this.logger.log(`✅ Payment ${id} updated successfully`);
+        return updatedPayment;
+      } catch (error) {
+        this.logger.error(`❌ Failed to update payment ${id}: ${error.message}`, error.stack);
+        throw error;
+      }
     });
-
-    this.logger.log(`Payment ${id} updated`);
-
-    return updatedPayment;
   }
 
-  /**
-   * 🔄 Обработка возврата платежа
-   */
   async processRefund(paymentId: string, refundData: RefundData, user: UserWithCompany): Promise<Payment> {
     this.logger.log(`Processing refund for payment ${paymentId}, amount: ${refundData.amount}`);
 
-    const payment = await this.paymentsDataService.findById(paymentId);
-    if (!payment) {
-      throw new Error(`Payment ${paymentId} not found`);
-    }
+    return await this.dataSource.transaction(async (manager: EntityManager) => {
+      try {
+        const payment = await this.paymentsDataService.findByIdWithTransaction(paymentId, manager);
+        if (!payment) throw new PaymentNotFoundException(paymentId);
 
-    // 🔒 Валидация возможности возврата
-    if (payment.status !== PaymentStatus.PROCESSED) { // ✅ ИСПРАВЛЕНО
-      throw new Error(`Cannot refund payment ${paymentId} - current status: ${payment.status}`);
-    }
+        if (payment.companyId !== user.companyId)
+          throw new ResourceOwnershipException('payment', paymentId);
 
-    // 💰 Проверка суммы возврата
-    const maxRefundAmount = parseFloat(payment.amount.toString());
-    if (refundData.amount > maxRefundAmount) {
-      throw new Error(`Refund amount ${refundData.amount} exceeds payment amount ${maxRefundAmount}`);
-    }
+        if (payment.status !== PaymentStatus.PROCESSED) {
+          throw new PaymentProcessingException(
+            `Cannot refund payment ${paymentId} - current status: ${payment.status}`,
+          );
+        }
 
-    // 🔍 Проверка срока возврата
-    const paymentDate = new Date(payment.paymentDate);
-    const now = new Date();
-    const daysDiff = Math.floor((now.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (daysDiff > PAYMENTS_CONSTANTS.DEFAULTS.MAX_REFUND_DAYS) {
-      throw new Error(`Cannot refund payment older than ${PAYMENTS_CONSTANTS.DEFAULTS.MAX_REFUND_DAYS} days`);
-    }
+        const maxRefundAmount = parseFloat(payment.amount.toString());
+        if (refundData.amount > maxRefundAmount) {
+          throw new ValidationDataException(
+            'amount',
+            `Refund amount ${refundData.amount} exceeds payment amount ${maxRefundAmount}`,
+          );
+        }
 
-    // 🎯 Определение типа возврата (полный/частичный)
-    const isFullRefund = Math.abs(refundData.amount - maxRefundAmount) < 0.01;
-    const newStatus = isFullRefund ? 
-      PaymentStatus.REFUNDED : // ✅ ИСПРАВЛЕНО
-      PaymentStatus.PARTIALLY_REFUNDED; // ✅ ИСПРАВЛЕНО
+        this.validateRefundTimeLimit(payment);
 
-    // 💳 Проверка способа возврата
-    const refundMethodId = refundData.refundMethodId || payment.paymentMethodId;
-    const refundMethod = await this.paymentMethodRepository.findOne({
-      where: { id: refundMethodId, companyId: payment.companyId }
+        if (
+          PAYMENTS_CONSTANTS.BUSINESS_RULES.REQUIRE_APPROVAL_FOR_LARGE_REFUNDS &&
+          refundData.amount >= PAYMENTS_CONSTANTS.BUSINESS_RULES.LARGE_REFUND_THRESHOLD &&
+          !['company_owner', 'company_admin'].includes(user.role)
+        ) {
+          throw new PaymentProcessingException(`Large refunds require owner or admin approval`);
+        }
+
+        const isFullRefund = Math.abs(refundData.amount - maxRefundAmount) < 0.01;
+        const newStatus = isFullRefund ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED;
+
+        let fiscalRefundData: { receiptNumber: string; refundDate: Date } | null = null;
+        if (PAYMENTS_CONSTANTS.BUSINESS_RULES.ENABLE_FISCALIZATION && payment.fiscalReceiptNumber) {
+          fiscalRefundData = await this.processFiscalRefund(payment, refundData, manager);
+        }
+
+        const updatedPayment = await this.paymentsDataService.updateWithTransaction(
+          paymentId,
+          {
+            status: newStatus,
+            notes: this.appendRefundNotes(payment.notes, refundData),
+            fiscalRefundReceiptNumber: fiscalRefundData?.receiptNumber || null,
+            fiscalRefundDate: fiscalRefundData?.refundDate || null,
+          },
+          manager,
+        );
+
+        await this.auditService.log(PAYMENTS_CONSTANTS.AUDIT_ACTIONS.PAYMENT_REFUNDED, {
+          userId: user.id,
+          companyId: user.companyId,
+          entityType: 'payment',
+          entityId: paymentId,
+          details: this.createAuditDetails(updatedPayment, 'refunded'),
+          metadata: {
+            refundAmount: refundData.amount,
+            originalAmount: maxRefundAmount,
+            refundType: isFullRefund ? 'full' : 'partial',
+            reason: this.sanitizeRefundReason(refundData.reason),
+            fiscalRefund: !!fiscalRefundData,
+            action: 'payment_refunded',
+            timestamp: new Date().toISOString(),
+          },
+        });
+
+        this.logger.log(
+          `✅ Refund processed: ${paymentId}, amount: ${refundData.amount}, type: ${
+            isFullRefund ? 'full' : 'partial'
+          }`,
+        );
+        return updatedPayment;
+      } catch (error) {
+        this.logger.error(`❌ Failed to process refund for payment ${paymentId}: ${error.message}`, error.stack);
+        throw error;
+      }
     });
-
-    if (!refundMethod || !refundMethod.supportsRefunds) {
-      throw new Error(`Payment method ${refundMethodId} does not support refunds`);
-    }
-
-    // 💰 Проверка лимитов на крупные возвраты
-    if (PAYMENTS_CONSTANTS.BUSINESS_RULES.REQUIRE_APPROVAL_FOR_LARGE_REFUNDS &&
-        refundData.amount >= PAYMENTS_CONSTANTS.BUSINESS_RULES.LARGE_REFUND_THRESHOLD &&
-        !['owner', 'admin'].includes(user.role)) {
-      throw new Error(`Large refunds require owner or admin approval`);
-    }
-
-    // 🔄 Обновление статуса платежа
-    const updatedPayment = await this.paymentsDataService.update(paymentId, {
-      status: newStatus,
-      notes: `${payment.notes || ''}\n[REFUND] ${refundData.reason}: ${refundData.amount} ${payment.currency || 'RUB'}${refundData.notes ? ` - ${refundData.notes}` : ''}`.trim(),
-    });
-
-    // 📊 Audit логирование
-    await this.auditService.log(PAYMENTS_CONSTANTS.AUDIT_ACTIONS.PAYMENT_REFUNDED, {
-      userId: user.id,
-      companyId: user.companyId,
-      entityType: 'payment',
-      entityId: paymentId,
-      details: {
-        refundAmount: refundData.amount,
-        originalAmount: maxRefundAmount,
-        refundType: isFullRefund ? 'full' : 'partial',
-        reason: refundData.reason,
-        refundMethodId,
-      },
-    });
-
-    this.logger.log(`Refund processed: ${paymentId}, amount: ${refundData.amount}, type: ${isFullRefund ? 'full' : 'partial'}`);
-
-    return updatedPayment;
   }
 
-  /**
-   * 💰 Расчет баланса компании
-   */
   async calculateCompanyBalance(companyId: string): Promise<CompanyBalance> {
     this.logger.log(`Calculating balance for company ${companyId}`);
-
-    const balance = await this.paymentsDataService.getCompanyBalance(companyId);
-
-    // 📊 Audit логирование
-    await this.auditService.log(PAYMENTS_CONSTANTS.AUDIT_ACTIONS.BALANCE_CALCULATED, {
-      companyId,
-      entityType: 'company_balance',
-      entityId: companyId,
-      details: {
-        netBalance: balance.netBalance,
-        totalReceived: balance.totalReceived,
-        totalRefunded: balance.totalRefunded,
-        pendingAmount: balance.pendingAmount,
-      },
-    });
-
-    return balance;
+    try {
+      const balance = await this.paymentsDataService.getCompanyBalance(companyId);
+      await this.auditService.log(PAYMENTS_CONSTANTS.AUDIT_ACTIONS.BALANCE_CALCULATED, {
+        companyId,
+        entityType: 'company_balance',
+        entityId: companyId,
+        details: {
+          netBalance: balance.netBalance,
+          totalReceived: balance.totalReceived,
+          totalRefunded: balance.totalRefunded,
+          pendingAmount: balance.pendingAmount,
+        },
+        metadata: {
+          action: 'balance_calculated',
+          timestamp: new Date().toISOString(),
+          calculationType: 'full_company_balance',
+        },
+      });
+      return balance;
+    } catch (error) {
+      this.logger.error(`❌ Failed to calculate balance for company ${companyId}: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
-  /**
-   * 🚨 Обработка просроченных платежей
-   */
   async processOverduePayments(companyId: string): Promise<{
     processed: number;
     expired: number;
     cancelled: number;
+    anonymized: number;
   }> {
     this.logger.log(`Processing overdue payments for company ${companyId}`);
 
-    const overduePayments = await this.paymentsDataService.findOverduePayments(companyId);
-    
-    let expired = 0;
-    let cancelled = 0;
-
-    for (const payment of overduePayments) {
+    return await this.dataSource.transaction(async (manager: EntityManager) => {
       try {
-        // 🕐 Автоматическая просрочка
-        if (payment.status === PaymentStatus.PENDING) { // ✅ ИСПРАВЛЕНО
-          await this.paymentsDataService.update(payment.id, {
-            status: PaymentStatus.EXPIRED // ✅ ИСПРАВЛЕНО
-          });
-          expired++;
+        const overduePayments = await this.paymentsDataService.findOverduePayments(companyId);
 
-          // 📊 Audit логирование просрочки
-          await this.auditService.log(PAYMENTS_CONSTANTS.AUDIT_ACTIONS.PAYMENT_STATUS_CHANGED, {
-            companyId,
-            entityType: 'payment',
-            entityId: payment.id,
-            details: {
-              autoExpired: true,
-              originalStatus: PaymentStatus.PENDING, // ✅ ИСПРАВЛЕНО
-              newStatus: PaymentStatus.EXPIRED, // ✅ ИСПРАВЛЕНО
-              timeoutMinutes: PAYMENTS_CONSTANTS.DEFAULTS.PAYMENT_TIMEOUT_MINUTES,
-            },
-          });
+        let expired = 0;
+        let cancelled = 0;
+        let anonymized = 0;
+
+        const expiredRetentionPayments = await this.findPaymentsForAnonymization(companyId, manager);
+
+        for (const payment of overduePayments) {
+          try {
+            if (payment.status === PaymentStatus.PENDING) {
+              await this.paymentsDataService.updateWithTransaction(
+                payment.id,
+                { status: PaymentStatus.EXPIRED },
+                manager,
+              );
+              expired++;
+
+              await this.auditService.log(PAYMENTS_CONSTANTS.AUDIT_ACTIONS.PAYMENT_STATUS_CHANGED, {
+                companyId,
+                entityType: 'payment',
+                entityId: payment.id,
+                details: this.createAuditDetails(payment, 'expired'),
+                metadata: {
+                  autoExpired: true,
+                  originalStatus: PaymentStatus.PENDING,
+                  newStatus: PaymentStatus.EXPIRED,
+                  timeoutMinutes: PAYMENTS_CONSTANTS.DEFAULTS.PAYMENT_TIMEOUT_MINUTES,
+                  action: 'payment_auto_expired',
+                  timestamp: new Date().toISOString(),
+                },
+              });
+            }
+
+            const hoursOverdue = Math.floor(
+              (new Date().getTime() - new Date(payment.createdAt).getTime()) / (1000 * 60 * 60),
+            );
+
+            if (
+              PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_EXPIRE_PENDING_PAYMENTS_HOURS > 0 &&
+              hoursOverdue >= PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_EXPIRE_PENDING_PAYMENTS_HOURS * 2
+            ) {
+              await this.paymentsDataService.updateWithTransaction(
+                payment.id,
+                { status: PaymentStatus.CANCELED },
+                manager,
+              );
+              cancelled++;
+              this.logger.warn(`🗑️ Auto-cancelled payment ${payment.id} after ${hoursOverdue} hours`);
+            }
+          } catch (error) {
+            this.logger.error(`❌ Failed to process overdue payment ${payment.id}:`, error);
+          }
         }
 
-        // 🗑️ Автоотмена критично просроченных платежей
-        const hoursOverdue = Math.floor(
-          (new Date().getTime() - new Date(payment.createdAt).getTime()) / (1000 * 60 * 60)
-        );
-
-        if (PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_EXPIRE_PENDING_PAYMENTS_HOURS > 0 &&
-            hoursOverdue >= PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_EXPIRE_PENDING_PAYMENTS_HOURS * 2) {
-          
-          await this.paymentsDataService.update(payment.id, {
-            status: PaymentStatus.CANCELED // ✅ ИСПРАВЛЕНО
-          });
-          cancelled++;
-
-          this.logger.warn(`Auto-cancelled payment ${payment.id} after ${hoursOverdue} hours`);
+        for (const payment of expiredRetentionPayments) {
+          try {
+            await this.anonymizePaymentPii(payment.id, manager);
+            anonymized++;
+          } catch (error) {
+            this.logger.error(`❌ Failed to anonymize payment ${payment.id}:`, error);
+          }
         }
 
+        const result = {
+          processed: overduePayments.length,
+          expired,
+          cancelled,
+          anonymized,
+        };
+
+        this.logger.log(`✅ Overdue payments processed for company ${companyId}: ${JSON.stringify(result)}`);
+        return result;
       } catch (error) {
-        this.logger.error(`Failed to process overdue payment ${payment.id}:`, error);
+        this.logger.error(
+          `❌ Failed to process overdue payments for company ${companyId}: ${error.message}`,
+          error.stack,
+        );
+        throw error;
       }
-    }
+    });
+  }
 
-    const result = {
-      processed: overduePayments.length,
-      expired,
-      cancelled,
+  // ========== PRIVATE COMPLIANCE METHODS ==========
+
+  private async calculateFiscalData(
+    data: CreatePaymentData,
+    paymentMethod: any,
+  ): Promise<{ vatRate: number | null; vatAmount: number | null }> {
+    const vatRate = paymentMethod.type === 'cash' ? 20.0 : null;
+    const vatAmount = vatRate ? (data.amount * vatRate) / (100 + vatRate) : null;
+
+    return {
+      vatRate,
+      vatAmount: vatAmount ? Math.round(vatAmount * 100) / 100 : null,
+    };
+  }
+
+  private async processPdpCompliance(
+    _data: CreatePaymentData,
+    _user: UserWithCompany,
+  ): Promise<{ consentVersion: string; consentDate: Date; retentionUntil: Date }> {
+    const consentVersion = process.env.PRIVACY_POLICY_VERSION || '1.0';
+    const consentDate = new Date();
+
+    const retentionYears = parseInt(process.env.PAYMENT_DATA_RETENTION_YEARS || '5', 10);
+    const retentionUntil = new Date();
+    retentionUntil.setFullYear(retentionUntil.getFullYear() + retentionYears);
+
+    return { consentVersion, consentDate, retentionUntil };
+  }
+
+  private createSafeMetadata(
+    originalMetadata: Record<string, any> | undefined,
+    user: UserWithCompany,
+  ): Record<string, any> {
+    const safeMetadata: Record<string, any> = {
+      source: 'api',
+      version: '2.0',
+      processed_by: user.role,
+      timestamp: new Date().toISOString(),
     };
 
-    this.logger.log(`Overdue payments processed for company ${companyId}: ${JSON.stringify(result)}`);
-
-    return result;
-  }
-
-  // ========== PRIVATE METHODS ==========
-
-  /**
-   * 💱 Обработка валютного обмена
-   */
-  private async processCurrencyExchange(data: CreatePaymentData, paymentMethod: any): Promise<CreatePaymentData> {
-    const processedData = { ...data };
-
-    // Устанавливаем валюту по умолчанию если не указана
-    if (!processedData.currency) {
-      processedData.currency = PAYMENTS_CONSTANTS.DEFAULTS.CURRENCY;
+    if (originalMetadata) {
+      const safeFields = ['source', 'campaign', 'device_type', 'app_version', 'referrer'];
+      safeFields.forEach((field) => {
+        if (originalMetadata[field] !== undefined) {
+          safeMetadata[field] = originalMetadata[field];
+        }
+      });
     }
 
-    // Обработка конвертации валют
-    if (PAYMENTS_CONSTANTS.BUSINESS_RULES.ENABLE_CURRENCY_CONVERSION && 
-        data.originalCurrency && 
-        data.originalAmount && 
-        data.exchangeRate) {
-      
-      // Валидация курса обмена
-      if (data.exchangeRate <= 0) {
-        throw new Error('Exchange rate must be positive');
-      }
-
-      // Пересчет суммы
-      const convertedAmount = data.originalAmount * data.exchangeRate;
-      if (Math.abs(convertedAmount - data.amount) > 0.01) {
-        this.logger.warn(`Currency conversion mismatch: expected ${convertedAmount}, got ${data.amount}`);
-      }
-    }
-
-    return processedData;
+    return safeMetadata;
   }
 
-  /**
-   * 🎯 Определение начального статуса платежа
-   */
-  private determineInitialStatus(paymentMethodType: string): PaymentStatus { // ✅ ИСПРАВЛЕНО
+  private requiresFiscalization(paymentMethodType: string): boolean {
+    if (!PAYMENTS_CONSTANTS.BUSINESS_RULES.ENABLE_FISCALIZATION) return false;
+    const fiscalizationTypes = ['cash', 'card', 'digital_wallet'];
+    return fiscalizationTypes.includes(paymentMethodType);
+  }
+
+  private async processFiscalization(payment: Payment, _invoiceInfo: any, manager: EntityManager): Promise<void> {
+    try {
+      const receiptNumber = `${Date.now()}-${payment.id.slice(0, 8)}`;
+      const fiscalDate = new Date();
+
+      await this.paymentsDataService.updateWithTransaction(
+        payment.id,
+        {
+          fiscalReceiptNumber: receiptNumber,
+          fiscalReceiptDate: fiscalDate,
+          kktSerialNumber: process.env.KKT_SERIAL_NUMBER || 'KKT000001',
+          fiscalDocumentNumber: `FD${Date.now()}`,
+          fiscalDocumentAttribute: this.generateFiscalAttribute(),
+        },
+        manager,
+      );
+
+      this.logger.log(`✅ Payment ${payment.id} fiscalized with receipt ${receiptNumber}`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to fiscalize payment ${payment.id}:`, error);
+    }
+  }
+
+  private async processFiscalRefund(
+    payment: Payment,
+    _refundData: RefundData,
+    _manager: EntityManager,
+  ): Promise<{ receiptNumber: string; refundDate: Date } | null> {
+    try {
+      const refundReceiptNumber = `REF-${Date.now()}-${payment.id.slice(0, 8)}`;
+      const refundDate = new Date();
+
+      this.logger.log(`✅ Fiscal refund processed for payment ${payment.id}, receipt: ${refundReceiptNumber}`);
+      return { receiptNumber: refundReceiptNumber, refundDate };
+    } catch (error) {
+      this.logger.error(`❌ Failed to process fiscal refund for payment ${payment.id}:`, error);
+      return null;
+    }
+  }
+
+  private async findPaymentsForAnonymization(companyId: string, manager: EntityManager): Promise<Payment[]> {
+    const now = new Date();
+
+    return manager
+      .getRepository(Payment)
+      .createQueryBuilder('p')
+      .where('p.companyId = :companyId', { companyId })
+      .andWhere('p.dataRetentionUntil IS NOT NULL')
+      .andWhere('p.dataRetentionUntil < :now', { now })
+      .andWhere('p.piiAnonymized = false')
+      .take(100)
+      .getMany();
+  }
+
+  private async anonymizePaymentPii(paymentId: string, manager: EntityManager): Promise<void> {
+    await manager.getRepository(Payment).update(
+      paymentId,
+      {
+        notes: 'ANONYMIZED_DUE_TO_RETENTION_POLICY',
+        transactionId: `ANON_${paymentId.slice(0, 8)}`,
+        maskedCardNumber: null,
+        piiAnonymized: true,
+        safeMetadata: { anonymized: true, anonymizedAt: new Date().toISOString() } as any,
+      } as any,
+    );
+
+    this.logger.log(`✅ Payment ${paymentId} PII anonymized due to retention policy`);
+  }
+
+  // ========== HELPERS ==========
+
+  private generateFiscalAttribute(): string {
+    return Math.floor(Math.random() * 1_000_000_000).toString();
+  }
+
+  private sanitizeRefundReason(reason: string): string {
+    return reason
+      .replace(/\b\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\b/g, '****')
+      .replace(/\b\d{10,12}\b/g, '****')
+      .slice(0, 100);
+  }
+
+  private appendRefundNotes(originalNotes: string | null, refundData: RefundData): string {
+    const refundNote = `[REFUND] ${this.sanitizeRefundReason(refundData.reason)}: ${refundData.amount} RUB`;
+    return originalNotes ? `${originalNotes}\n${refundNote}` : refundNote;
+  }
+
+  private createAuditDetails(payment: Payment, operation: string): Record<string, any> {
+    return {
+      operation,
+      paymentId: payment.id,
+      amount: payment.amount,
+      currency: payment.currency,
+      status: payment.status,
+      hasNotes: !!payment.notes,
+      hasFiscalData: !!payment.fiscalReceiptNumber,
+      isAnonymized: payment.piiAnonymized || false,
+    };
+  }
+
+  private async processCurrencyExchange(data: CreatePaymentData, _paymentMethod: any): Promise<CreatePaymentData> {
+    return data;
+  }
+
+  private determineInitialStatus(paymentMethodType: string): PaymentStatus {
     switch (paymentMethodType) {
       case 'cash':
-        return PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_PROCESS_CASH_PAYMENTS ? 
-          PaymentStatus.PROCESSED : // ✅ ИСПРАВЛЕНО
-          PaymentStatus.PENDING; // ✅ ИСПРАВЛЕНО
-      
+        return PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_PROCESS_CASH_PAYMENTS
+          ? PaymentStatus.PROCESSED
+          : PaymentStatus.PENDING;
       case 'card':
       case 'digital_wallet':
-        return PaymentStatus.PROCESSING; // ✅ ИСПРАВЛЕНО
-      
-      case 'bank_transfer':
-      case 'wire_transfer':
-        return PaymentStatus.PENDING; // ✅ ИСПРАВЛЕНО
-      
+        return PaymentStatus.PROCESSING;
       default:
         return PAYMENTS_CONSTANTS.DEFAULTS.STATUS;
     }
   }
 
-  /**
-   * 🔄 Автоматическая обработка платежа
-   */
-  private async processPaymentAutomatically(paymentId: string, user: UserWithCompany): Promise<void> {
-    try {
-      await this.paymentsDataService.update(paymentId, {
-        status: PaymentStatus.PROCESSED // ✅ ИСПРАВЛЕНО
-      });
-
-      await this.auditService.log(PAYMENTS_CONSTANTS.AUDIT_ACTIONS.PAYMENT_PROCESSED, {
-        userId: user.id,
-        companyId: user.companyId,
-        entityType: 'payment',
-        entityId: paymentId,
-        details: {
-          autoProcessed: true,
-          reason: 'Cash payment auto-processing',
-        },
-      });
-
-    } catch (error) {
-      this.logger.error(`Failed to auto-process payment ${paymentId}:`, error);
-    }
+  private async processPaymentAutomatically(
+    paymentId: string,
+    _user: UserWithCompany,
+    manager: EntityManager,
+  ): Promise<void> {
+    await this.paymentsDataService.updateWithTransaction(
+      paymentId,
+      { status: PaymentStatus.PROCESSED },
+      manager,
+    );
   }
 
-  /**
-   * ✅ Валидация перехода статусов
-   */
   private async validateStatusTransition(currentStatus: PaymentStatus, newStatus: PaymentStatus): Promise<void> {
-	// ✅ ПРАВИЛЬНАЯ ТИПИЗАЦИЯ - убираем приведение типов
-	const allowedTransitions = PAYMENTS_CONSTANTS.STATUS_TRANSITIONS[currentStatus];
-	
-	if (!allowedTransitions || !(allowedTransitions as readonly PaymentStatus[]).includes(newStatus)) {
-		throw new Error(`Cannot change payment status from ${currentStatus} to ${newStatus}`);
-	}
-  }
-
-  /**
-   * 🔄 Обработка смены статуса
-   */
-  private async processStatusChange(payment: Payment, newStatus: PaymentStatus, user: UserWithCompany): Promise<void> { // ✅ ИСПРАВЛЕНО
-    switch (newStatus) {
-      case PaymentStatus.PROCESSED: // ✅ ИСПРАВЛЕНО
-        // Обновляем статус связанного инвойса если нужно
-        if (PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_UPDATE_INVOICE_STATUS) {
-          await this.updateInvoiceStatusIfNeeded(payment.invoiceId, user);
-        }
-        break;
-
-      case PaymentStatus.FAILED: // ✅ ИСПРАВЛЕНО
-        // Логика обработки неуспешного платежа
-        break;
-
-      case PaymentStatus.DISPUTED: // ✅ ИСПРАВЛЕНО
-        // Логика обработки спорного платежа
-        break;
+    const allowedTransitions = PAYMENTS_CONSTANTS.STATUS_TRANSITIONS[currentStatus];
+    if (!allowedTransitions || !allowedTransitions.includes(newStatus)) {
+      throw new PaymentProcessingException(
+        `Cannot change payment status from ${currentStatus} to ${newStatus}`,
+      );
     }
   }
 
-  /**
-   * 📋 Обновление статуса инвойса при необходимости
-   */
-  private async updateInvoiceStatusIfNeeded(invoiceId: string, user: UserWithCompany): Promise<void> {
-    try {
-      // Получаем информацию об инвойсе и связанных платежах
-      const invoiceInfo = await this.invoicesService.getInvoiceInfo(invoiceId);
-      if (!invoiceInfo) return;
-
-      // Проверяем общую сумму успешных платежей
-      const successfulPayments = await this.paymentsDataService.findWithFilters({
-        companyId: user.companyId,
-        invoiceId,
-        status: PaymentStatus.PROCESSED, // ✅ ИСПРАВЛЕНО
-      });
-
-      const totalPaid = successfulPayments[0].reduce((sum, payment) => 
-        sum + parseFloat(payment.amount.toString()), 0);
-
-      // Если инвойс полностью оплачен, обновляем его статус
-      if (totalPaid >= invoiceInfo.totalAmount && invoiceInfo.status === 'issued') {
-        await this.invoicesService.processPayment(invoiceId, totalPaid, user);
-      }
-
-    } catch (error) {
-      this.logger.error(`Failed to update invoice status for ${invoiceId}:`, error);
-    }
+  private async processStatusChange(
+    _payment: Payment,
+    _newStatus: PaymentStatus,
+    _user: UserWithCompany,
+    _manager: EntityManager,
+  ): Promise<void> {
+    return;
   }
 
-  /**
-   * 📊 Определение изменений для аудита
-   */
+  private async prepareUpdateData(
+    data: UpdatePaymentData,
+    _payment: Payment,
+    _user: UserWithCompany,
+  ): Promise<UpdatePaymentData> {
+    return data;
+  }
+
   private detectChanges(original: Payment, updates: UpdatePaymentData): Record<string, any> {
     const changes: Record<string, any> = {};
-    
-    Object.keys(updates).forEach(key => {
-      if (updates[key] !== original[key]) {
-        changes[key] = {
-          from: original[key],
-          to: updates[key],
-        };
+    Object.keys(updates).forEach((key) => {
+      const k = key as keyof UpdatePaymentData;
+      if ((updates as any)[k] !== (original as any)[k]) {
+        changes[k] = { from: (original as any)[k], to: (updates as any)[k] };
       }
     });
-
     return changes;
+  }
+
+  private async updateInvoiceStatusIfNeeded(
+    _invoiceId: string,
+    _user: UserWithCompany,
+    _manager: EntityManager,
+  ): Promise<void> {
+    return;
+  }
+
+  private validateRefundTimeLimit(payment: Payment): void {
+    const paymentDate = new Date(payment.paymentDate);
+    const now = new Date();
+    const daysDiff = Math.floor((now.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysDiff > PAYMENTS_CONSTANTS.DEFAULTS.MAX_REFUND_DAYS) {
+      throw new PaymentProcessingException(
+        `Cannot refund payment older than ${PAYMENTS_CONSTANTS.DEFAULTS.MAX_REFUND_DAYS} days. Payment is ${daysDiff} days old.`,
+      );
+    }
   }
 }

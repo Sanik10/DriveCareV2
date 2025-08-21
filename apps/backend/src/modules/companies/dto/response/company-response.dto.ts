@@ -1,7 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CompanySubscriptionInfo } from '../../types/companies.types';
+import { WorkingHoursDto } from '../request/create-company.dto';
 
-export class CompanyResponseDto {
+// ✅ ДОБАВЛЕНО: Type converter для совместимости
+export type WorkingHoursResponse = WorkingHoursDto;
+
+export class CompanyBasicResponseDto {
   @ApiProperty({ 
     description: 'Уникальный идентификатор компании',
     example: '123e4567-e89b-12d3-a456-426614174000'
@@ -15,13 +19,45 @@ export class CompanyResponseDto {
   name: string;
 
   @ApiProperty({ 
+    description: 'Email компании',
+    example: 'info@autoservice-profi.ru'
+  })
+  email: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Телефон компании',
+    example: '+7 (495) 123-45-67'
+  })
+  phone?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Веб-сайт компании',
+    example: 'https://autoservice-profi.ru'
+  })
+  website?: string;
+
+  @ApiProperty({ 
+    description: 'Активна ли компания',
+    example: true
+  })
+  isActive: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Часы работы',
+    type: 'object' // ✅ ИСПРАВЛЕНО: Упрощенная типизация для swagger
+  })
+  workingHours?: WorkingHoursResponse;
+}
+
+export class CompanyResponseDto extends CompanyBasicResponseDto {
+  @ApiProperty({ 
     description: 'Юридическое название',
     example: 'ООО "АвтоСервис Профи"'
   })
   legalName: string;
 
   @ApiPropertyOptional({ 
-    description: 'ИНН/налоговый номер',
+    description: '🔒 ИНН/налоговый номер (доступен только владельцам и админам)',
     example: '7712345678'
   })
   taxNumber?: string;
@@ -33,43 +69,10 @@ export class CompanyResponseDto {
   address?: string;
 
   @ApiPropertyOptional({ 
-    description: 'Телефон компании',
-    example: '+7 (495) 123-45-67'
-  })
-  phone?: string;
-
-  @ApiProperty({ 
-    description: 'Email компании',
-    example: 'info@autoservice-profi.ru'
-  })
-  email: string;
-
-  @ApiPropertyOptional({ 
-    description: 'Веб-сайт компании',
-    example: 'https://autoservice-profi.ru'
-  })
-  website?: string;
-
-  @ApiPropertyOptional({ 
     description: 'URL логотипа',
     example: 'https://autoservice-profi.ru/logo.png'
   })
   logoUrl?: string;
-
-  @ApiPropertyOptional({ 
-    description: 'Часы работы в JSON формате',
-    example: {
-      monday: { open: '09:00', close: '18:00', isOpen: true },
-      tuesday: { open: '09:00', close: '18:00', isOpen: true }
-    }
-  })
-  workingHours?: Record<string, any>;
-
-  @ApiProperty({ 
-    description: 'Активна ли компания',
-    example: true
-  })
-  isActive: boolean;
 
   @ApiProperty({ 
     description: 'Дата создания',
@@ -84,7 +87,7 @@ export class CompanyResponseDto {
   updatedAt: Date;
 
   @ApiPropertyOptional({ 
-    description: 'Информация о текущей подписке',
+    description: '🔒 Информация о подписке (доступна только владельцам и админам)',
     example: {
       id: '456e7890-e89b-12d3-a456-426614174001',
       tariffName: 'Стандарт',
@@ -93,4 +96,24 @@ export class CompanyResponseDto {
     }
   })
   subscription?: CompanySubscriptionInfo;
+}
+
+export class CompanyPublicResponseDto {
+  @ApiProperty({ description: 'Идентификатор компании' })
+  id: string;
+
+  @ApiProperty({ description: 'Название компании' })
+  name: string;
+
+  @ApiPropertyOptional({ description: 'Веб-сайт компании' })
+  website?: string;
+
+  @ApiPropertyOptional({ description: 'URL логотипа' })
+  logoUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Часы работы' })
+  workingHours?: WorkingHoursResponse; // ✅ ИСПРАВЛЕНО
+
+  @ApiProperty({ description: 'Активна ли компания' })
+  isActive: boolean;
 }

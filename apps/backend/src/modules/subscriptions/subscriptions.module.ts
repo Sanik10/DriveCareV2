@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/subscriptions/subscriptions.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubscriptionsController } from './subscriptions.controller';
@@ -7,12 +8,16 @@ import { SubscriptionsBusinessService } from './services/subscriptions-business.
 import { SubscriptionsValidationService } from './services/subscriptions-validation.service';
 import { SubscriptionLimitsService } from './services/subscription-limits.service';
 import { SubscriptionsMapperService } from './services/subscriptions-mapper.service';
-import { Subscription, Tariff, Company } from '../../database/entities'; // 🔥 ДОБАВЛЕНО Tariff, Company
+import { Subscription, Tariff, Company } from '../../database/entities';
 import { AuditService } from '../../common/audit/audit.service';
+import { ConfigModule } from '@nestjs/config';
+import { RedisModule } from '../../common/redis/redis.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Subscription, Tariff, Company]), // 🔥 ИСПРАВЛЕНО: добавлены Tariff, Company
+    ConfigModule,
+    RedisModule,
+    TypeOrmModule.forFeature([Subscription, Tariff, Company]),
   ],
   controllers: [SubscriptionsController],
   providers: [
@@ -23,12 +28,13 @@ import { AuditService } from '../../common/audit/audit.service';
     SubscriptionLimitsService,
     SubscriptionsMapperService,
     AuditService,
+    // убрано: AuditLoggingInterceptor, SecurityHeadersInterceptor
   ],
   exports: [
     SubscriptionsService,
-    SubscriptionsDataService, // Для других модулей
-    SubscriptionsMapperService, // Для экспорта
-    SubscriptionLimitsService, // Для проверки лимитов в других модулях
+    SubscriptionsDataService,
+    SubscriptionsMapperService,
+    SubscriptionLimitsService,
   ],
 })
 export class SubscriptionsModule {}

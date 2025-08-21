@@ -1,4 +1,4 @@
-// src/modules/work-schedules/work-schedules.controller.ts
+// path: apps/backend/src/modules/work-schedules/work-schedules.controller.ts
 import {
   Controller,
   Get,
@@ -13,6 +13,8 @@ import {
   DefaultValuePipe,
   ParseIntPipe,
   Req,
+  BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -36,6 +38,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RequestWithUser } from '../auth/interfaces/request-with-user.interface';
 import { AuthWithOwnership, WorkScheduleResource } from '../../common';
 import { WORK_SCHEDULES_CONSTANTS } from './constants/work-schedules.constants';
+import { ExceptionResponseDto } from './dto/response/exception-response.dto';
 
 @ApiTags('📅 Управление расписаниями')
 @Controller('work-schedules')
@@ -44,10 +47,10 @@ export class WorkSchedulesController {
 
   @Post()
   @AuthWithOwnership()
-  @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @Roles('owner', 'admin', 'manager', 'company_owner', 'company_admin')
+  @ApiOperation({
     summary: 'Создание расписания работы',
-    description: 'Создание расписания работы для сотрудника компании.'
+    description: 'Создание расписания работы для сотрудника компании.',
   })
   @ApiBody({ type: CreateScheduleDto })
   @ApiResponse({ status: HttpStatus.CREATED, type: ScheduleResponseDto })
@@ -56,40 +59,78 @@ export class WorkSchedulesController {
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async create(
     @Body() createScheduleDto: CreateScheduleDto,
-    @Req() req: RequestWithUser, // 🔥 ИСПРАВЛЕНО: перенесено в конец
+    @Req() req: RequestWithUser,
   ): Promise<ScheduleResponseDto> {
     return this.workSchedulesService.create(createScheduleDto, req.user);
   }
 
   @Get()
   @AuthWithOwnership()
-  @ApiOperation({ 
+  @Roles('owner', 'admin', 'manager', 'mechanic', 'company_owner', 'company_admin')
+  @ApiOperation({
     summary: 'Получение списка расписаний',
-    description: 'Получение списка расписаний работы с фильтрацией и пагинацией.'
+    description: 'Получение списка расписаний работы с фильтрацией и пагинацией.',
   })
   @ApiQuery({ name: 'userId', required: false, description: 'ID пользователя' })
   @ApiQuery({ name: 'dayOfWeek', required: false, description: 'День недели (0-6)' })
-  @ApiQuery({ name: 'isActive', required: false, description: 'Статус активности' })
+  @ApiQuery({ name: 'isActive', required: false, description: 'Статус активности (true/false)' })
   @ApiQuery({ name: 'page', required: false, description: 'Номер страницы' })
   @ApiQuery({ name: 'limit', required: false, description: 'Размер страницы' })
+  @ApiQuery({ name: 'companyId', required: false, description: 'ID компании (обязательно для superadmin)' })
   @ApiResponse({ status: HttpStatus.OK, type: PaginatedSchedulesResponseDto })
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   async findAll(
-    @Req() req: RequestWithUser, // 🔥 ИСПРАВЛЕНО: req должен быть обязательным параметром первым
+    @Req() req: RequestWithUser,
     @Query('userId') userId?: string,
-    @Query('dayOfWeek') dayOfWeek?: number,
-    @Query('isActive') isActive?: boolean,
+    @Query('dayOfWeek') dayOfWeekParam?: string,
+    @Query('isActive') isActiveParam?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query('limit', new DefaultValuePipe(WORK_SCHEDULES_CONSTANTS.DEFAULT_PAGE_SIZE), ParseIntPipe) limit: number = WORK_SCHEDULES_CONSTANTS.DEFAULT_PAGE_SIZE,
+    @Query('limit', new DefaultValuePipe(WORK_SCHEDULES_CONSTANTS.DEFAULT_PAGE_SIZE), ParseIntPipe)
+    limit: number = WORK_SCHEDULES_CONSTANTS.DEFAULT_PAGE_SIZE,
+    @Query('companyId') companyId?: string,
   ): Promise<PaginatedSchedulesResponseDto> {
+    if (req.user.role === 'superadmin' && !companyId) {
+      throw new BadRequestException('companyId is required for superadmin listings');
+    }
+
+    if (dayOfWeekParam !== undefined && dayOfWeekParam !== null && dayOfWeekParam !== '') {
+      const parsed = Number(dayOfWeekParam);
+      if (Number.isNaN(parsed) || parsed < 0 || parsed > 6) {
+        throw new BadRequestException('dayOfWeek must be a number in range 0..6');
+      }
+    }
+
+    // Механикам — только свои расписания
+    if (req.user.role === 'mechanic' && userId && userId !== req.user.id) {
+      throw new ForbiddenException('Mechanics can only query their own schedules');
+    }
+
+    const dayOfWeek =
+      dayOfWeekParam !== undefined && dayOfWeekParam !== null && dayOfWeekParam !== ''
+        ? Number(dayOfWeekParam)
+        : undefined;
+
+    const isActive =
+      isActiveParam !== undefined && isActiveParam !== null && isActiveParam !== ''
+        ? ['true', '1'].includes(isActiveParam.toLowerCase())
+          ? true
+          : ['false', '0'].includes(isActiveParam.toLowerCase())
+          ? false
+          : undefined
+        : undefined;
+
+    const normalizedPage = Math.max(1, page);
+    const normalizedLimit = Math.min(Math.max(1, limit), WORK_SCHEDULES_CONSTANTS.MAX_PAGE_SIZE);
+    const effectiveUserId = req.user.role === 'mechanic' ? (userId ?? req.user.id) : userId;
+
     const filter = {
-      userId,
+      userId: effectiveUserId,
       dayOfWeek,
       isActive,
-      page,
-      limit: Math.min(limit, WORK_SCHEDULES_CONSTANTS.MAX_PAGE_SIZE),
-      companyId: req.user.role === 'superadmin' ? undefined : req.user.companyId,
+      page: normalizedPage,
+      limit: normalizedLimit,
+      companyId: req.user.role === 'superadmin' ? companyId! : req.user.companyId!,
     };
 
     return this.workSchedulesService.findAll(filter);
@@ -98,9 +139,9 @@ export class WorkSchedulesController {
   @Get(':id')
   @AuthWithOwnership()
   @WorkScheduleResource()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Получение расписания по ID',
-    description: 'Получение детальной информации о расписании работы.'
+    description: 'Получение детальной информации о расписании работы.',
   })
   @ApiParam({ name: 'id', description: 'ID расписания' })
   @ApiResponse({ status: HttpStatus.OK, type: ScheduleResponseDto })
@@ -108,17 +149,17 @@ export class WorkSchedulesController {
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
   @ApiForbiddenResponse({ description: '❌ Нет доступа к расписанию' })
   @Throttle({ default: { limit: 50, ttl: 60000 } })
-  async findOne(@Param('id') id: string): Promise<ScheduleResponseDto> {
-    return this.workSchedulesService.findOne(id);
+  async findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<ScheduleResponseDto> {
+    return this.workSchedulesService.findOne(id, req.user);
   }
 
   @Patch(':id')
   @AuthWithOwnership()
   @WorkScheduleResource()
-  @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @Roles('owner', 'admin', 'manager', 'company_owner', 'company_admin')
+  @ApiOperation({
     summary: 'Обновление расписания',
-    description: 'Обновление расписания работы сотрудника.'
+    description: 'Обновление расписания работы сотрудника.',
   })
   @ApiParam({ name: 'id', description: 'ID расписания' })
   @ApiBody({ type: UpdateScheduleDto })
@@ -130,18 +171,19 @@ export class WorkSchedulesController {
   async update(
     @Param('id') id: string,
     @Body() updateScheduleDto: UpdateScheduleDto,
+    @Req() req: RequestWithUser,
   ): Promise<ScheduleResponseDto> {
-    return this.workSchedulesService.update(id, updateScheduleDto);
+    return this.workSchedulesService.update(id, updateScheduleDto, req.user);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @AuthWithOwnership()
   @WorkScheduleResource()
-  @Roles('owner', 'admin')
-  @ApiOperation({ 
+  @Roles('owner', 'admin', 'company_owner', 'company_admin')
+  @ApiOperation({
     summary: 'Удаление расписания',
-    description: 'Удаление расписания работы сотрудника.'
+    description: 'Деактивация расписания (историчность сохраняется).',
   })
   @ApiParam({ name: 'id', description: 'ID расписания' })
   @ApiResponse({ status: HttpStatus.NO_CONTENT })
@@ -149,26 +191,30 @@ export class WorkSchedulesController {
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
   @ApiForbiddenResponse({ description: '❌ Недостаточно прав или нет доступа к расписанию' })
   @Throttle({ default: { limit: 5, ttl: 60000 } })
-  async remove(@Param('id') id: string): Promise<void> {
-    return this.workSchedulesService.remove(id);
+  async remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<void> {
+    return this.workSchedulesService.remove(id, req.user);
   }
 
   @Post('exceptions')
   @AuthWithOwnership()
-  @Roles('owner', 'admin', 'manager', 'mechanic')
-  @ApiOperation({ 
+  @Roles('owner', 'admin', 'manager', 'mechanic', 'company_owner', 'company_admin')
+  @ApiOperation({
     summary: 'Создание исключения в расписании',
-    description: 'Создание исключения в расписании (отпуск, больничный и т.д.).'
+    description: 'Создание исключения в расписании (отпуск, больничный и т.д.).',
   })
   @ApiBody({ type: CreateExceptionDto })
-  @ApiResponse({ status: HttpStatus.CREATED })
+  @ApiResponse({ status: HttpStatus.CREATED, type: ExceptionResponseDto })
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
   @ApiForbiddenResponse({ description: '❌ Недостаточно прав доступа' })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async createException(
     @Body() createExceptionDto: CreateExceptionDto,
     @Req() req: RequestWithUser,
-  ): Promise<any> {
+  ): Promise<ExceptionResponseDto> {
+    // Механик может создавать исключения только для себя
+    if (req.user.role === 'mechanic' && createExceptionDto.userId !== req.user.id) {
+      throw new ForbiddenException('Mechanics can only create exceptions for themselves');
+    }
     return this.workSchedulesService.createException(createExceptionDto, req.user);
   }
 }

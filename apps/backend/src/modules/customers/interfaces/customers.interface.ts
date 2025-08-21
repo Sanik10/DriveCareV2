@@ -1,3 +1,4 @@
+// apps/backend/src/modules/customers/interfaces/customers.interface.ts
 import { Customer } from '../../../database/entities/customer.entity';
 import { 
   CreateCustomerData, 
@@ -34,6 +35,8 @@ export interface ICustomersBusinessService {
   createCustomer(data: CreateCustomerData): Promise<Customer>;
   updateCustomer(id: string, data: UpdateCustomerData): Promise<Customer>;
   deactivateCustomer(id: string): Promise<void>;
+  softDeleteCustomer(id: string): Promise<void>;
+  hardDeleteCustomer(id: string): Promise<void>;
   updateLoyaltyPoints(customerId: string, points: number): Promise<Customer>;
   getCustomerWithVehicles(id: string, companyId: string): Promise<any>;
 }

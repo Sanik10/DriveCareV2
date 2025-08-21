@@ -1,17 +1,22 @@
 import { Subscription, Tariff } from '../../../database/entities';
-import { 
-  CreateSubscriptionData, 
-  UpdateSubscriptionData, 
-  SubscriptionFilter, 
-  TariffLimits, 
+import {
+  CreateSubscriptionData,
+  UpdateSubscriptionData,
+  SubscriptionFilter,
+  TariffLimits,
   LimitCheckResult,
-  SubscriptionStatus 
+  SubscriptionStatus,
 } from '../types/subscriptions.types';
 
 export interface ISubscriptionsDataService {
   create(data: CreateSubscriptionData): Promise<Subscription>;
   findById(id: string): Promise<Subscription | null>;
-  findByCompany(companyId: string, page?: number, limit?: number, status?: SubscriptionStatus): Promise<[Subscription[], number]>;
+  findByCompany(
+    companyId: string,
+    page?: number,
+    limit?: number,
+    status?: SubscriptionStatus,
+  ): Promise<[Subscription[], number]>;
   findActiveByCompany(companyId: string): Promise<Subscription | null>;
   findExpiredSubscriptions(): Promise<Subscription[]>;
   update(id: string, data: UpdateSubscriptionData): Promise<Subscription>;
@@ -20,7 +25,7 @@ export interface ISubscriptionsDataService {
 }
 
 export interface ISubscriptionsBusinessService {
-  createSubscription(data: CreateSubscriptionData): Promise<Subscription>;
+  createSubscription(data: CreateSubscriptionData, idempotencyKey?: string): Promise<Subscription>;
   updateSubscription(id: string, data: UpdateSubscriptionData): Promise<Subscription>;
   cancelSubscription(id: string): Promise<Subscription>;
   processExpiredSubscriptions(): Promise<number>;
@@ -41,5 +46,10 @@ export interface ISubscriptionLimitsService {
   checkVehicleLimit(companyId: string, currentCount: number, increment?: number): Promise<LimitCheckResult>;
   checkOrderLimit(companyId: string, currentCount: number, increment?: number): Promise<LimitCheckResult>;
   getTariffLimits(companyId: string): Promise<TariffLimits | null>;
-  validateLimit(companyId: string, limitType: keyof TariffLimits, currentCount: number, increment?: number): Promise<boolean>;
+  validateLimit(
+    companyId: string,
+    limitType: keyof TariffLimits,
+    currentCount: number,
+    increment?: number,
+  ): Promise<boolean>;
 }

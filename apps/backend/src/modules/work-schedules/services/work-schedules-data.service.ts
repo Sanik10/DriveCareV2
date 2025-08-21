@@ -1,14 +1,15 @@
-// src/modules/work-schedules/services/work-schedules-data.service.ts
+// path: apps/backend/src/modules/work-schedules/services/work-schedules-data.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { WorkSchedule, ScheduleException, User } from '../../../database/entities';
+import { In, Repository } from 'typeorm';
+import { WorkSchedule, ScheduleException } from '../../../database/entities';
 import { CreateScheduleDto } from '../dto/request/create-schedule.dto';
 import { UpdateScheduleDto } from '../dto/request/update-schedule.dto';
 import { CreateExceptionDto } from '../dto/request/create-exception.dto';
-import { WorkSchedulesFilter, ScheduleExceptionsFilter } from '../types/work-schedules.types';
+import { WorkSchedulesFilter } from '../types/work-schedules.types';
 import { IWorkSchedulesDataService } from '../interfaces/work-schedules.interface';
 import { WORK_SCHEDULES_CONSTANTS } from '../constants/work-schedules.constants';
+import { ExceptionStatus, ExceptionType } from '../../../database/entities/schedule-exception.entity';
 
 @Injectable()
 export class WorkSchedulesDataService implements IWorkSchedulesDataService {
@@ -17,39 +18,41 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
     private readonly workScheduleRepository: Repository<WorkSchedule>,
     @InjectRepository(ScheduleException)
     private readonly scheduleExceptionRepository: Repository<ScheduleException>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
   ) {}
 
   async create(data: CreateScheduleDto & { companyId: string }): Promise<WorkSchedule> {
-    // 🔥 ИСПРАВЛЕНО: правильное создание с учетом типов entity
-    const scheduleData = {
+    const scheduleData: Partial<WorkSchedule> = {
       companyId: data.companyId,
       userId: data.userId,
       dayOfWeek: data.dayOfWeek,
-      startTime: data.startTime,
-      endTime: data.endTime,
+      startTime: data.startTime ?? null,
+      endTime: data.endTime ?? null,
       isDayOff: data.isDayOff || false,
-      breakStartTime: data.breakStartTime || null,
-      breakEndTime: data.breakEndTime || null,
-      efficiency: data.efficiency || WORK_SCHEDULES_CONSTANTS.DEFAULT_EFFICIENCY,
-      // 🔥 ИСПРАВЛЕНО: skillMatrix как JSON string, не массив
-      skillMatrix: data.skillMatrix ? JSON.stringify(data.skillMatrix) : null,
+      breakStartTime: data.breakStartTime ?? null,
+      breakEndTime: data.breakEndTime ?? null,
+      efficiency: data.efficiency ?? WORK_SCHEDULES_CONSTANTS.DEFAULT_EFFICIENCY,
+      skillMatrix: data.skillMatrix ?? [],
       shiftType: data.shiftType || 'flexible',
-      maxConsecutiveDays: data.maxConsecutiveDays || 5,
-      // 🔥 ИСПРАВЛЕНО: preferredDaysOff как JSON string
-      preferredDaysOff: data.preferredDaysOff ? JSON.stringify(data.preferredDaysOff) : null,
+      maxConsecutiveDays: data.maxConsecutiveDays ?? 5,
+      preferredDaysOff: data.preferredDaysOff ?? [],
       isActive: true,
     };
 
-    const schedule = this.workScheduleRepository.create(scheduleData);
+    const schedule = this.workScheduleRepository.create(scheduleData as WorkSchedule);
     return this.workScheduleRepository.save(schedule);
   }
 
   async findById(id: string): Promise<WorkSchedule | null> {
-    return this.workScheduleRepository.findOne({
-      where: { id },
-    });
+    return this.workScheduleRepository.findOne({ where: { id } });
+  }
+
+  async findByIdForCompany(id: string, companyId: string): Promise<WorkSchedule | null> {
+    return this.workScheduleRepository.findOne({ where: { id, companyId } });
+  }
+
+  async existsForCompany(id: string, companyId: string): Promise<boolean> {
+    const count = await this.workScheduleRepository.count({ where: { id, companyId } });
+    return count > 0;
   }
 
   async findAll(): Promise<WorkSchedule[]> {
@@ -67,17 +70,16 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
       page = 1,
       limit = WORK_SCHEDULES_CONSTANTS.DEFAULT_PAGE_SIZE,
       sortBy = 'dayOfWeek',
-      sortOrder = 'ASC'
+      sortOrder = 'ASC',
     } = filter;
 
     const query = this.workScheduleRepository.createQueryBuilder('schedule');
 
-    // 🔒 ОБЯЗАТЕЛЬНАЯ фильтрация по companyId
+    // Обязательная фильтрация по companyId
     if (companyId) {
       query.andWhere('schedule.companyId = :companyId', { companyId });
     }
 
-    // Фильтры
     if (userId) {
       query.andWhere('schedule.userId = :userId', { userId });
     }
@@ -90,51 +92,52 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
       query.andWhere('schedule.isActive = :isActive', { isActive });
     }
 
-    // Сортировка
     const sortColumn = this.mapSortField(sortBy);
-    query.orderBy(sortColumn, sortOrder.toUpperCase() as 'ASC' | 'DESC');
+    const order = (sortOrder || 'ASC').toString().toUpperCase();
+    const normalizedOrder: 'ASC' | 'DESC' = order === 'DESC' ? 'DESC' : 'ASC';
+    query.orderBy(sortColumn, normalizedOrder);
 
-    // Пагинация
-    const offset = (page - 1) * limit;
-    query.skip(offset).take(limit);
+    const safeLimit = Math.min(Math.max(1, limit), WORK_SCHEDULES_CONSTANTS.MAX_PAGE_SIZE);
+    const safePage = Math.max(1, page);
+    const offset = (safePage - 1) * safeLimit;
+    query.skip(offset).take(safeLimit);
 
     return query.getManyAndCount();
   }
 
   async update(id: string, data: Partial<UpdateScheduleDto>): Promise<WorkSchedule> {
-    // 🔥 ИСПРАВЛЕНО: подготавливаем данные для обновления с правильными типами
-    const updateData: any = {};
-    
+    const updateData: Partial<WorkSchedule> = {};
+
     if (data.dayOfWeek !== undefined) updateData.dayOfWeek = data.dayOfWeek;
     if (data.startTime !== undefined) updateData.startTime = data.startTime;
     if (data.endTime !== undefined) updateData.endTime = data.endTime;
     if (data.isDayOff !== undefined) updateData.isDayOff = data.isDayOff;
-    if (data.breakStartTime !== undefined) updateData.breakStartTime = data.breakStartTime;
-    if (data.breakEndTime !== undefined) updateData.breakEndTime = data.breakEndTime;
+    if (data.breakStartTime !== undefined) updateData.breakStartTime = data.breakStartTime ?? null;
+    if (data.breakEndTime !== undefined) updateData.breakEndTime = data.breakEndTime ?? null;
     if (data.efficiency !== undefined) updateData.efficiency = data.efficiency;
     if (data.shiftType !== undefined) updateData.shiftType = data.shiftType;
     if (data.maxConsecutiveDays !== undefined) updateData.maxConsecutiveDays = data.maxConsecutiveDays;
-    
-    // 🔥 ИСПРАВЛЕНО: правильная обработка JSON полей
+
     if (data.skillMatrix !== undefined) {
-      updateData.skillMatrix = data.skillMatrix ? JSON.stringify(data.skillMatrix) : null;
+      updateData.skillMatrix = data.skillMatrix ?? [];
     }
     if (data.preferredDaysOff !== undefined) {
-      updateData.preferredDaysOff = data.preferredDaysOff ? JSON.stringify(data.preferredDaysOff) : null;
+      updateData.preferredDaysOff = data.preferredDaysOff ?? [];
     }
 
-    await this.workScheduleRepository.update(id, updateData);
-    
+    await this.workScheduleRepository.update(id, updateData as any);
+
     const updatedSchedule = await this.findById(id);
     if (!updatedSchedule) {
       throw new Error(`WorkSchedule with id ${id} not found after update`);
     }
-    
+
     return updatedSchedule;
   }
 
+  // Soft-delete: деактивация вместо физического удаления
   async delete(id: string): Promise<void> {
-    await this.workScheduleRepository.delete(id);
+    await this.workScheduleRepository.update(id, { isActive: false } as any);
   }
 
   async findByUserId(userId: string, companyId: string): Promise<WorkSchedule[]> {
@@ -157,18 +160,47 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
     });
   }
 
-  async createException(data: CreateExceptionDto & { companyId: string }): Promise<ScheduleException> {
-    const exception = this.scheduleExceptionRepository.create(data);
-    return this.scheduleExceptionRepository.save(exception);
+  async findActiveByCompanyAndDayOfWeek(companyId: string, dayOfWeek: number): Promise<WorkSchedule[]> {
+    return this.workScheduleRepository.find({
+      where: { companyId, isActive: true, dayOfWeek },
+      order: { startTime: 'ASC' },
+    });
   }
 
-  async findExceptions(filter: ScheduleExceptionsFilter): Promise<[ScheduleException[], number]> {
+  async createException(data: CreateExceptionDto & { companyId: string }): Promise<ScheduleException> {
+    const entity = this.scheduleExceptionRepository.create({
+      companyId: data.companyId,
+      userId: data.userId,
+      type: data.type,
+      startDate: data.startDate as any,
+      endDate: data.endDate as any,
+      isFullDay: data.isFullDay ?? true,
+      startTime: data.startTime ?? null,
+      endTime: data.endTime ?? null,
+      reason: data.reason ?? null,
+      status: ExceptionStatus.PENDING,
+      approvedBy: null,
+      approvedAt: null,
+      rejectionReason: null,
+      affectedAppointments: [], // список ID затронутых записей (jsonb)
+      coverageAnalysis: null,
+    } as Partial<ScheduleException>);
+    return this.scheduleExceptionRepository.save(entity);
+  }
+
+  async findExceptions(filter: {
+    companyId: string;
+    userId?: string;
+    type?: ExceptionType;
+    status?: ExceptionStatus;
+    page?: number;
+    limit?: number;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<[ScheduleException[], number]> {
     const query = this.scheduleExceptionRepository.createQueryBuilder('exception');
 
-    // 🔒 ОБЯЗАТЕЛЬНАЯ фильтрация по companyId
-    if (filter.companyId) {
-      query.andWhere('exception.companyId = :companyId', { companyId: filter.companyId });
-    }
+    query.andWhere('exception.companyId = :companyId', { companyId: filter.companyId });
 
     if (filter.userId) {
       query.andWhere('exception.userId = :userId', { userId: filter.userId });
@@ -182,30 +214,54 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
       query.andWhere('exception.status = :status', { status: filter.status });
     }
 
-    // Пагинация
-    if (filter.page && filter.limit) {
-      const offset = (filter.page - 1) * filter.limit;
-      query.skip(offset).take(filter.limit);
+    if (filter.dateFrom && filter.dateTo) {
+      query.andWhere('(exception.startDate <= :dateTo AND exception.endDate >= :dateFrom)', {
+        dateFrom: filter.dateFrom,
+        dateTo: filter.dateTo,
+      });
+    } else if (filter.dateFrom) {
+      query.andWhere('exception.endDate >= :dateFrom', { dateFrom: filter.dateFrom });
+    } else if (filter.dateTo) {
+      query.andWhere('exception.startDate <= :dateTo', { dateTo: filter.dateTo });
     }
+
+    const page = Math.max(1, filter.page || 1);
+    const limit = Math.min(filter.limit || WORK_SCHEDULES_CONSTANTS.DEFAULT_PAGE_SIZE, WORK_SCHEDULES_CONSTANTS.MAX_PAGE_SIZE);
+    const offset = (page - 1) * limit;
+
+    query.skip(offset).take(limit);
+    query.orderBy('exception.startDate', 'DESC');
 
     return query.getManyAndCount();
   }
 
-  async updateExceptionStatus(id: string, status: string, approvedBy?: string): Promise<ScheduleException> {
-    const updateData: any = { status };
-    
+  async findExceptionsForDate(companyId: string, date: Date, userIds?: string[]): Promise<ScheduleException[]> {
+    const qb = this.scheduleExceptionRepository
+      .createQueryBuilder('e')
+      .where('e.companyId = :companyId', { companyId })
+      .andWhere(':date BETWEEN e.startDate AND e.endDate', { date });
+
+    if (userIds && userIds.length > 0) {
+      qb.andWhere('e.userId IN (:...userIds)', { userIds });
+    }
+
+    return qb.getMany();
+  }
+
+  async updateExceptionStatus(id: string, status: ExceptionStatus, approvedBy?: string): Promise<ScheduleException> {
+    const updateData: Partial<ScheduleException> = { status };
     if (approvedBy) {
       updateData.approvedBy = approvedBy;
-      updateData.approvedAt = new Date();
+      updateData.approvedAt = new Date() as any;
     }
 
     await this.scheduleExceptionRepository.update(id, updateData);
-    
+
     const exception = await this.scheduleExceptionRepository.findOne({ where: { id } });
     if (!exception) {
       throw new Error(`ScheduleException with id ${id} not found after update`);
     }
-    
+
     return exception;
   }
 
@@ -221,7 +277,6 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
       efficiency: 'schedule.efficiency',
       createdAt: 'schedule.createdAt',
     };
-
     return fieldMap[sortField] || 'schedule.dayOfWeek';
   }
 }

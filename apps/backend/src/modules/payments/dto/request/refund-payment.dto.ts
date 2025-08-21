@@ -1,11 +1,14 @@
-// src/modules/payments/dto/request/refund-payment.dto.ts (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+// src/modules/payments/dto/request/refund-payment.dto.ts (✅ XSS PROTECTED)
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
+import * as sanitizeHtml from 'sanitize-html';
 import { 
   IsNumber, 
   IsString, 
   IsOptional, 
   IsUUID,
   Min, 
+  MinLength,
   MaxLength 
 } from 'class-validator';
 import { PAYMENTS_CONSTANTS } from '../../constants/payments.constants';
@@ -30,11 +33,14 @@ export class RefundPaymentDto {
   amount: number;
 
   @ApiProperty({ 
-    description: 'Причина возврата',
+    description: 'Причина возврата (минимум 3 символа)',
     example: 'Некачественная услуга',
+    minLength: 3,
     maxLength: PAYMENTS_CONSTANTS.VALIDATION.NOTES.MAX_LENGTH
   })
+  @Transform(({ value }) => sanitizeHtml(value, { allowedTags: [] })) // ✅ XSS PROTECTION
   @IsString({ message: 'Причина возврата должна быть строкой' })
+  @MinLength(3, { message: 'Причина возврата должна содержать минимум 3 символа' }) // ✅ ДОБАВЛЕНО
   @MaxLength(PAYMENTS_CONSTANTS.VALIDATION.NOTES.MAX_LENGTH, {
     message: `Причина возврата не может превышать ${PAYMENTS_CONSTANTS.VALIDATION.NOTES.MAX_LENGTH} символов`
   })
@@ -46,6 +52,7 @@ export class RefundPaymentDto {
     maxLength: PAYMENTS_CONSTANTS.VALIDATION.NOTES.MAX_LENGTH
   })
   @IsOptional()
+  @Transform(({ value }) => sanitizeHtml(value, { allowedTags: [] })) // ✅ XSS PROTECTION
   @IsString({ message: 'Примечания должны быть строкой' })
   @MaxLength(PAYMENTS_CONSTANTS.VALIDATION.NOTES.MAX_LENGTH, {
     message: `Примечания не могут превышать ${PAYMENTS_CONSTANTS.VALIDATION.NOTES.MAX_LENGTH} символов`

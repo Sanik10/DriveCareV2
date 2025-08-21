@@ -1,3 +1,4 @@
+// path: apps/backend/src/common/guards/auth-with-ownership.guard.ts
 import { applyDecorators, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../modules/auth/guards/jwt-auth.guard';

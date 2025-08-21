@@ -1,24 +1,29 @@
 // src/modules/payments/services/payments-mapper.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Payment } from '../../../database/entities';
 import { PaymentResponseDto } from '../dto/response/payment-response.dto';
 import { PaginatedPaymentsResponseDto } from '../dto/response/paginated-payments-response.dto';
 import { PaymentStatisticsDto } from '../dto/response/payment-statistics.dto';
 import { CompanyBalanceDto } from '../dto/response/company-balance.dto';
-import { 
-  PaymentStatistics, 
-  CompanyBalance, 
+import {
+  CompanyBalance,
+  PaymentCurrency,
+  PaymentStatistics,
   PaymentStatus,
-  PaymentCurrency 
 } from '../types/payments.types';
 import { PAYMENTS_CONSTANTS } from '../constants/payments.constants';
 
 @Injectable()
 export class PaymentsMapperService {
-  
-  /**
-   * 🎯 Основной маппинг Entity → ResponseDto
-   */
+  private readonly logger = new Logger(PaymentsMapperService.name);
+
+  constructor(
+    @InjectRepository(Payment)
+    private readonly paymentsRepository: Repository<Payment>,
+  ) {}
+
   mapToResponseDto(payment: Payment): PaymentResponseDto {
     return {
       id: payment.id,
@@ -34,46 +39,42 @@ export class PaymentsMapperService {
       createdAt: payment.createdAt,
       updatedAt: payment.updatedAt,
 
-      // 🌍 МЕЖДУНАРОДНЫЕ ПОЛЯ (если есть в entity)
+      // FX
       exchangeRate: payment.exchangeRate ? parseFloat(payment.exchangeRate.toString()) : undefined,
       originalAmount: payment.originalAmount ? parseFloat(payment.originalAmount.toString()) : undefined,
       originalCurrency: payment.originalCurrency as PaymentCurrency,
 
-      // 🏦 GATEWAY ИНТЕГРАЦИЯ (если есть в entity)
-      gatewayTransactionId: payment.gatewayTransactionId,
+      // Gateway
       gatewayFee: payment.gatewayFee ? parseFloat(payment.gatewayFee.toString()) : undefined,
 
-      // 📄 МЕТАДАННЫЕ (если есть в entity)
-      metadata: payment.metadata,
+      // Relations
+      invoice: payment.invoice
+        ? {
+            invoiceNumber: payment.invoice.invoiceNumber,
+            totalAmount: parseFloat(payment.invoice.totalAmount.toString()),
+            status: payment.invoice.status,
+          }
+        : undefined,
 
-      // 🔗 СВЯЗАННЫЕ ДАННЫЕ
-      invoice: payment.invoice ? {
-        invoiceNumber: payment.invoice.invoiceNumber,
-        totalAmount: parseFloat(payment.invoice.totalAmount.toString()),
-        status: payment.invoice.status,
-      } : undefined,
+      paymentMethod: payment.paymentMethod
+        ? {
+            name: payment.paymentMethod.name,
+            type: payment.paymentMethod.type,
+          }
+        : undefined,
 
-      paymentMethod: payment.paymentMethod ? {
-        name: payment.paymentMethod.name,
-        type: payment.paymentMethod.type,
-      } : undefined,
-
-      // 📊 UI ДАННЫЕ
       statusColor: PAYMENTS_CONSTANTS.STATUS_COLORS[payment.status as PaymentStatus] || '#6b7280',
       statusDisplay: PAYMENTS_CONSTANTS.STATUS_DISPLAY[payment.status as PaymentStatus] || payment.status,
+
+      // Safe metadata уже безопасные — возвращаем как есть
+      safeMetadata: payment.safeMetadata || undefined,
     };
   }
 
-  /**
-   * 📋 Маппинг для списков (массив Entity → массив ResponseDto)
-   */
   mapArrayToResponseDto(payments: Payment[]): PaymentResponseDto[] {
-    return payments.map(payment => this.mapToResponseDto(payment));
+    return payments.map((payment) => this.mapToResponseDto(payment));
   }
 
-  /**
-   * 📊 Маппинг для пагинированного ответа
-   */
   mapToPaginatedResponse(
     payments: Payment[],
     total: number,
@@ -84,10 +85,10 @@ export class PaymentsMapperService {
       successfulPayments?: number;
       failedPayments?: number;
       refundAmount?: number;
-    }
+    },
   ): PaginatedPaymentsResponseDto {
     const totalPages = Math.ceil(total / limit);
-    
+
     return {
       items: this.mapArrayToResponseDto(payments),
       total,
@@ -96,8 +97,6 @@ export class PaymentsMapperService {
       totalPages,
       hasNext: page < totalPages,
       hasPrev: page > 1,
-      
-      // 📊 ДОПОЛНИТЕЛЬНАЯ СТАТИСТИКА
       totalAmount: additionalData?.totalAmount || 0,
       successfulPayments: additionalData?.successfulPayments || 0,
       failedPayments: additionalData?.failedPayments || 0,
@@ -105,77 +104,98 @@ export class PaymentsMapperService {
     };
   }
 
-  /**
-   * 📊 Маппинг статистики платежей
-   */
-  mapToStatisticsDto(statistics: PaymentStatistics): PaymentStatisticsDto {
-    // Генерация трендовых данных (последние 30 дней)
-    const dailyTrends = this.generateDailyTrends();
-    
-    // Генерация почасового распределения
-    const hourlyDistribution = this.generateHourlyDistribution();
+  async mapToStatisticsDto(statistics: PaymentStatistics, companyId: string): Promise<PaymentStatisticsDto> {
+    try {
+      const dailyTrends = await this.calculateDailyTrends(companyId);
+      const hourlyDistribution = await this.calculateHourlyDistribution(companyId);
 
-    return {
-      total: statistics.total,
-      byStatus: statistics.byStatus,
-      byCurrency: statistics.byCurrency,
-      byPaymentMethod: statistics.byPaymentMethod,
-      totalAmount: statistics.totalAmount,
-      totalAmountByCurrency: statistics.totalAmountByCurrency,
-      thisMonth: statistics.thisMonth,
-      thisMonthAmount: statistics.thisMonthAmount,
-      avgPaymentAmount: Math.round(statistics.avgPaymentAmount * 100) / 100,
-      avgPaymentTime: statistics.avgPaymentTime,
-      successRate: Math.round(statistics.successRate * 100) / 100,
-      refundRate: Math.round(statistics.refundRate * 100) / 100,
-      
-      // 📈 ТРЕНДОВЫЕ ДАННЫЕ
-      dailyTrends,
-      hourlyDistribution,
-    };
+      return {
+        total: statistics.total,
+        byStatus: statistics.byStatus,
+        byCurrency: statistics.byCurrency,
+        byPaymentMethod: statistics.byPaymentMethod,
+        totalAmount: statistics.totalAmount,
+        totalAmountByCurrency: statistics.totalAmountByCurrency,
+        thisMonth: statistics.thisMonth,
+        thisMonthAmount: statistics.thisMonthAmount,
+        avgPaymentAmount: Math.round(statistics.avgPaymentAmount * 100) / 100,
+        avgPaymentTime: statistics.avgPaymentTime,
+        successRate: Math.round(statistics.successRate * 100) / 100,
+        refundRate: Math.round(statistics.refundRate * 100) / 100,
+        dailyTrends,
+        hourlyDistribution,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to map statistics for company ${companyId}:`, error);
+      return {
+        total: statistics.total,
+        byStatus: statistics.byStatus,
+        byCurrency: statistics.byCurrency,
+        byPaymentMethod: statistics.byPaymentMethod,
+        totalAmount: statistics.totalAmount,
+        totalAmountByCurrency: statistics.totalAmountByCurrency,
+        thisMonth: statistics.thisMonth,
+        thisMonthAmount: statistics.thisMonthAmount,
+        avgPaymentAmount: Math.round(statistics.avgPaymentAmount * 100) / 100,
+        avgPaymentTime: statistics.avgPaymentTime,
+        successRate: Math.round(statistics.successRate * 100) / 100,
+        refundRate: Math.round(statistics.refundRate * 100) / 100,
+        dailyTrends: [],
+        hourlyDistribution: [],
+      };
+    }
   }
 
-  /**
-   * 💰 Маппинг баланса компании
-   */
-  mapToBalanceDto(balance: CompanyBalance): CompanyBalanceDto {
-    // Расчет дополнительной аналитики
-    const totalTransactions = Object.values(balance.balanceByCurrency).reduce(
-      (sum, currency) => sum + (currency.received > 0 ? 1 : 0), 0
-    );
+  async mapToBalanceDto(balance: CompanyBalance): Promise<CompanyBalanceDto> {
+    try {
+      const last30DaysBalance = await this.calculateLast30DaysBalance(balance.companyId);
+      const monthlyGrowthPercentage = await this.calculateMonthlyGrowth(balance.companyId);
 
-    const averageTransactionAmount = totalTransactions > 0 ? 
-      balance.totalReceived / totalTransactions : 0;
+      const totalTransactions = Object.values(balance.balanceByCurrency).reduce(
+        (sum: number, currency: any) => sum + (currency.received > 0 ? 1 : 0),
+        0,
+      );
 
-    // Заглушки для дополнительных метрик (в реальном проекте брать из БД)
-    const last30DaysBalance = balance.netBalance * 0.15; // 15% от общего баланса
-    const monthlyGrowthPercentage = 12.5; // Заглушка
+      const averageTransactionAmount = totalTransactions > 0 ? balance.totalReceived / totalTransactions : 0;
 
-    return {
-      companyId: balance.companyId,
-      totalReceived: Math.round(balance.totalReceived * 100) / 100,
-      totalRefunded: Math.round(balance.totalRefunded * 100) / 100,
-      netBalance: Math.round(balance.netBalance * 100) / 100,
-      pendingAmount: Math.round(balance.pendingAmount * 100) / 100,
-      disputedAmount: Math.round(balance.disputedAmount * 100) / 100,
-      balanceByCurrency: this.roundCurrencyBalances(balance.balanceByCurrency),
-      lastUpdated: balance.lastUpdated,
+      return {
+        companyId: balance.companyId,
+        totalReceived: Math.round(balance.totalReceived * 100) / 100,
+        totalRefunded: Math.round(balance.totalRefunded * 100) / 100,
+        netBalance: Math.round(balance.netBalance * 100) / 100,
+        pendingAmount: Math.round(balance.pendingAmount * 100) / 100,
+        disputedAmount: Math.round(balance.disputedAmount * 100) / 100,
+        balanceByCurrency: this.roundCurrencyBalances(balance.balanceByCurrency),
+        lastUpdated: balance.lastUpdated,
 
-      // 📊 ДОПОЛНИТЕЛЬНАЯ АНАЛИТИКА
-      totalTransactions,
-      averageTransactionAmount: Math.round(averageTransactionAmount * 100) / 100,
-      last30DaysBalance: Math.round(last30DaysBalance * 100) / 100,
-      monthlyGrowthPercentage: Math.round(monthlyGrowthPercentage * 100) / 100,
-    };
+        totalTransactions,
+        averageTransactionAmount: Math.round(averageTransactionAmount * 100) / 100,
+        last30DaysBalance: Math.round(last30DaysBalance * 100) / 100,
+        monthlyGrowthPercentage: Math.round(monthlyGrowthPercentage * 100) / 100,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to map balance for company ${balance.companyId}:`, error);
+      return {
+        companyId: balance.companyId,
+        totalReceived: Math.round(balance.totalReceived * 100) / 100,
+        totalRefunded: Math.round(balance.totalRefunded * 100) / 100,
+        netBalance: Math.round(balance.netBalance * 100) / 100,
+        pendingAmount: Math.round(balance.pendingAmount * 100) / 100,
+        disputedAmount: Math.round(balance.disputedAmount * 100) / 100,
+        balanceByCurrency: this.roundCurrencyBalances(balance.balanceByCurrency),
+        lastUpdated: balance.lastUpdated,
+        totalTransactions: 0,
+        averageTransactionAmount: 0,
+        last30DaysBalance: 0,
+        monthlyGrowthPercentage: 0,
+      };
+    }
   }
 
-  /**
-   * 🔗 Базовая информация о платеже (для других модулей)
-   */
-  mapToBasicInfo(payment: Payment): { 
-    id: string; 
-    invoiceId: string; 
-    companyId: string; 
+  mapToBasicInfo(payment: Payment): {
+    id: string;
+    invoiceId: string;
+    companyId: string;
     status: string;
     amount: number;
     currency: string;
@@ -190,9 +210,6 @@ export class PaymentsMapperService {
     };
   }
 
-  /**
-   * 🎨 Расширенная информация о платеже (для интеграций)
-   */
   mapToExtendedInfo(payment: Payment): {
     id: string;
     invoiceId: string;
@@ -202,8 +219,6 @@ export class PaymentsMapperService {
     status: string;
     paymentDate: Date;
     transactionId?: string;
-    gatewayTransactionId?: string;
-    metadata?: any;
     createdAt: Date;
   } {
     return {
@@ -215,18 +230,13 @@ export class PaymentsMapperService {
       status: payment.status,
       paymentDate: payment.paymentDate,
       transactionId: payment.transactionId,
-      gatewayTransactionId: payment.gatewayTransactionId,
-      metadata: payment.metadata,
       createdAt: payment.createdAt,
     };
   }
 
-  /**
-   * 📋 Маппинг для выпадающих списков (ID + описание)
-   */
-  mapToSelectOption(payment: Payment): { 
-    value: string; 
-    label: string; 
+  mapToSelectOption(payment: Payment): {
+    value: string;
+    label: string;
     amount: number;
     status: string;
     disabled?: boolean;
@@ -234,19 +244,18 @@ export class PaymentsMapperService {
     const statusDisplay = PAYMENTS_CONSTANTS.STATUS_DISPLAY[payment.status as PaymentStatus] || payment.status;
     const currency = payment.currency || 'RUB';
     const amount = parseFloat(payment.amount.toString());
-    
+
     return {
       value: payment.id,
       label: `${payment.transactionId || payment.id.slice(0, 8)} - ${amount} ${currency} (${statusDisplay})`,
       amount,
       status: payment.status,
-      disabled: ![PaymentStatus.PROCESSED, PaymentStatus.PARTIALLY_REFUNDED].includes(payment.status as PaymentStatus),
+      disabled: ![PaymentStatus.PROCESSED, PaymentStatus.PARTIALLY_REFUNDED].includes(
+        payment.status as PaymentStatus,
+      ),
     };
   }
 
-  /**
-   * 🔍 Маппинг для поиска (компактная форма)
-   */
   mapToSearchResult(payment: Payment): {
     id: string;
     transactionId?: string;
@@ -267,9 +276,6 @@ export class PaymentsMapperService {
     };
   }
 
-  /**
-   * 💳 Маппинг для отчетов (финансовая информация)
-   */
   mapToFinancialReport(payment: Payment): {
     id: string;
     transactionId?: string;
@@ -285,7 +291,7 @@ export class PaymentsMapperService {
   } {
     const amount = parseFloat(payment.amount.toString());
     const gatewayFee = payment.gatewayFee ? parseFloat(payment.gatewayFee.toString()) : 0;
-    
+
     return {
       id: payment.id,
       transactionId: payment.transactionId,
@@ -301,9 +307,6 @@ export class PaymentsMapperService {
     };
   }
 
-  /**
-   * 📊 Маппинг для дашборда (ключевые метрики)
-   */
   mapToDashboardMetrics(payments: Payment[]): {
     totalCount: number;
     totalAmount: number;
@@ -312,12 +315,7 @@ export class PaymentsMapperService {
     todayAmount: number;
     successRate: number;
     topCurrency: string;
-    recentPayments: Array<{
-      id: string;
-      amount: number;
-      status: string;
-      paymentDate: Date;
-    }>;
+    recentPayments: Array<{ id: string; amount: number; status: string; paymentDate: Date }>;
   } {
     const totalCount = payments.length;
     const totalAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount.toString()), 0);
@@ -325,28 +323,26 @@ export class PaymentsMapperService {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
-    const todayPayments = payments.filter(p => new Date(p.paymentDate) >= today);
+
+    const todayPayments = payments.filter((p) => new Date(p.paymentDate) >= today);
     const todayCount = todayPayments.length;
     const todayAmount = todayPayments.reduce((sum, p) => sum + parseFloat(p.amount.toString()), 0);
 
-    const successfulCount = payments.filter(p => p.status === PaymentStatus.PROCESSED).length;
+    const successfulCount = payments.filter((p) => p.status === PaymentStatus.PROCESSED).length;
     const successRate = totalCount > 0 ? (successfulCount / totalCount) * 100 : 0;
 
-    // Определение самой популярной валюты
     const currencyCount = payments.reduce((acc, p) => {
       const currency = p.currency || PAYMENTS_CONSTANTS.DEFAULTS.CURRENCY;
       acc[currency] = (acc[currency] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
-    
+
     const topCurrency = Object.keys(currencyCount).sort((a, b) => currencyCount[b] - currencyCount[a])[0] || 'RUB';
 
-    // Последние 5 платежей
     const recentPayments = payments
       .sort((a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime())
       .slice(0, 5)
-      .map(p => ({
+      .map((p) => ({
         id: p.id,
         amount: parseFloat(p.amount.toString()),
         status: p.status,
@@ -365,15 +361,11 @@ export class PaymentsMapperService {
     };
   }
 
-  // ========== PRIVATE HELPER METHODS ==========
+  // ========== PRIVATE HELPERS ==========
 
-  /**
-   * 💰 Округление балансов по валютам
-   */
   private roundCurrencyBalances(balances: Record<string, any>): Record<string, any> {
-    const rounded = {};
-    
-    Object.keys(balances).forEach(currency => {
+    const rounded: Record<string, any> = {};
+    Object.keys(balances).forEach((currency) => {
       const balance = balances[currency];
       rounded[currency] = {
         received: Math.round(balance.received * 100) / 100,
@@ -382,51 +374,143 @@ export class PaymentsMapperService {
         pending: Math.round(balance.pending * 100) / 100,
       };
     });
-
     return rounded;
   }
 
-  /**
-   * 📈 Генерация данных по дням (заглушка)
-   */
-  private generateDailyTrends(): Array<{ date: string; amount: number; count: number }> {
-    const trends = [];
-    const today = new Date();
-    
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      
-      trends.push({
-        date: date.toISOString().split('T')[0],
-        amount: Math.floor(Math.random() * 100000) + 50000, // Заглушка
-        count: Math.floor(Math.random() * 20) + 5, // Заглушка
-      });
+  private async calculateDailyTrends(
+    companyId: string,
+  ): Promise<Array<{ date: string; amount: number; count: number }>> {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 29);
+      startDate.setHours(0, 0, 0, 0);
+
+      const trends = await this.paymentsRepository
+        .createQueryBuilder('payment')
+        .select([
+          'DATE(payment.paymentDate) as date',
+          'COUNT(*) as count',
+          'COALESCE(SUM(CASE WHEN payment.status = :processedStatus THEN CAST(payment.amount AS DECIMAL) ELSE 0 END), 0) as amount',
+        ])
+        .where('payment.companyId = :companyId', { companyId })
+        .andWhere('payment.paymentDate >= :startDate', { startDate })
+        .andWhere('payment.paymentDate <= :endDate', { endDate })
+        .setParameter('processedStatus', PaymentStatus.PROCESSED)
+        .groupBy('DATE(payment.paymentDate)')
+        .orderBy('DATE(payment.paymentDate)', 'ASC')
+        .getRawMany();
+
+      const result: Array<{ date: string; amount: number; count: number }> = [];
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        const dayData = trends.find((t) => t.date === dateStr);
+        result.push({
+          date: dateStr,
+          amount: dayData ? parseFloat(dayData.amount) || 0 : 0,
+          count: dayData ? parseInt(dayData.count, 10) || 0 : 0,
+        });
+      }
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to calculate daily trends for company ${companyId}:`, error);
+      return [];
     }
-    
-    return trends;
   }
 
-  /**
-   * ⏰ Генерация почасового распределения (заглушка)
-   */
-  private generateHourlyDistribution(): Array<{ hour: number; count: number }> {
-    const distribution = [];
-    
-    for (let hour = 0; hour < 24; hour++) {
-      // Имитируем реальное распределение (больше днем, меньше ночью)
-      let count = 0;
-      if (hour >= 9 && hour <= 18) {
-        count = Math.floor(Math.random() * 50) + 20; // Рабочие часы
-      } else if (hour >= 19 && hour <= 22) {
-        count = Math.floor(Math.random() * 30) + 10; // Вечер
-      } else {
-        count = Math.floor(Math.random() * 10) + 1; // Ночь/раннее утро
+  private async calculateHourlyDistribution(
+    companyId: string,
+  ): Promise<Array<{ hour: number; count: number }>> {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+
+      const hourlyData = await this.paymentsRepository
+        .createQueryBuilder('payment')
+        .select(['EXTRACT(HOUR FROM payment.paymentDate) as hour', 'COUNT(*) as count'])
+        .where('payment.companyId = :companyId', { companyId })
+        .andWhere('payment.paymentDate >= :startDate', { startDate })
+        .andWhere('payment.paymentDate <= :endDate', { endDate })
+        .groupBy('EXTRACT(HOUR FROM payment.paymentDate)')
+        .orderBy('EXTRACT(HOUR FROM payment.paymentDate)', 'ASC')
+        .getRawMany();
+
+      const result: Array<{ hour: number; count: number }> = [];
+      for (let hour = 0; hour < 24; hour++) {
+        const hourData = hourlyData.find((h) => parseInt(h.hour, 10) === hour);
+        result.push({ hour, count: hourData ? parseInt(hourData.count, 10) || 0 : 0 });
       }
-      
-      distribution.push({ hour, count });
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to calculate hourly distribution for company ${companyId}:`, error);
+      return Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
     }
-    
-    return distribution;
+  }
+
+  private async calculateLast30DaysBalance(companyId: string): Promise<number> {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+
+      const result = await this.paymentsRepository
+        .createQueryBuilder('payment')
+        .select('COALESCE(SUM(CAST(payment.amount AS DECIMAL)), 0)', 'totalAmount')
+        .where('payment.companyId = :companyId', { companyId })
+        .andWhere('payment.paymentDate >= :startDate', { startDate })
+        .andWhere('payment.paymentDate <= :endDate', { endDate })
+        .andWhere('payment.status = :status', { status: PaymentStatus.PROCESSED })
+        .getRawOne();
+
+      return parseFloat(result?.totalAmount) || 0;
+    } catch (error) {
+      this.logger.error(`Failed to calculate last 30 days balance for company ${companyId}:`, error);
+      return 0;
+    }
+  }
+
+  private async calculateMonthlyGrowth(companyId: string): Promise<number> {
+    try {
+      const currentMonth = new Date();
+      currentMonth.setDate(1);
+      currentMonth.setHours(0, 0, 0, 0);
+
+      const previousMonth = new Date(currentMonth);
+      previousMonth.setMonth(previousMonth.getMonth() - 1);
+
+      const previousMonthEnd = new Date(currentMonth);
+      previousMonthEnd.setMilliseconds(-1);
+
+      const currentMonthResult = await this.paymentsRepository
+        .createQueryBuilder('payment')
+        .select('COALESCE(SUM(CAST(payment.amount AS DECIMAL)), 0)', 'amount')
+        .where('payment.companyId = :companyId', { companyId })
+        .andWhere('payment.paymentDate >= :startDate', { startDate: currentMonth })
+        .andWhere('payment.status = :status', { status: PaymentStatus.PROCESSED })
+        .getRawOne();
+
+      const previousMonthResult = await this.paymentsRepository
+        .createQueryBuilder('payment')
+        .select('COALESCE(SUM(CAST(payment.amount AS DECIMAL)), 0)', 'amount')
+        .where('payment.companyId = :companyId', { companyId })
+        .andWhere('payment.paymentDate >= :startDate', { startDate: previousMonth })
+        .andWhere('payment.paymentDate <= :endDate', { endDate: previousMonthEnd })
+        .andWhere('payment.status = :status', { status: PaymentStatus.PROCESSED })
+        .getRawOne();
+
+      const currentAmount = parseFloat(currentMonthResult?.amount) || 0;
+      const previousAmount = parseFloat(previousMonthResult?.amount) || 0;
+
+      if (previousAmount === 0) return currentAmount > 0 ? 100 : 0;
+
+      const growth = ((currentAmount - previousAmount) / previousAmount) * 100;
+      return Math.min(Math.max(growth, -100), 1000);
+    } catch (error) {
+      this.logger.error(`Failed to calculate monthly growth for company ${companyId}:`, error);
+      return 0;
+    }
   }
 }

@@ -1,5 +1,15 @@
-// src/database/entities/invoice.entity.ts (ДОПОЛНЕННАЯ ВЕРСИЯ)
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn, Index } from 'typeorm';
+// src/database/entities/invoice.entity.ts
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { Order } from './order.entity';
 import { Payment } from './payment.entity';
 import { Company } from './company.entity';
@@ -15,7 +25,7 @@ export enum InvoiceStatus {
 @Index(['orderId'])
 @Index(['status'])
 @Index(['dueDate'])
-@Index(['invoiceNumber'], { unique: true })
+@Index(['companyId', 'invoiceNumber'], { unique: true }) // уникальность номера внутри компании
 export class Invoice {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -29,11 +39,10 @@ export class Invoice {
   @Column({ type: 'varchar', length: 50 })
   invoiceNumber: string;
 
-  @Column({ 
-    type: 'varchar', 
+  @Column({
+    type: 'varchar',
     length: 20,
-    enum: InvoiceStatus,
-    default: InvoiceStatus.ISSUED
+    default: InvoiceStatus.ISSUED,
   })
   status: InvoiceStatus;
 
@@ -43,33 +52,33 @@ export class Invoice {
   @Column({ type: 'date' })
   dueDate: Date;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 15, scale: 2 })
   amount: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 15, scale: 2 })
   taxAmount: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 15, scale: 2 })
   totalAmount: number;
 
   @Column({ type: 'text', nullable: true })
   notes: string;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
-  // 🔗 TypeORM Relationships
-  @ManyToOne(() => Company)
+  // Relations
+  @ManyToOne(() => Company, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'companyId' })
   company: Company;
 
-  @ManyToOne(() => Order)
+  @ManyToOne(() => Order, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'orderId' })
   order: Order;
 
-  @OneToMany(() => Payment, payment => payment.invoice)
+  @OneToMany(() => Payment, (payment) => payment.invoice)
   payments: Payment[];
 }

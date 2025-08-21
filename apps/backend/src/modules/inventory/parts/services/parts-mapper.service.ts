@@ -1,42 +1,46 @@
-// src/modules/inventory/parts/services/parts-mapper.service.ts
+// path: apps/backend/src/modules/inventory/parts/services/parts-mapper.service.ts
 import { Injectable } from '@nestjs/common';
 import { Part } from '../../../../database/entities';
 import { PartResponseDto, PartCategoryDto } from '../dto/response/part-response.dto';
-import { PartBasicInfo, PartWithInventory } from '../types/parts.types';
 
 @Injectable()
 export class PartsMapperService {
-  
-  /**
-   * 🎯 Основной маппинг Part Entity → ResponseDto
-   */
+  private canViewCostsForRole(role?: string): boolean {
+    if (!role) return false;
+    return ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'].includes(role);
+  }
+
   mapToResponseDto(part: Part): PartResponseDto {
-    const marginPercent = this.calculateMarginPercent(part.costPrice, part.sellingPrice);
-    const profitPerUnit = this.calculateProfitPerUnit(part.costPrice, part.sellingPrice);
-    
+    return this.mapToResponseDtoForRole(part, 'company_admin');
+  }
+
+  mapArrayToResponseDto(parts: Part[]): PartResponseDto[] {
+    return parts.map((part) => this.mapToResponseDto(part));
+  }
+
+  mapToResponseDtoForRole(part: Part, role?: string): PartResponseDto {
+    const canViewCosts = this.canViewCostsForRole(role);
+    const marginPercent = canViewCosts ? this.calculateMarginPercent(part.costPrice, part.sellingPrice) : undefined;
+    const profitPerUnit = canViewCosts ? this.calculateProfitPerUnit(part.costPrice, part.sellingPrice) : undefined;
+
     return {
       id: part.id,
       companyId: part.companyId,
       categoryId: part.categoryId,
-      category: part.category ? this.mapCategoryToDto(part.category) : {
-        id: part.categoryId,
-        name: 'Неизвестная категория',
-        code: undefined,
-      },
+      category: part.category ? this.mapCategoryToDto(part.category) : { id: part.categoryId, name: 'Неизвестная категория', code: undefined },
       name: part.name,
-      partNumber: part.partNumber,
-      brand: part.brand,
-      description: part.description,
-      costPrice: parseFloat(part.costPrice.toString()),
-      sellingPrice: parseFloat(part.sellingPrice.toString()),
+      partNumber: part.partNumber || undefined,
+      brand: part.brand || undefined,
+      description: part.description || undefined,
+      costPrice: canViewCosts ? parseFloat(part.costPrice.toString()) : undefined,
+      sellingPrice: canViewCosts ? parseFloat(part.sellingPrice.toString()) : undefined,
       marginPercent,
       profitPerUnit,
-      imageUrl: part.imageUrl,
+      imageUrl: part.imageUrl || undefined,
       isActive: part.isActive,
       createdAt: part.createdAt,
       updatedAt: part.updatedAt,
-      
-      // Дополнительные вычисляемые поля (будут заполнены при наличии данных)
+
       currentStock: undefined,
       minStock: undefined,
       needsRestock: undefined,
@@ -47,181 +51,20 @@ export class PartsMapperService {
     };
   }
 
-  /**
-   * 🎯 Массовый маппинг
-   */
-  mapArrayToResponseDto(parts: Part[]): PartResponseDto[] {
-    return parts.map(part => this.mapToResponseDto(part));
+  mapArrayToResponseDtoForRole(parts: Part[], role?: string): PartResponseDto[] {
+    return parts.map((p) => this.mapToResponseDtoForRole(p, role));
   }
 
-  /**
-   * 🎯 Маппинг с данными инвентаря
-   */
-  mapToResponseDtoWithInventory(part: Part, inventoryData?: {
-    currentStock: number;
-    minStock: number;
-    lastMovementDate?: Date;
-  }): PartResponseDto {
-    const baseDto = this.mapToResponseDto(part);
-    
-    if (inventoryData) {
-      baseDto.currentStock = inventoryData.currentStock;
-      baseDto.minStock = inventoryData.minStock;
-      baseDto.needsRestock = inventoryData.currentStock <= inventoryData.minStock;
-      baseDto.stockStatus = this.determineStockStatus(inventoryData.currentStock, inventoryData.minStock);
-      baseDto.lastMovementDate = inventoryData.lastMovementDate;
-    }
-    
-    return baseDto;
-  }
-
-  /**
-   * 🎯 Маппинг категории
-   */
   mapCategoryToDto(category: any): PartCategoryDto {
-    return {
-      id: category.id,
-      name: category.name,
-      code: category.code,
-    };
+    return { id: category.id, name: category.name, code: category.code };
   }
 
-  /**
-   * 🎯 Базовая информация (для других модулей)
-   */
-  mapToBasicInfo(part: Part): PartBasicInfo {
-    return {
-      id: part.id,
-      name: part.name,
-      partNumber: part.partNumber,
-      brand: part.brand,
-      categoryName: part.category?.name || 'Без категории',
-      costPrice: parseFloat(part.costPrice.toString()),
-      sellingPrice: parseFloat(part.sellingPrice.toString()),
-      isActive: part.isActive,
-      companyId: part.companyId,
-    };
-  }
-
-  /**
-   * 🎯 Для списков и краткого отображения
-   */
-  mapToListItem(part: Part): {
+  mapToBasicInfo(part: Part): {
     id: string;
     name: string;
-    partNumber: string;
-    brand: string;
+    partNumber?: string;
+    brand?: string;
     categoryName: string;
-    costPrice: number;
-    sellingPrice: number;
-    marginPercent: number;
-    isActive: boolean;
-    stockStatus: string;
-  } {
-    return {
-      id: part.id,
-      name: part.name,
-      partNumber: part.partNumber || '',
-      brand: part.brand || '',
-      categoryName: part.category?.name || 'Без категории',
-      costPrice: parseFloat(part.costPrice.toString()),
-      sellingPrice: parseFloat(part.sellingPrice.toString()),
-      marginPercent: this.calculateMarginPercent(part.costPrice, part.sellingPrice),
-      isActive: part.isActive,
-      stockStatus: 'unknown', // Будет заполнено при наличии данных инвентаря
-    };
-  }
-
-  /**
-   * 🎯 Для финансовых отчетов
-   */
-  mapToFinancialSummary(part: Part): {
-    id: string;
-    name: string;
-    partNumber: string;
-    costPrice: number;
-    sellingPrice: number;
-    profitPerUnit: number;
-    marginPercent: number;
-    category: string;
-    isActive: boolean;
-  } {
-    return {
-      id: part.id,
-      name: part.name,
-      partNumber: part.partNumber || '',
-      costPrice: parseFloat(part.costPrice.toString()),
-      sellingPrice: parseFloat(part.sellingPrice.toString()),
-      profitPerUnit: this.calculateProfitPerUnit(part.costPrice, part.sellingPrice),
-      marginPercent: this.calculateMarginPercent(part.costPrice, part.sellingPrice),
-      category: part.category?.name || 'Без категории',
-      isActive: part.isActive,
-    };
-  }
-
-  /**
-   * 🎯 Для поиска с релевантностью
-   */
-  mapToSearchResult(part: Part, relevanceScore: number = 0): {
-    id: string;
-    name: string;
-    partNumber: string;
-    brand: string;
-    categoryName: string;
-    costPrice: number;
-    sellingPrice: number;
-    isActive: boolean;
-    relevanceScore: number;
-    description: string;
-  } {
-    return {
-      id: part.id,
-      name: part.name,
-      partNumber: part.partNumber || '',
-      brand: part.brand || '',
-      categoryName: part.category?.name || 'Без категории',
-      costPrice: parseFloat(part.costPrice.toString()),
-      sellingPrice: parseFloat(part.sellingPrice.toString()),
-      isActive: part.isActive,
-      relevanceScore,
-      description: part.description || '',
-    };
-  }
-
-  /**
-   * 🎯 Для мобильного приложения (упрощенный)
-   */
-  mapToMobileView(part: Part): {
-    id: string;
-    name: string;
-    partNumber: string;
-    brand: string;
-    price: number;
-    isActive: boolean;
-    category: string;
-    imageUrl: string;
-  } {
-    return {
-      id: part.id,
-      name: part.name,
-      partNumber: part.partNumber || '',
-      brand: part.brand || '',
-      price: parseFloat(part.sellingPrice.toString()),
-      isActive: part.isActive,
-      category: part.category?.name || 'Без категории',
-      imageUrl: part.imageUrl || '',
-    };
-  }
-
-  /**
-   * 🎯 Для audit логирования
-   */
-  mapToAuditData(part: Part): {
-    id: string;
-    name: string;
-    partNumber: string;
-    brand: string;
-    categoryId: string;
     costPrice: number;
     sellingPrice: number;
     isActive: boolean;
@@ -232,7 +75,7 @@ export class PartsMapperService {
       name: part.name,
       partNumber: part.partNumber || '',
       brand: part.brand || '',
-      categoryId: part.categoryId,
+      categoryName: part.category?.name || 'Без категории',
       costPrice: parseFloat(part.costPrice.toString()),
       sellingPrice: parseFloat(part.sellingPrice.toString()),
       isActive: part.isActive,
@@ -240,121 +83,118 @@ export class PartsMapperService {
     };
   }
 
-  /**
-   * 🎯 Для экспорта в Excel/CSV
-   */
-  mapToExportRow(part: Part): {
-    partNumber: string;
+  mapToListItem(part: Part): {
+    id: string;
     name: string;
+    partNumber: string;
     brand: string;
+    categoryName: string;
+    costPrice?: number;
+    sellingPrice?: number;
+    marginPercent?: number;
+    isActive: boolean;
+    stockStatus: string;
+  } {
+    const canViewCosts = true; // для внутренних списков — контролируется выше уровнем
+    return {
+      id: part.id,
+      name: part.name,
+      partNumber: part.partNumber || '',
+      brand: part.brand || '',
+      categoryName: part.category?.name || 'Без категории',
+      costPrice: canViewCosts ? parseFloat(part.costPrice.toString()) : undefined,
+      sellingPrice: canViewCosts ? parseFloat(part.sellingPrice.toString()) : undefined,
+      marginPercent: canViewCosts ? this.calculateMarginPercent(part.costPrice, part.sellingPrice) : undefined,
+      isActive: part.isActive,
+      stockStatus: 'unknown',
+    };
+  }
+
+  mapToFinancialSummary(part: Part): {
+    id: string;
+    name: string;
+    partNumber: string;
+    costPrice?: number;
+    sellingPrice?: number;
+    profitPerUnit?: number;
+    marginPercent?: number;
     category: string;
-    costPrice: number;
-    sellingPrice: number;
-    marginPercent: number;
-    profitPerUnit: number;
-    status: string;
-    createdAt: string;
+    isActive: boolean;
+  } {
+    const canViewCosts = true;
+    return {
+      id: part.id,
+      name: part.name,
+      partNumber: part.partNumber || '',
+      costPrice: canViewCosts ? parseFloat(part.costPrice.toString()) : undefined,
+      sellingPrice: canViewCosts ? parseFloat(part.sellingPrice.toString()) : undefined,
+      profitPerUnit: canViewCosts ? this.calculateProfitPerUnit(part.costPrice, part.sellingPrice) : undefined,
+      marginPercent: canViewCosts ? this.calculateMarginPercent(part.costPrice, part.sellingPrice) : undefined,
+      category: part.category?.name || 'Без категории',
+      isActive: part.isActive,
+    };
+  }
+
+  mapToSearchResult(part: Part, relevanceScore: number = 0): {
+    id: string;
+    name: string;
+    partNumber: string;
+    brand: string;
+    categoryName: string;
+    costPrice?: number;
+    sellingPrice?: number;
+    isActive: boolean;
+    relevanceScore: number;
     description: string;
   } {
+    const canViewCosts = false;
     return {
-      partNumber: part.partNumber || '',
+      id: part.id,
       name: part.name,
+      partNumber: part.partNumber || '',
       brand: part.brand || '',
-      category: part.category?.name || 'Без категории',
-      costPrice: parseFloat(part.costPrice.toString()),
-      sellingPrice: parseFloat(part.sellingPrice.toString()),
-      marginPercent: this.calculateMarginPercent(part.costPrice, part.sellingPrice),
-      profitPerUnit: this.calculateProfitPerUnit(part.costPrice, part.sellingPrice),
-      status: part.isActive ? 'Активна' : 'Неактивна',
-      createdAt: part.createdAt.toISOString().split('T')[0],
+      categoryName: part.category?.name || 'Без категории',
+      costPrice: canViewCosts ? parseFloat(part.costPrice.toString()) : undefined,
+      sellingPrice: canViewCosts ? parseFloat(part.sellingPrice.toString()) : undefined,
+      isActive: part.isActive,
+      relevanceScore,
       description: part.description || '',
     };
   }
 
-  /**
-   * 🎯 Группировка по категориям
-   */
-  mapToCategoryGroups(parts: Part[]): Record<string, {
-    categoryName: string;
-    categoryId: string;
-    parts: Array<{
-      id: string;
-      name: string;
-      partNumber: string;
-      costPrice: number;
-      sellingPrice: number;
-    }>;
-    totalParts: number;
-    totalValue: number;
-    averagePrice: number;
-  }> {
-    const groups: Record<string, any> = {};
-    
-    parts.forEach(part => {
-      const categoryName = part.category?.name || 'Без категории';
-      const categoryId = part.categoryId || 'unknown';
-      
-      if (!groups[categoryName]) {
-        groups[categoryName] = {
-          categoryName,
-          categoryId,
-          parts: [],
-          totalParts: 0,
-          totalValue: 0,
-          averagePrice: 0,
-        };
-      }
-      
-      const costPrice = parseFloat(part.costPrice.toString());
-      const sellingPrice = parseFloat(part.sellingPrice.toString());
-      
-      groups[categoryName].parts.push({
-        id: part.id,
-        name: part.name,
-        partNumber: part.partNumber || '',
-        costPrice,
-        sellingPrice,
-      });
-      
-      groups[categoryName].totalParts++;
-      groups[categoryName].totalValue += costPrice;
-    });
-    
-    // Вычисляем среднюю цену для каждой категории
-    Object.values(groups).forEach((group: any) => {
-      group.averagePrice = group.totalParts > 0 ? group.totalValue / group.totalParts : 0;
-    });
-    
-    return groups;
+  mapToMobileView(part: Part): {
+    id: string;
+    name: string;
+    partNumber: string;
+    brand: string;
+    price?: number;
+    isActive: boolean;
+    category: string;
+    imageUrl: string;
+  } {
+    const canViewCosts = false;
+    return {
+      id: part.id,
+      name: part.name,
+      partNumber: part.partNumber || '',
+      brand: part.brand || '',
+      price: canViewCosts ? parseFloat(part.sellingPrice.toString()) : undefined,
+      isActive: part.isActive,
+      category: part.category?.name || 'Без категории',
+      imageUrl: part.imageUrl || '',
+    };
   }
 
-  /**
-   * 📊 Расчет процента наценки
-   */
   private calculateMarginPercent(costPrice: number, sellingPrice: number): number {
     const cost = parseFloat(costPrice.toString());
     const selling = parseFloat(sellingPrice.toString());
-    
     if (cost === 0) return 0;
     return Math.round(((selling - cost) / cost) * 100 * 100) / 100;
   }
 
-  /**
-   * 💰 Расчет прибыли с единицы
-   */
   private calculateProfitPerUnit(costPrice: number, sellingPrice: number): number {
     const cost = parseFloat(costPrice.toString());
     const selling = parseFloat(sellingPrice.toString());
-    
     return Math.round((selling - cost) * 100) / 100;
-  }
-
-  /**
-   * 📊 Определение статуса наличия
-   */
-  private determineStockStatus(currentStock: number, minStock: number): 'in_stock' | 'low_stock' | 'out_of_stock' {
-    if (currentStock === 0) return 'out_of_stock';
-    if (currentStock <= minStock) return 'low_stock';
-    return 'in_stock';
   }
 }

@@ -7,20 +7,30 @@ import { CreateCustomerData, UpdateCustomerData, CustomerFilter } from '../types
 import { ICustomersDataService } from '../interfaces/customers.interface';
 import { CUSTOMERS_CONSTANTS } from '../constants/customers.constants';
 import { ValidationDataException } from '../../../common/exceptions/domain.exceptions';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class CustomersDataService implements ICustomersDataService {
   constructor(
     @InjectRepository(Customer)
     private readonly customersRepository: Repository<Customer>,
+    private readonly config: ConfigService,
   ) {}
 
   async create(data: CreateCustomerData): Promise<Customer> {
     const customer = this.customersRepository.create({
       ...data,
-      loyaltyPoints: data.loyaltyPoints || CUSTOMERS_CONSTANTS.DEFAULTS.DEFAULT_LOYALTY_POINTS,
+      loyaltyPoints: data.loyaltyPoints ?? CUSTOMERS_CONSTANTS.DEFAULTS.DEFAULT_LOYALTY_POINTS,
       isActive: data.isActive ?? CUSTOMERS_CONSTANTS.DEFAULTS.DEFAULT_IS_ACTIVE,
     });
+
+    // 152-ФЗ: срок хранения ПДн (ретеншн) — рассчитываем при создании
+    const retentionYears = this.config.get<number>('customers.retentionYears', 5);
+    if (retentionYears && Number.isFinite(retentionYears)) {
+      const until = new Date();
+      until.setFullYear(until.getFullYear() + retentionYears);
+      customer.dataRetentionUntil = until;
+    }
 
     return this.customersRepository.save(customer);
   }
@@ -40,12 +50,12 @@ export class CustomersDataService implements ICustomersDataService {
   }
 
   async findByEmail(email: string, companyId: string): Promise<Customer | null> {
+    const emailNormalized = (email ?? '').trim().toLowerCase();
     return this.customersRepository.findOne({
-      where: { email, companyId, isDeleted: false },
+      where: { emailNormalized, companyId, isDeleted: false },
     });
   }
 
-  // 🔥 ИСПРАВЛЕНО: Усиленная фильтрация с обязательной security проверкой
   async findWithFilters(filter: CustomerFilter): Promise<[Customer[], number]> {
     const {
       search,
@@ -64,7 +74,6 @@ export class CustomersDataService implements ICustomersDataService {
       includeDeleted = false
     } = filter;
 
-    // 🔒 КРИТИЧНО: Обязательная проверка companyId для безопасности
     if (!companyId) {
       throw new ValidationDataException(
         'companyId',
@@ -75,7 +84,6 @@ export class CustomersDataService implements ICustomersDataService {
     const query = this.customersRepository.createQueryBuilder('customer')
       .leftJoinAndSelect('customer.vehicles', 'vehicle', 'vehicle.isDeleted = false');
 
-    // 🔒 ОБЯЗАТЕЛЬНАЯ фильтрация по companyId (первая и главная!)
     query.andWhere('customer.companyId = :companyId', { companyId });
 
     if (!includeDeleted) {
@@ -126,12 +134,11 @@ export class CustomersDataService implements ICustomersDataService {
     return query.getManyAndCount();
   }
 
-  // 🔥 НОВОЕ: Безопасный поиск по ID с проверкой принадлежности
   async findByIdForCompany(id: string, companyId: string): Promise<Customer | null> {
     return this.customersRepository.findOne({
       where: { 
         id,
-        companyId, // 🔒 КРИТИЧНО: проверяем принадлежность
+        companyId,
         isDeleted: false,
       },
       relations: ['vehicles'],
@@ -139,28 +146,27 @@ export class CustomersDataService implements ICustomersDataService {
   }
 
   async update(id: string, data: UpdateCustomerData): Promise<Customer> {
-    const updateData: Partial<Customer> = {};
-    
-    Object.keys(data).forEach(key => {
-      if (data[key] !== undefined) {
-        updateData[key] = data[key];
+    const existing = await this.findById(id);
+    if (!existing) {
+      throw new Error(`Customer with id ${id} not found`);
+    }
+
+    Object.keys(data).forEach((key) => {
+      const k = key as keyof UpdateCustomerData;
+      if (data[k] !== undefined) {
+        (existing as any)[k] = data[k];
       }
     });
 
-    await this.customersRepository.update(id, updateData);
-    
-    const updatedCustomer = await this.findById(id);
-    if (!updatedCustomer) {
-      throw new Error(`Customer with id ${id} not found after update`);
-    }
-    
-    return updatedCustomer;
+    const saved = await this.customersRepository.save(existing);
+    return saved;
   }
 
   async softDelete(id: string): Promise<void> {
     await this.customersRepository.update(id, { 
       isDeleted: true, 
-      deletedAt: new Date() 
+      deletedAt: new Date(),
+      isActive: false,
     });
   }
 
@@ -169,13 +175,12 @@ export class CustomersDataService implements ICustomersDataService {
   }
 
   async setActive(id: string, isActive: boolean): Promise<Customer> {
-    await this.customersRepository.update(id, { isActive });
-    
-    const updatedCustomer = await this.findById(id);
-    if (!updatedCustomer) {
-      throw new Error(`Customer with id ${id} not found after status update`);
+    const existing = await this.findById(id);
+    if (!existing) {
+      throw new Error(`Customer with id ${id} not found`);
     }
-    
+    existing.isActive = isActive;
+    const updatedCustomer = await this.customersRepository.save(existing);
     return updatedCustomer;
   }
 
@@ -185,10 +190,11 @@ export class CustomersDataService implements ICustomersDataService {
       .select([
         'COUNT(*) FILTER (WHERE customer.isActive = true) as "totalActive"',
         'COUNT(*) FILTER (WHERE customer.isActive = false) as "totalInactive"',
-        'COUNT(*) FILTER (WHERE customer.type = \'individual\') as "totalIndividuals"',
-        'COUNT(*) FILTER (WHERE customer.type = \'company\') as "totalCompanies"',
+        "COUNT(*) FILTER (WHERE customer.type = 'individual') as \"totalIndividuals\"",
+        "COUNT(*) FILTER (WHERE customer.type = 'company') as \"totalCompanies\"",
         'COALESCE(AVG(customer.loyaltyPoints), 0) as "averageLoyaltyPoints"',
-        'COALESCE(SUM(customer.loyaltyPoints), 0) as "totalLoyaltyPoints"'
+        'COALESCE(SUM(customer.loyaltyPoints), 0) as "totalLoyaltyPoints"',
+        `COUNT(*) FILTER (WHERE customer.createdAt >= date_trunc('month', now())) as "newThisMonth"`
       ])
       .where('customer.companyId = :companyId', { companyId })
       .andWhere('customer.isDeleted = false')
@@ -201,7 +207,7 @@ export class CustomersDataService implements ICustomersDataService {
       totalCompanies: parseInt(stats.totalCompanies) || 0,
       averageLoyaltyPoints: parseFloat(stats.averageLoyaltyPoints) || 0,
       totalLoyaltyPoints: parseInt(stats.totalLoyaltyPoints) || 0,
-      newThisMonth: 0, // TODO: Calculate
+      newThisMonth: parseInt(stats.newThisMonth) || 0,
     };
   }
 
@@ -220,7 +226,6 @@ export class CustomersDataService implements ICustomersDataService {
       loyaltyPoints: 'customer.loyaltyPoints',
       companyName: 'customer.companyName',
     };
-
     return fieldMap[sortField] || 'customer.createdAt';
   }
 }

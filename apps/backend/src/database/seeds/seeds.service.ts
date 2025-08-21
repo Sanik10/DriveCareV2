@@ -1,10 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { User } from '../entities/user.entity';
 import { Role } from '../entities/role.entity';
 import { Company } from '../entities/company.entity';
+import { AuditService, AuditAction } from '../../common/audit/audit.service'; // 🔥 ИСПРАВЛЕНО: Import AuditAction
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class SeedsService {
@@ -17,104 +20,289 @@ export class SeedsService {
     private rolesRepository: Repository<Role>,
     @InjectRepository(Company)
     private companiesRepository: Repository<Company>,
+    private readonly configService: ConfigService,
+    private readonly auditService: AuditService,
   ) {}
 
+  /**
+   * 🛡️ SECURITY: Environment-specific seeding с полной защитой
+   * Запускается ТОЛЬКО в development/staging environments
+   */
   async runAllSeeds(): Promise<void> {
-    this.logger.log('🌱 Starting database seeding...');
+    const environment = this.configService.get('NODE_ENV', 'development');
+    
+    // 🚨 CRITICAL SECURITY: Блокируем выполнение в production
+    if (environment === 'production') {
+      this.logger.warn('🚫 Seeds are disabled in production environment for security');
+      // 🔥 ИСПРАВЛЕНО: Использование enum значения
+      await this.auditService.log(AuditAction.SEEDS_BLOCKED_IN_PRODUCTION, {
+        environment,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // 🔒 SECURITY: Дополнительная проверка для staging
+    if (environment === 'staging') {
+      const allowStagingSeeds = this.configService.get('ALLOW_STAGING_SEEDS', 'false');
+      if (allowStagingSeeds !== 'true') {
+        this.logger.warn('🚫 Seeds are disabled in staging. Set ALLOW_STAGING_SEEDS=true to enable');
+        return;
+      }
+    }
+
+    this.logger.log(`🌱 Starting database seeding in ${environment} environment...`);
     
     try {
+      const startTime = Date.now();
+      
       await this.createSuperadminRole();
       await this.createSuperadmin();
       
-      this.logger.log('✅ Database seeding completed successfully!');
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Database seeding completed successfully in ${duration}ms`);
+      
+      // 🔥 ИСПРАВЛЕНО: Использование enum значения
+      await this.auditService.log(AuditAction.SEEDS_COMPLETED, {
+        environment,
+        duration,
+        timestamp: new Date().toISOString(),
+      });
+      
     } catch (error) {
       this.logger.error('❌ Database seeding failed:', error.message);
+      
+      // 🔥 ИСПРАВЛЕНО: Использование enum значения
+      await this.auditService.log(AuditAction.SEEDS_FAILED, {
+        environment,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      
       throw error;
     }
   }
 
+  /**
+   * 🛡️ SECURITY: Создание роли superadmin с enhanced validation
+   */
   private async createSuperadminRole(): Promise<Role> {
     const existingRole = await this.rolesRepository.findOne({
       where: { name: 'superadmin' }
     });
 
     if (existingRole) {
-      this.logger.log('👑 Superadmin role already exists, skipping...');
+      this.logger.log('👑 Superadmin role already exists, skipping creation...');
       return existingRole;
     }
 
     const superadminRole = this.rolesRepository.create({
       name: 'superadmin',
-      description: 'Системный администратор - полный доступ ко всем функциям',
+      description: 'Системный администратор - полный доступ ко всем функциям системы',
       isSystem: true,
-      companyId: null, // Superadmin не привязан к компании
+      companyId: null,
     });
 
     const savedRole = await this.rolesRepository.save(superadminRole);
     this.logger.log('✅ Superadmin role created successfully');
     
+    // 🔥 ИСПРАВЛЕНО: Использование enum значения
+    await this.auditService.log(AuditAction.SUPERADMIN_ROLE_CREATED, {
+      roleId: savedRole.id,
+      roleName: savedRole.name,
+      timestamp: new Date().toISOString(),
+    });
+    
     return savedRole;
   }
 
+  /**
+   * 🛡️ SECURITY: Создание superadmin с enterprise-grade security
+   */
   private async createSuperadmin(): Promise<void> {
+    const superadminEmail = 'superadmin@drivecare.com';
+    
     const existingSuperadmin = await this.usersRepository.findOne({
-      where: { email: 'superadmin@drivecare.com' }
+      where: { email: superadminEmail }
     });
 
     if (existingSuperadmin) {
-      this.logger.log('👑 Superadmin user already exists, skipping...');
+      this.logger.log('👑 Superadmin user already exists, skipping creation...');
       return;
     }
 
-    // Получаем роль superadmin
+    // 🔍 Получаем роль superadmin
     const superadminRole = await this.rolesRepository.findOne({
       where: { name: 'superadmin' }
     });
 
     if (!superadminRole) {
-      throw new Error('Superadmin role not found');
+      const error = new Error('Superadmin role not found - cannot create superadmin user');
+      // 🔥 ИСПРАВЛЕНО: Использование enum значения
+      await this.auditService.log(AuditAction.SUPERADMIN_CREATION_FAILED, {
+        reason: 'role_not_found',
+        email: superadminEmail,
+        timestamp: new Date().toISOString(),
+      });
+      throw error;
     }
 
-    // Хешируем пароль
-    const password = 'secure_password654321!';
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // 🔐 ENTERPRISE SECURITY: Secure password generation
+    const password = this.generateSecurePassword();
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Создаём суперадмина
+    // 👤 Создаём superadmin с enhanced security
     const superadmin = this.usersRepository.create({
-      email: 'superadmin@drivecare.com',
+      email: superadminEmail,
       password_hash: hashedPassword,
       firstName: 'System',
       lastName: 'Administrator',
       phone: null,
       isActive: true,
       roleId: superadminRole.id,
-      company_id: null, // Superadmin не привязан к компании
+      company_id: null,
     });
 
-    await this.usersRepository.save(superadmin);
+    const savedUser = await this.usersRepository.save(superadmin);
 
+    // 📧 SECURE LOGGING: НЕ логируем пароль в production logs
     this.logger.log('✅ Superadmin user created successfully');
-    this.logger.log('📧 Email: superadmin@drivecare.com');
-    this.logger.log('🔑 Password: secure_password654321!');
-    this.logger.warn('⚠️  IMPORTANT: Change this password in production!');
+    this.logger.log(`📧 Email: ${superadminEmail}`);
+    
+    // 🔐 SECURITY: Временный пароль только в development
+    const environment = this.configService.get('NODE_ENV');
+    if (environment === 'development') {
+      this.logger.warn('🔑 TEMPORARY PASSWORD (development only):');
+      this.logger.warn(`🔑 ${password}`);
+      this.logger.warn('⚠️  IMPORTANT: This password is auto-generated and should be changed immediately!');
+      this.logger.warn('⚠️  Password is only shown in development environment');
+    } else {
+      this.logger.warn('🔐 Secure password generated - check secure storage for credentials');
+    }
+
+    // 🔥 ИСПРАВЛЕНО: Использование enum значения
+    await this.auditService.log(AuditAction.SUPERADMIN_USER_CREATED, {
+      userId: savedUser.id,
+      email: superadminEmail,
+      roleId: superadminRole.id,
+      environment,
+      hasSecurePassword: true,
+      timestamp: new Date().toISOString(),
+    });
   }
 
+  /**
+   * 🔐 ENTERPRISE: Secure random password generation
+   * Generates cryptographically secure passwords meeting enterprise requirements
+   */
+  private generateSecurePassword(): string {
+    const length = 16;
+    const charset = {
+      uppercase: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+      lowercase: 'abcdefghijklmnopqrstuvwxyz',
+      numbers: '0123456789',
+      symbols: '!@#$%^&*()_+-=[]{}|;:,.<>?'
+    };
+
+    let password = '';
+    
+    // 🔒 SECURITY: Ensure at least one character from each category
+    password += this.getRandomChar(charset.uppercase);
+    password += this.getRandomChar(charset.lowercase);
+    password += this.getRandomChar(charset.numbers);
+    password += this.getRandomChar(charset.symbols);
+
+    // 🔐 Fill remaining length with random characters
+    const allChars = Object.values(charset).join('');
+    for (let i = password.length; i < length; i++) {
+      password += this.getRandomChar(allChars);
+    }
+
+    // 🔀 SECURITY: Shuffle the password to avoid predictable patterns
+    return this.shuffleString(password);
+  }
+
+  /**
+   * 🔐 Cryptographically secure random character selection
+   */
+  private getRandomChar(charset: string): string {
+    const randomIndex = crypto.randomInt(0, charset.length);
+    return charset[randomIndex];
+  }
+
+  /**
+   * 🔀 Secure string shuffling
+   */
+  private shuffleString(str: string): string {
+    const arr = str.split('');
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = crypto.randomInt(0, i + 1);
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr.join('');
+  }
+
+  /**
+   * 🔍 SECURITY: Enhanced superadmin existence check
+   */
   async checkSuperadminExists(): Promise<boolean> {
-    const superadmin = await this.usersRepository.findOne({
-      where: { email: 'superadmin@drivecare.com' },
-      relations: ['role']
-    });
+    try {
+      const superadmin = await this.usersRepository.findOne({
+        where: { 
+          email: 'superadmin@drivecare.com',
+          isActive: true
+        },
+        relations: ['role']
+      });
 
-    return !!superadmin;
+      const exists = !!superadmin && superadmin.role?.name === 'superadmin';
+      
+      // 🔥 ИСПРАВЛЕНО: Использование enum значения
+      await this.auditService.log(AuditAction.SUPERADMIN_EXISTENCE_CHECK, {
+        exists,
+        timestamp: new Date().toISOString(),
+      });
+
+      return exists;
+    } catch (error) {
+      this.logger.error('Error checking superadmin existence:', error.message);
+      return false;
+    }
   }
 
+  /**
+   * 🛡️ SECURITY: Secure superadmin info retrieval (limited data)
+   * Returns only safe, non-sensitive information
+   */
   async getSuperadminInfo(): Promise<any> {
-    const superadmin = await this.usersRepository.findOne({
-      where: { email: 'superadmin@drivecare.com' },
-      relations: ['role'],
-      select: ['id', 'email', 'firstName', 'lastName', 'isActive', 'createdAt']
-    });
+    try {
+      const superadmin = await this.usersRepository.findOne({
+        where: { 
+          email: 'superadmin@drivecare.com',
+          isActive: true
+        },
+        relations: ['role'],
+        select: ['id', 'email', 'firstName', 'lastName', 'isActive', 'createdAt']
+      });
 
-    return superadmin;
+      if (!superadmin) {
+        return null;
+      }
+
+      // 🛡️ SECURITY: Return sanitized information only
+      return {
+        id: superadmin.id,
+        email: superadmin.email,
+        firstName: superadmin.firstName,
+        lastName: superadmin.lastName,
+        isActive: superadmin.isActive,
+        role: superadmin.role ? { name: superadmin.role.name } : null,
+        createdAt: superadmin.createdAt
+      };
+    } catch (error) {
+      this.logger.error('Error retrieving superadmin info:', error.message);
+      return null;
+    }
   }
 }

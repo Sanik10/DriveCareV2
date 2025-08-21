@@ -1,3 +1,4 @@
+// path: apps/backend/src/common/index.ts
 // Guards
 export * from './guards/company-ownership.guard';
 export * from './guards/auth-with-ownership.guard';

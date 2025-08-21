@@ -1,43 +1,117 @@
+// path: apps/backend/src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
+import helmet from 'helmet';
+import * as compression from 'compression';
+import * as cookieParser from 'cookie-parser';
+import express, { Request, Response, NextFunction } from 'express';
+import { EnhancedValidationPipe } from './common/pipes/enhanced-validation.pipe';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { SecurityHeadersInterceptor } from './common/interceptors/security-headers.interceptor';
+import { AuditService } from './common/audit/audit.service';
+import { AuditLoggingInterceptor } from './common/interceptors/audit-logging.interceptor';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  const configService = app.get(ConfigService);
-  
-  // Dynamic API prefix
-  const apiPrefix = configService.get('API_PREFIX', 'api/v1');
-  app.setGlobalPrefix(apiPrefix);
-  
-  // Global validation pipe
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    transform: true,
-  }));
+async function setupGracefulShutdown(app: any): Promise<void> {
+  process.on('SIGTERM', async () => {
+    console.log('🔄 SIGTERM received - initiating graceful shutdown...');
+    try {
+      await app.close();
+      console.log('✅ Application closed gracefully');
+      process.exit(0);
+    } catch (error) {
+      console.error('❌ Error during graceful shutdown:', error);
+      process.exit(1);
+    }
+  });
 
-  // Dynamic Swagger configuration
+  process.on('SIGINT', async () => {
+    console.log('🔄 SIGINT received - initiating graceful shutdown...');
+    try {
+      await app.close();
+      console.log('✅ Application closed gracefully');
+      process.exit(0);
+    } catch (error) {
+      console.error('❌ Error during graceful shutdown:', error);
+      process.exit(1);
+    }
+  });
+
+  process.on('uncaughtException', (error) => {
+    console.error('💥 Uncaught Exception:', error);
+    process.exit(1);
+  });
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+    process.exit(1);
+  });
+}
+
+function normalizePath(prefix: string, path: string) {
+  const p = path.startsWith('/') ? path.slice(1) : path;
+  const pre = prefix.replace(/^\/+|\/+$/g, '');
+  return `/${pre}/${p}`;
+}
+
+function configureWebhookRawBody(app: any, configService: ConfigService, apiPrefix: string) {
+  const ykPath = configService.get<string>('YOOKASSA_WEBHOOK_PATH', 'subscription-billing/webhooks/yookassa');
+  const tkPath = configService.get<string>('TINKOFF_WEBHOOK_PATH', 'subscription-billing/webhooks/tinkoff');
+
+  const ykFull = normalizePath(apiPrefix, ykPath);
+  const tkFull = normalizePath(apiPrefix, tkPath);
+
+  const attachRaw = (path: string) => {
+    app.use(path, (req: Request, res: Response, next: NextFunction) => {
+      express.raw({ type: '*/*', limit: '256kb' })(req, res, (err) => {
+        if (err) return next(err);
+        // Важно: сохраняем сырой буфер для подписи, и оставляем body как Buffer
+        (req as any).rawBody = req.body;
+        return next();
+      });
+    });
+  };
+
+  attachRaw(ykFull);
+  attachRaw(tkFull);
+
+  // Стандартные парсеры — не трогаем вебхуки
+  const jsonParser = express.json({ limit: '1mb' });
+  const urlencodedParser = express.urlencoded({ extended: true, limit: '1mb' });
+  const isWebhook = (url: string) => url.startsWith(ykFull) || url.startsWith(tkFull);
+
+  app.use((req, res, next) => {
+    if (isWebhook(req.originalUrl || req.url)) return next();
+    return jsonParser(req, res, (err) => {
+      if (err) return next(err);
+      return urlencodedParser(req, res, next);
+    });
+  });
+
+  console.log(`🪝 Webhook raw-body enabled: ${ykFull}, ${tkFull}`);
+}
+
+async function configureSwagger(app: any, configService: ConfigService, environment: string) {
+  if (environment === 'production') {
+    console.log('🔒 Swagger documentation disabled in production for security');
+    return;
+  }
   const swaggerTitle = configService.get('SWAGGER_TITLE', 'DriveCare API');
   const swaggerDescription = configService.get('SWAGGER_DESCRIPTION', 'API документация');
   const appVersion = configService.get('APP_VERSION', '2.0');
-  
+
   const config = new DocumentBuilder()
-    .setTitle(swaggerTitle)
-    .setDescription(swaggerDescription)
+    .setTitle(`${swaggerTitle} (${environment.toUpperCase()})`)
+    .setDescription(`${swaggerDescription}\n\n🚨 Environment: ${environment.toUpperCase()}`)
     .setVersion(appVersion)
     .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        name: 'JWT',
-        description: 'Введите JWT токен',
-        in: 'header',
-      },
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', name: 'JWT', in: 'header' },
       'JWT-auth',
     )
+    .addTag('🏠 Система')
+    .addTag('🔐 Аутентификация')
+    .addTag('🏢 Компании')
+    .addTag('👥 Пользователи')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
@@ -47,26 +121,121 @@ async function bootstrap() {
       persistAuthorization: true,
       tagsSorter: 'alpha',
       operationsSorter: 'alpha',
+      docExpansion: 'none',
+      filter: true,
+      showRequestDuration: true,
     },
-    customSiteTitle: `${swaggerTitle} Docs`,
+    customSiteTitle: `${swaggerTitle} Docs (${environment.toUpperCase()})`,
+    customCss: '.swagger-ui .topbar { display: none }',
   });
-
-  // Dynamic CORS origins
-  const corsOrigins = configService.get('CORS_ORIGINS', 'http://localhost:3000,http://localhost:5173')
-    .split(',')
-    .map(origin => origin.trim());
-
-  app.enableCors({
-    origin: corsOrigins,
-    credentials: true,
-  });
-
-  const port = configService.get('PORT', 3001);
-  await app.listen(port);
-
-  console.log(`🚀 ${swaggerTitle} running on: http://localhost:${port}`);
-  console.log(`📚 API Docs: http://localhost:${port}/${swaggerPath}`);
-  console.log(`🔍 API Health: http://localhost:${port}/${apiPrefix}/health`);
 }
 
-bootstrap();
+async function configureCORS(app: any, configService: ConfigService, environment: string) {
+  const corsOrigins = (configService.get('CORS_ORIGINS', 'http://localhost:3000,http://localhost:5173') as string)
+    .split(',')
+    .map((o) => o.trim())
+    .filter((o) => o.length > 0);
+
+  const corsConfig = {
+    origin: (origin: string, callback: Function) => {
+      if (!origin && environment !== 'production') return callback(null, true);
+      if (corsOrigins.includes(origin)) callback(null, true);
+      else {
+        console.warn(`🚫 CORS blocked origin: ${origin}`);
+        callback(new Error('Not allowed by CORS policy'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'X-API-Key', 'X-Request-ID'],
+    exposedHeaders: ['X-Total-Count', 'X-Request-ID', 'X-API-Version'],
+    maxAge: 86400,
+  };
+  app.enableCors(corsConfig);
+  console.log(`🌐 CORS configured for origins: ${corsOrigins.join(', ')}`);
+}
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule, { logger: ['error', 'warn', 'log'] });
+  const configService = app.get(ConfigService);
+  const environment = configService.get('NODE_ENV', 'development');
+  const apiPrefix = configService.get('API_PREFIX', 'api/v1');
+
+  app.setGlobalPrefix(apiPrefix);
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  app.getHttpAdapter().getInstance().disable('x-powered-by');
+
+  // Helmet c безопасным CSP (в dev — послабления для Swagger)
+  const scriptSrc = ["'self'", ...(environment !== 'production' ? ["'unsafe-inline'", "'unsafe-eval'"] : [])];
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          defaultSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc,
+          imgSrc: ["'self'", 'data:', 'https:'],
+          connectSrc: ["'self'", ...(environment !== 'production' ? ['ws:', 'wss:'] : [])],
+          fontSrc: ["'self'", 'https:', 'data:'],
+          objectSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"],
+          upgradeInsecureRequests: [],
+        },
+      },
+      frameguard: { action: 'deny' },
+      hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+
+  const cookieSecret = configService.get<string>('COOKIE_SECRET');
+  app.use(cookieParser(cookieSecret));
+  app.use(compression());
+
+  // Raw body для вебхуков — до стандартных парсеров
+  configureWebhookRawBody(app, configService, apiPrefix);
+
+  // Глобальные пайпы (security-aware)
+  app.useGlobalPipes(new EnhancedValidationPipe(configService));
+
+  // Глобальные фильтры/интерсепторы безопасности
+  const auditService = app.get(AuditService);
+  app.useGlobalFilters(new GlobalExceptionFilter(configService, auditService));
+  app.useGlobalInterceptors(
+    new SecurityHeadersInterceptor(configService),
+    new AuditLoggingInterceptor(auditService),
+  );
+
+  await configureSwagger(app, configService, environment);
+  await configureCORS(app, configService, environment);
+
+  app.enableShutdownHooks();
+
+  const port = configService.get('PORT', 3001);
+  const host = environment === 'production' ? '0.0.0.0' : 'localhost';
+  await app.listen(port, host);
+
+  const swaggerTitle = configService.get('SWAGGER_TITLE', 'DriveCare API');
+  console.log(`🚀 ${swaggerTitle} started successfully!`);
+  console.log(`🌍 Environment: ${environment}`);
+  console.log(`🔗 Server: http://${host}:${port}`);
+  console.log(`🔍 Health: http://${host}:${port}/${apiPrefix}/health`);
+  if (environment !== 'production') {
+    const swaggerPath = configService.get('SWAGGER_PATH', 'docs');
+    console.log(`📚 API Docs: http://${host}:${port}/${swaggerPath}`);
+  }
+  console.log(`🛡️ Security: Enhanced middleware active`);
+  console.log(`⚡ Performance: Compression enabled`);
+
+  await setupGracefulShutdown(app);
+  console.log(`🔄 Graceful shutdown handlers registered`);
+}
+
+bootstrap().catch((err) => {
+  console.error('💥 Application failed to start:', err);
+  process.exit(1);
+});

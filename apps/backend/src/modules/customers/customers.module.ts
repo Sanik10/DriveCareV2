@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/customers/customers.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CustomersController } from './customers.controller';
@@ -7,13 +8,20 @@ import { CustomersBusinessService } from './services/customers-business.service'
 import { CustomersValidationService } from './services/customers-validation.service';
 import { CustomersMapperService } from './services/customers-mapper.service';
 import { Customer, Subscription } from '../../database/entities';
+import { Vehicle } from '../../database/entities/vehicle.entity';
+import { Order } from '../../database/entities/order.entity';
 import { AuditService } from '../../common/audit/audit.service';
+import { CustomerExportService } from './services/customer-export.service';
+import { CustomerAnonymizationService } from './services/customer-anonymization.service';
+import { CustomerRetentionScheduler } from './services/customer-retention.scheduler';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      Customer,     // Основная entity
-      Subscription, // Для проверки лимитов в ValidationService
+      Customer,
+      Subscription,
+      Vehicle,
+      Order,
     ]),
   ],
   controllers: [CustomersController],
@@ -23,6 +31,9 @@ import { AuditService } from '../../common/audit/audit.service';
     CustomersBusinessService,
     CustomersValidationService,
     CustomersMapperService,
+    CustomerExportService,
+    CustomerAnonymizationService,
+    CustomerRetentionScheduler,
     AuditService,
   ],
   exports: [

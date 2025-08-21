@@ -1,10 +1,11 @@
+// apps/backend/src/modules/subscriptions/services/subscriptions-mapper.service.ts
 import { Injectable } from '@nestjs/common';
 import { Subscription } from '../../../database/entities';
 import { SubscriptionResponseDto } from '../dto/response/subscription-response.dto';
+import { SubscriptionStatus } from '../../../database/entities/subscription.entity';
 
 @Injectable()
 export class SubscriptionsMapperService {
-  
   /**
    * Основной маппинг Entity → ResponseDto
    */
@@ -12,16 +13,18 @@ export class SubscriptionsMapperService {
     return {
       id: subscription.id,
       companyId: subscription.companyId,
-      tariff: subscription.tariff ? {
-        id: subscription.tariff.id,
-        name: subscription.tariff.name,
-        priceMonthly: subscription.tariff.priceMonthly,
-        priceYearly: subscription.tariff.priceYearly,
-        maxUsers: subscription.tariff.maxUsers,
-        maxCustomers: subscription.tariff.maxCustomers,
-        maxVehicles: subscription.tariff.maxVehicles,
-        maxOrders: subscription.tariff.maxOrders,
-      } : undefined,
+      tariff: subscription.tariff
+        ? {
+            id: subscription.tariff.id,
+            name: subscription.tariff.name,
+            priceMonthly: subscription.tariff.priceMonthly,
+            priceYearly: subscription.tariff.priceYearly,
+            maxUsers: subscription.tariff.maxUsers,
+            maxCustomers: subscription.tariff.maxCustomers,
+            maxVehicles: subscription.tariff.maxVehicles,
+            maxOrders: subscription.tariff.maxOrders,
+          }
+        : undefined,
       startDate: subscription.startDate,
       endDate: subscription.endDate,
       status: subscription.status,
@@ -36,7 +39,7 @@ export class SubscriptionsMapperService {
    * Маппинг для списков (массив Entity → массив ResponseDto)
    */
   mapArrayToResponseDto(subscriptions: Subscription[]): SubscriptionResponseDto[] {
-    return subscriptions.map(subscription => this.mapToResponseDto(subscription));
+    return subscriptions.map((subscription) => this.mapToResponseDto(subscription));
   }
 
   /**
@@ -45,7 +48,7 @@ export class SubscriptionsMapperService {
   mapToBasicInfo(subscription: Subscription): {
     id: string;
     companyId: string;
-    status: string;
+    status: SubscriptionStatus;
     endDate: Date;
     tariffName?: string;
   } {
@@ -65,7 +68,7 @@ export class SubscriptionsMapperService {
     id: string;
     tariffName: string;
     endDate: Date;
-    status: string;
+    status: SubscriptionStatus;
   } {
     return {
       id: subscription.id,
@@ -81,7 +84,7 @@ export class SubscriptionsMapperService {
   mapToStatsInfo(subscription: Subscription): {
     id: string;
     companyId: string;
-    status: string;
+    status: SubscriptionStatus;
     startDate: Date;
     endDate: Date;
     daysRemaining: number;
@@ -104,7 +107,7 @@ export class SubscriptionsMapperService {
   }
 
   /**
-   * 🔥 НОВОЕ: Маппинг для renewal информации
+   * Маппинг для renewal информации
    */
   mapToRenewalInfo(subscription: Subscription): {
     id: string;
@@ -127,13 +130,13 @@ export class SubscriptionsMapperService {
   }
 
   /**
-   * 🔥 НОВОЕ: Маппинг для audit логирования
+   * Маппинг для audit логирования
    */
   mapToAuditData(subscription: Subscription): {
     id: string;
     companyId: string;
     tariffId: string;
-    status: string;
+    status: SubscriptionStatus;
     startDate: Date;
     endDate: Date;
     autoRenew: boolean;

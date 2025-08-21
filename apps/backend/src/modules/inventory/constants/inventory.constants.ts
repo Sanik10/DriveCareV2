@@ -1,4 +1,4 @@
-// src/modules/inventory/constants/inventory.constants.ts
+// path: apps/backend/src/modules/inventory/constants/inventory.constants.ts
 export const INVENTORY_CONSTANTS = {
   DEFAULTS: {
     PAGE_SIZE: 25,
@@ -9,41 +9,29 @@ export const INVENTORY_CONSTANTS = {
   },
 
   VALIDATION: {
-    QUANTITY: {
-      MIN: 0,
-      MAX: 999999,
-    },
-    MIN_QUANTITY: {
-      MIN: 0,
-      MAX: 1000,
-    },
-    LOCATION: {
-      MAX_LENGTH: 100,
-      PATTERN: /^[A-Z0-9-]+$/, // A1-B2, SHELF-1, etc.
-    },
-    NOTES: {
-      MAX_LENGTH: 500,
-    },
+    QUANTITY: { MIN: 0, MAX: 999999 },
+    MIN_QUANTITY: { MIN: 0, MAX: 1000 },
+    LOCATION: { MAX_LENGTH: 100, PATTERN: /^[A-Z0-9-]+$/ },
+    NOTES: { MAX_LENGTH: 500 },
   },
 
   STOCK_MOVEMENTS: {
     TYPES: {
-      RECEIPT: 'receipt',           // Приход товара
-      ISSUE: 'issue',              // Расход товара
-      ADJUSTMENT: 'adjustment',     // Инвентаризация
-      TRANSFER: 'transfer',        // Перемещение
-      RESERVATION: 'reservation',   // Резервирование
-      RELEASE: 'release',          // Освобождение резерва
+      RECEIPT: 'receipt',
+      ISSUE: 'issue',
+      ADJUSTMENT: 'adjustment',
+      TRANSFER: 'transfer',
+      RESERVATION: 'reservation',
+      RELEASE: 'release',
     } as const,
-    
     REASONS: {
-      PURCHASE: 'purchase',         // Закупка
-      ORDER_FULFILLMENT: 'order_fulfillment', // Выполнение заказа
-      INVENTORY_COUNT: 'inventory_count',      // Инвентаризация
-      DAMAGE: 'damage',            // Брак/повреждение
-      EXPIRY: 'expiry',           // Истечение срока
-      LOSS: 'loss',               // Потеря
-      CORRECTION: 'correction',    // Корректировка
+      PURCHASE: 'purchase',
+      ORDER_FULFILLMENT: 'order_fulfillment',
+      INVENTORY_COUNT: 'inventory_count',
+      DAMAGE: 'damage',
+      EXPIRY: 'expiry',
+      LOSS: 'loss',
+      CORRECTION: 'correction',
     } as const,
   },
 
@@ -54,14 +42,7 @@ export const INVENTORY_CONSTANTS = {
       OVERSTOCK: 'overstock',
       EXPIRED_RESERVATION: 'expired_reservation',
     } as const,
-    
-    PRIORITIES: {
-      LOW: 'low',
-      MEDIUM: 'medium',
-      HIGH: 'high',
-      CRITICAL: 'critical',
-    } as const,
-    
+    PRIORITIES: { LOW: 'low', MEDIUM: 'medium', HIGH: 'high', CRITICAL: 'critical' } as const,
     AUTO_DISMISS_HOURS: 72,
   },
 
@@ -74,14 +55,22 @@ export const INVENTORY_CONSTANTS = {
     ENABLE_BARCODE_SCANNING: true,
   },
 
+  // 🔒 RBAC: только роли с доступом к складу (синк с трекером)
   ROLES: {
-    CAN_VIEW: ['superadmin', 'owner', 'admin', 'manager', 'mechanic'], // 🔥 ДОБАВИЛИ superadmin
-    CAN_UPDATE_QUANTITIES: ['superadmin', 'owner', 'admin', 'manager'], // 🔥 ДОБАВИЛИ superadmin
-    CAN_UPDATE_SETTINGS: ['superadmin', 'owner', 'admin'], // 🔥 ДОБАВИЛИ superadmin
-    CAN_DELETE: ['superadmin', 'owner', 'admin'], // 🔥 ДОБАВИЛИ superadmin
-    CAN_CREATE_ADJUSTMENTS: ['superadmin', 'owner', 'admin', 'manager'],
-    CAN_VIEW_COSTS: ['superadmin', 'owner', 'admin'],
-    CAN_MANAGE_SUPPLIERS: ['superadmin', 'owner', 'admin', 'manager'],
+    // Просмотр склада
+    CAN_VIEW: ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'],
+    // Изменение количеств (приход/расход/корректировки)
+    CAN_UPDATE_QUANTITIES: ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'],
+    // Изменение настроек склада (минимумы/локации)
+    CAN_UPDATE_SETTINGS: ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'],
+    // Удаление (запрещено — см. remove), оставляем для совместимости если понадобится «архивирование»
+    CAN_DELETE: ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'],
+    // Корректирующие движения
+    CAN_CREATE_ADJUSTMENTS: ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'],
+    // Просмотр себестоимости
+    CAN_VIEW_COSTS: ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'],
+    // Управление поставщиками
+    CAN_MANAGE_SUPPLIERS: ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'],
   },
 
   AUDIT_ACTIONS: {
@@ -97,20 +86,18 @@ export const INVENTORY_CONSTANTS = {
   REPORTS: {
     TURNOVER_PERIODS: {
       DAILY: 'daily',
-      WEEKLY: 'weekly', 
+      WEEKLY: 'weekly',
       MONTHLY: 'monthly',
       QUARTERLY: 'quarterly',
       YEARLY: 'yearly',
     } as const,
-    
     MAX_EXPORT_RECORDS: 10000,
     DEFAULT_PERIOD_DAYS: 30,
   },
 } as const;
 
-// 🔥 ИСПРАВЛЕНИЕ: Правильный экспорт типов
 export type StockMovementType = typeof INVENTORY_CONSTANTS.STOCK_MOVEMENTS.TYPES[keyof typeof INVENTORY_CONSTANTS.STOCK_MOVEMENTS.TYPES];
 export type StockMovementReason = typeof INVENTORY_CONSTANTS.STOCK_MOVEMENTS.REASONS[keyof typeof INVENTORY_CONSTANTS.STOCK_MOVEMENTS.REASONS];
 export type AlertType = typeof INVENTORY_CONSTANTS.ALERTS.TYPES[keyof typeof INVENTORY_CONSTANTS.ALERTS.TYPES];
-export type AlertPriority = typeof INVENTORY_CONSTANTS.ALERTS.PRIORITIES[keyof typeof INVENTORY_CONSTANTS.ALERTS.PRIORITIES]; // ✅ ЭКСПОРТИРУЕМ
+export type AlertPriority = typeof INVENTORY_CONSTANTS.ALERTS.PRIORITIES[keyof typeof INVENTORY_CONSTANTS.ALERTS.PRIORITIES];
 export type TurnoverPeriod = typeof INVENTORY_CONSTANTS.REPORTS.TURNOVER_PERIODS[keyof typeof INVENTORY_CONSTANTS.REPORTS.TURNOVER_PERIODS];

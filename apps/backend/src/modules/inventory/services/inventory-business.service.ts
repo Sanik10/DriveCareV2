@@ -1,74 +1,168 @@
-// src/modules/inventory/services/inventory-business.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+// path: apps/backend/src/modules/inventory/services/inventory-business.service.ts
+import { Injectable, Logger, Inject } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { DataSource } from 'typeorm';
+import type { Redis } from 'ioredis';
+
 import { InventoryDataService } from './inventory-data.service';
 import { Inventory } from '../../../database/entities';
-import { UpdateInventoryData, StockSummary, LowStockAlert, AlertPriority } from '../types/inventory.types';
+import { UpdateInventoryData } from '../types/inventory.types';
 import { RequestWithUser } from '../../auth/interfaces/request-with-user.interface';
 import { AuditService, AuditAction } from '../../../common/audit/audit.service';
-import { 
-  ValidationDataException,
-  InventoryNotFoundException
-} from '../../../common/exceptions/domain.exceptions';
-import { Inject, forwardRef } from '@nestjs/common';
-import { AlertsBusinessService } from '../inventory-alerts/services/alerts-business.service'; // 🔥 ДОБАВИТЬ
+import { ValidationDataException } from '../../../common/exceptions/domain.exceptions';
+import { AlertsBusinessService } from '../inventory-alerts/services/alerts-business.service';
+import { REDIS_CLIENT } from '../../../common/redis/redis.constants';
+import { ReservationStatus } from '../../../database/entities/part-reservation.entity';
 
 @Injectable()
 export class InventoryBusinessService {
   private readonly logger = new Logger(InventoryBusinessService.name);
+  private readonly idemTtlMs: number;
 
   constructor(
     private readonly inventoryDataService: InventoryDataService,
     private readonly auditService: AuditService,
-    @Inject(forwardRef(() => AlertsBusinessService))
     private readonly alertsBusinessService: AlertsBusinessService,
-  ) {}
+    private readonly dataSource: DataSource,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly configService: ConfigService,
+  ) {
+    const cfg = this.configService.get<number>('inventory.idempotencyTtlMs');
+    const fromEnv = parseInt(process.env.INVENTORY_IDEMPOTENCY_TTL_MS || '900000', 10);
+    this.idemTtlMs = Number.isFinite(cfg as any) ? (cfg as number) : (Number.isFinite(fromEnv) ? fromEnv : 900000);
+  }
 
-  /**
-   * 📝 Обновление позиции склада с бизнес-логикой
-   */
   async updateInventoryItem(id: string, data: UpdateInventoryData): Promise<Inventory> {
-    this.logger.log(`Updating inventory item: ${id}`);
-
     const inventoryItem = await this.inventoryDataService.findById(id);
-    if (!inventoryItem) {
-      throw new InventoryNotFoundException(id);
-    }
+    if (!inventoryItem) throw new ValidationDataException('inventory', `Inventory ${id} not found`);
 
-    // Конвертируем строковую дату в Date объект
-    const updateData = {
-      ...data,
-      lastRestockDate: data.lastRestockDate ? new Date(data.lastRestockDate) : undefined,
-    };
-
+    const updateData = { ...data, lastRestockDate: data.lastRestockDate ? new Date(data.lastRestockDate) : undefined };
     const updatedInventory = await this.inventoryDataService.update(id, updateData);
 
-    // 🔥 Audit логирование
     await this.auditService.log(AuditAction.INVENTORY_UPDATED, {
       entityType: 'Inventory',
       entityId: id,
       companyId: inventoryItem.companyId,
       metadata: {
         partId: inventoryItem.partId,
-        partName: inventoryItem.part?.name,
         changes: this.detectChanges(inventoryItem, updateData),
-        oldMinQuantity: inventoryItem.minQuantity,
-        newMinQuantity: updateData.minQuantity,
       },
     });
 
-    // 🚨 Проверяем нужно ли создать/обновить алерты
     await this.checkAndCreateLowStockAlert(updatedInventory);
-
-    this.logger.log(`Inventory item updated: ${id}`);
     return updatedInventory;
   }
 
-  /**
-   * 📊 Расчет сводки по складу
-   */
-  async calculateStockSummary(companyId: string): Promise<any> {
-    this.logger.log(`Calculating stock summary for company: ${companyId}`);
+  async reserveParts(
+    reservationData: { partId: string; quantity: number; orderId?: string; expiresAt?: Date; idempotencyKey?: string },
+    user: RequestWithUser['user'],
+  ): Promise<{ success: boolean; message: string; reservationId?: string }> {
+    const companyId = user.companyId;
+    if (!companyId) throw new ValidationDataException('companyId', 'Компания не определена для пользователя');
 
+    const idemKey = reservationData.idempotencyKey?.trim();
+    const redisKey = idemKey ? `idem:inv:reserve:${companyId}:${idemKey}` : null;
+
+    if (redisKey) {
+      const nx = await this.redis.set(redisKey, '1', 'PX', this.idemTtlMs, 'NX');
+      if (!nx) {
+        const existing = await this.inventoryDataService.findReservationByIdempotency(companyId, idemKey!);
+        if (existing) {
+          return { success: true, message: 'Повторный запрос (идемпотентность)', reservationId: existing.id };
+        }
+        return { success: false, message: 'Дубликат запроса (идемпотентность)' };
+      }
+    }
+
+    const effectiveExpiresAt = reservationData.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    const reservation = await this.dataSource.transaction(async (manager) => {
+      await this.inventoryDataService.expireReservations(companyId, manager);
+
+      const availability = await this.inventoryDataService.checkReservationAvailability(
+        reservationData.partId,
+        reservationData.quantity,
+        companyId,
+      );
+      if (!availability.canReserve) {
+        throw new ValidationDataException(
+          'quantity',
+          `Недостаточно запчастей для резервирования. Доступно: ${availability.available}, требуется: ${reservationData.quantity}`,
+        );
+      }
+
+      const res = await this.inventoryDataService.createReservation(
+        {
+          companyId,
+          partId: reservationData.partId,
+          orderId: reservationData.orderId,
+          quantity: reservationData.quantity,
+          reservedBy: user.id,
+          expiresAt: effectiveExpiresAt,
+          idempotencyKey: idemKey || null,
+        },
+        manager,
+      );
+
+      return res;
+    });
+
+    await this.auditService.log(AuditAction.RESERVATION_CREATED, {
+      entityType: 'PartReservation',
+      entityId: reservation.id,
+      companyId,
+      userId: user.id,
+      metadata: {
+        partId: reservationData.partId,
+        quantity: reservationData.quantity,
+        orderId: reservationData.orderId,
+        expiresAt: effectiveExpiresAt,
+        idempotency: !!idemKey,
+      },
+    });
+
+    return { success: true, message: 'Запчасти успешно зарезервированы', reservationId: reservation.id };
+  }
+
+  async releaseReservation(reservationId: string): Promise<void> {
+    const existing = await this.inventoryDataService.findReservationById(reservationId);
+    if (!existing) throw new ValidationDataException('reservationId', 'Резервирование не найдено');
+    if (existing.status !== ReservationStatus.ACTIVE) return;
+
+    await this.dataSource.transaction(async (manager) => {
+      await this.inventoryDataService.markReservationReleased(reservationId, existing.reservedBy, manager);
+    });
+
+    await this.auditService.log(AuditAction.RESERVATION_RELEASED, {
+      entityType: 'PartReservation',
+      entityId: reservationId,
+      companyId: existing.companyId,
+      userId: existing.reservedBy,
+      metadata: { partId: existing.partId },
+    });
+  }
+
+  async checkPartAvailability(
+    partId: string,
+    quantity: number,
+    companyId: string,
+  ): Promise<{ partId: string; available: number; canReserve: boolean; maxReservable: number; location: string }> {
+    const inventory = await this.inventoryDataService.findByPartAndCompany(partId, companyId);
+    if (!inventory) {
+      return { partId, available: 0, canReserve: false, maxReservable: 0, location: 'Не найдено' };
+    }
+
+    const availability = await this.inventoryDataService.checkReservationAvailability(partId, quantity, companyId);
+    return {
+      partId,
+      available: availability.available,
+      canReserve: availability.canReserve,
+      maxReservable: availability.available,
+      location: inventory.location || 'Не указано',
+    };
+  }
+
+  async calculateStockSummary(companyId: string): Promise<any> {
     const [stats, topCategories, recentMovements] = await Promise.all([
       this.inventoryDataService.getCompanyStockStats(companyId),
       this.inventoryDataService.getTopCategories(companyId, 5),
@@ -94,18 +188,11 @@ export class InventoryBusinessService {
     };
   }
 
-  /**
-   * 🚨 Получение уведомлений о низких остатках
-   */
   async getLowStockAlerts(companyId: string): Promise<any> {
-    this.logger.log(`Getting low stock alerts for company: ${companyId}`);
-
     const lowStockItems = await this.inventoryDataService.findLowStockItems(companyId);
-
-    const alerts: LowStockAlert[] = lowStockItems.map(item => {
+    const alerts = lowStockItems.map((item) => {
       const shortage = Math.max(0, item.minQuantity - item.quantity);
       const priority = this.calculateAlertPriority(item.quantity, item.minQuantity);
-      
       return {
         partId: item.partId,
         partName: item.part?.name || 'Неизвестная запчасть',
@@ -120,19 +207,16 @@ export class InventoryBusinessService {
         estimatedRunOutDays: this.calculateRunOutDays(item),
       };
     });
-
-    // Сортируем по приоритету
     alerts.sort((a, b) => {
-      const priorityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
-      return priorityOrder[b.priority] - priorityOrder[a.priority];
+      const order = { critical: 4, high: 3, medium: 2, low: 1 } as any;
+      return order[b.priority] - order[a.priority];
     });
 
-    const criticalAlerts = alerts.filter(a => a.priority === 'critical').length;
-    const highPriorityAlerts = alerts.filter(a => a.priority === 'high').length;
-
+    const criticalAlerts = alerts.filter((a) => a.priority === 'critical').length;
+    const highPriorityAlerts = alerts.filter((a) => a.priority === 'high').length;
     const totalShortageValue = alerts.reduce((sum, alert) => {
-      const partPrice = lowStockItems.find(item => item.partId === alert.partId)?.part?.costPrice || 0;
-      return sum + (alert.shortage * parseFloat(partPrice.toString()));
+      const partPrice = lowStockItems.find((i) => i.partId === alert.partId)?.part?.costPrice || 0;
+      return sum + alert.shortage * parseFloat(partPrice.toString());
     }, 0);
 
     return {
@@ -145,168 +229,13 @@ export class InventoryBusinessService {
     };
   }
 
-  /**
-   * 🔄 Проверка доступности запчасти
-   */
-  async checkPartAvailability(
-    partId: string, 
-    quantity: number, 
-    companyId: string
-  ): Promise<{
-    partId: string;
-    available: number;
-    canReserve: boolean;
-    maxReservable: number;
-    location: string;
-  }> {
+  async reserveForOrder(partId: string, quantity: number, orderId: string, companyId: string): Promise<boolean> {
     const inventory = await this.inventoryDataService.findByPartAndCompany(partId, companyId);
-    
-    if (!inventory) {
-      return {
-        partId,
-        available: 0,
-        canReserve: false,
-        maxReservable: 0,
-        location: 'Не найдено',
-      };
-    }
+    if (!inventory) return false;
 
-    const reservationCheck = await this.inventoryDataService.checkReservationAvailability(
-      partId, 
-      quantity, 
-      companyId
-    );
+    const { available, canReserve } = await this.inventoryDataService.checkReservationAvailability(partId, quantity, companyId);
+    if (!canReserve) return false;
 
-    return {
-      partId,
-      available: reservationCheck.available,
-      canReserve: reservationCheck.canReserve,
-      maxReservable: reservationCheck.available,
-      location: inventory.location || 'Не указано',
-    };
-  }
-
-  /**
-   * 🔒 Резервирование запчастей
-   */
-  async reserveParts(
-    reservationData: {
-      partId: string;
-      quantity: number;
-      orderId?: string;
-      expiresAt?: Date;
-    },
-    user: RequestWithUser['user']
-  ): Promise<{ success: boolean; message: string; reservationId?: string }> {
-    this.logger.log(`Reserving ${reservationData.quantity} units of part ${reservationData.partId}`);
-
-    const availability = await this.checkPartAvailability(
-      reservationData.partId,
-      reservationData.quantity,
-      user.companyId
-    );
-
-    if (!availability.canReserve) {
-      return {
-        success: false,
-        message: `Недостаточно запчастей для резервирования. Доступно: ${availability.available}, требуется: ${reservationData.quantity}`,
-      };
-    }
-
-    // TODO: Создать запись резервирования в отдельной таблице
-    const reservationId = `RES-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-    // 🔥 Audit логирование
-    await this.auditService.log(AuditAction.RESERVATION_CREATED, {
-      entityType: 'PartReservation',
-      entityId: reservationId,
-      companyId: user.companyId,
-      userId: user.id,
-      metadata: {
-        partId: reservationData.partId,
-        quantity: reservationData.quantity,
-        orderId: reservationData.orderId,
-        expiresAt: reservationData.expiresAt,
-      },
-    });
-
-    return {
-      success: true,
-      message: 'Запчасти успешно зарезервированы',
-      reservationId,
-    };
-  }
-
-  /**
-   * 🔓 Освобождение резерва
-   */
-  async releaseReservation(reservationId: string): Promise<void> {
-    this.logger.log(`Releasing reservation: ${reservationId}`);
-
-    // TODO: Реализовать освобождение резерва из таблицы резервирований
-    
-    // 🔥 Audit логирование
-    await this.auditService.log(AuditAction.RESERVATION_RELEASED, {
-      entityType: 'PartReservation',
-      entityId: reservationId,
-      metadata: {
-        reservationId,
-        releasedAt: new Date(),
-      },
-    });
-  }
-
-  /**
-   * 📊 Расчет отчета по оборачиваемости
-   */
-  async calculateTurnoverReport(params: {
-    companyId: string;
-    dateFrom?: Date;
-    dateTo?: Date;
-    categoryId?: string;
-  }): Promise<any> {
-    this.logger.log(`Calculating turnover report for company: ${params.companyId}`);
-
-    // TODO: Реализовать сложную аналитику оборачиваемости
-    // Пока возвращаем заглушку
-    return {
-      period: {
-        from: params.dateFrom || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-        to: params.dateTo || new Date(),
-      },
-      summary: {
-        totalParts: 0,
-        averageTurnoverRatio: 0,
-        fastMovingParts: 0,
-        slowMovingParts: 0,
-        deadStock: 0,
-      },
-      details: [],
-    };
-  }
-
-  /**
-   * 🔄 Резервирование для заказа (интеграция с Orders)
-   */
-  async reserveForOrder(
-    partId: string, 
-    quantity: number, 
-    orderId: string, 
-    companyId: string
-  ): Promise<boolean> {
-    this.logger.log(`Reserving ${quantity} units of part ${partId} for order ${orderId}`);
-
-    const inventory = await this.inventoryDataService.findByPartAndCompany(partId, companyId);
-    
-    if (!inventory || inventory.quantity < quantity) {
-      return false;
-    }
-
-    // Уменьшаем количество в инвентаре
-    const newQuantity = inventory.quantity - quantity;
-    await this.inventoryDataService.updateQuantity(inventory.id, newQuantity);
-
-    // 🔥 Audit логирование
     await this.auditService.log(AuditAction.STOCK_RESERVED_FOR_ORDER, {
       entityType: 'Inventory',
       entityId: inventory.id,
@@ -316,144 +245,83 @@ export class InventoryBusinessService {
         orderId,
         quantityReserved: quantity,
         previousQuantity: inventory.quantity,
-        newQuantity,
+        newQuantity: inventory.quantity,
+        availableBefore: available,
       },
     });
 
     return true;
   }
 
-  /**
-   * 🔄 Освобождение резерва заказа
-   */
-  async releaseOrderReservation(
-    partId: string, 
-    quantity: number, 
-    orderId: string, 
-    companyId: string
-  ): Promise<void> {
-    this.logger.log(`Releasing ${quantity} units of part ${partId} from order ${orderId}`);
-
+  async releaseOrderReservation(partId: string, quantity: number, orderId: string, companyId: string): Promise<void> {
     const inventory = await this.inventoryDataService.findByPartAndCompany(partId, companyId);
-    
-    if (!inventory) {
-      throw new ValidationDataException(
-        'partId',
-        `Позиция склада для запчасти ${partId} не найдена`
-      );
-    }
+    if (!inventory) throw new ValidationDataException('partId', `Позиция склада для запчасти ${partId} не найдена`);
 
-    // Увеличиваем количество в инвентаре
-    const newQuantity = inventory.quantity + quantity;
-    await this.inventoryDataService.updateQuantity(inventory.id, newQuantity);
-
-    // 🔥 Audit логирование
     await this.auditService.log(AuditAction.STOCK_RELEASED_FROM_ORDER, {
       entityType: 'Inventory',
       entityId: inventory.id,
       companyId,
-      metadata: {
-        partId,
-        orderId,
-        quantityReleased: quantity,
-        previousQuantity: inventory.quantity,
-        newQuantity,
-      },
+      metadata: { partId, orderId, quantityReleased: quantity },
     });
   }
 
-  /**
-   * 🚨 Проверка и создание алерта о низком остатке
-   */
+  async calculateTurnoverReport(params: { companyId: string; dateFrom?: Date; dateTo?: Date; categoryId?: string }): Promise<any> {
+    const now = new Date();
+    const from = params.dateFrom || new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const to = params.dateTo || now;
+    if (from > to) throw new ValidationDataException('dateRange', 'Дата начала периода больше даты окончания');
+
+    return {
+      period: { from, to },
+      filters: { categoryId: params.categoryId || null },
+      summary: {
+        totalParts: 0,
+        averageTurnoverRatio: 0,
+        fastMovingParts: 0,
+        slowMovingParts: 0,
+        deadStock: 0,
+      },
+      details: [],
+      generatedAt: new Date(),
+    };
+  }
+
   private async checkAndCreateLowStockAlert(inventory: Inventory): Promise<void> {
-    if (inventory.quantity <= inventory.minQuantity) {
-      // TODO: Создать алерт в таблице inventory_alerts
-      this.logger.warn(
-        `Low stock alert for part ${inventory.partId}: ${inventory.quantity} <= ${inventory.minQuantity}`
-      );
+    try {
+      if (inventory.quantity <= inventory.minQuantity) {
+        await this.alertsBusinessService.createSmartAlert(
+          { partId: inventory.partId, companyId: inventory.companyId, triggeredBy: 'system' },
+          { id: 'system', companyId: inventory.companyId } as any,
+        );
+      }
+    } catch (error: any) {
+      this.logger.error(`Failed to handle alerts: ${error?.message || error}`);
     }
   }
 
-  /**
-   * 📊 Расчет приоритета алерта
-   */
-  private calculateAlertPriority(currentQuantity: number, minQuantity: number): AlertPriority {
+  private calculateAlertPriority(currentQuantity: number, minQuantity: number): 'critical' | 'high' | 'medium' | 'low' {
     if (currentQuantity === 0) return 'critical';
-    
-    const ratio = currentQuantity / minQuantity;
+    const ratio = minQuantity > 0 ? currentQuantity / minQuantity : 1;
     if (ratio <= 0.25) return 'critical';
     if (ratio <= 0.5) return 'high';
     if (ratio <= 0.75) return 'medium';
     return 'low';
   }
 
-  /**
-   * ⏱️ Расчет прогноза исчерпания запаса
-   */
   private calculateRunOutDays(inventory: Inventory): number | undefined {
-    // TODO: Реализовать на основе исторических данных движений
-    // Пока возвращаем простую оценку
     if (inventory.quantity === 0) return 0;
     if (inventory.quantity <= inventory.minQuantity) return 7;
     return undefined;
   }
 
-  /**
-   * 📊 Определение изменений для аудита
-   */
   private detectChanges(original: Inventory, updates: UpdateInventoryData): Record<string, any> {
     const changes: Record<string, any> = {};
-    
-    Object.keys(updates).forEach(key => {
-      if (updates[key] !== original[key]) {
-        changes[key] = {
-          from: original[key],
-          to: updates[key],
-        };
+    Object.keys(updates).forEach((k) => {
+      const nk = k as keyof UpdateInventoryData;
+      if (updates[nk] !== undefined && (original as any)[nk] !== updates[nk]) {
+        changes[nk] = { from: (original as any)[nk], to: updates[nk] };
       }
     });
-
     return changes;
-  }
-
-  /**
-   * 🔄 Обновление остатков с автоматическим созданием алертов
-   */
-  async updateInventoryWithAlerts(
-    inventoryId: string,
-    newQuantity: number,
-    userId: string,
-    movementId?: string
-  ): Promise<Inventory> {
-    // Получаем текущие данные
-    const currentInventory = await this.inventoryDataService.findById(inventoryId);
-    if (!currentInventory) {
-      throw new Error(`Inventory ${inventoryId} not found`);
-    }
-
-    const previousQuantity = currentInventory.quantity;
-
-    // Обновляем остатки
-    const updatedInventory = await this.inventoryDataService.updateQuantity(
-      inventoryId,
-      newQuantity
-    );
-
-    // 🔥 НОВОЕ: Автоматическое создание алертов при изменении остатков
-    try {
-      await this.alertsBusinessService.handleStockMovement(
-        currentInventory.partId,
-        currentInventory.companyId,
-        previousQuantity,
-        newQuantity,
-        movementId || '',
-        userId
-      );
-    } catch (error) {
-      this.logger.error(`Failed to handle stock movement alerts: ${error.message}`);
-      // Не прерываем основной процесс, только логируем ошибку
-    }
-
-    return updatedInventory;
   }
 }

@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/appointments/types/appointments.types.ts
 import { AppointmentStatus, AppointmentPriority } from '../../../database/entities';
 
 export type SortOrder = 'asc' | 'desc';
@@ -29,7 +30,7 @@ export interface CreateAppointmentData {
   endTime: Date;
   estimatedDuration: number;
   serviceIds: string[];
-  status?: AppointmentStatus; // 🔥 ДОБАВЛЕНО
+  status?: AppointmentStatus;
   priority?: AppointmentPriority;
   description?: string;
   customerNotes?: string;
@@ -44,7 +45,7 @@ export interface UpdateAppointmentData {
   endTime?: Date;
   estimatedDuration?: number;
   serviceIds?: string[];
-  status?: AppointmentStatus; // 🔥 ДОБАВЛЕНО
+  status?: AppointmentStatus;
   priority?: AppointmentPriority;
   description?: string;
   customerNotes?: string;
@@ -55,9 +56,9 @@ export interface UpdateAppointmentData {
   finalCost?: number;
   rating?: number;
   feedback?: string;
-  actualDuration?: number; // 🔥 ДОБАВЛЕНО
-  reminderSent?: boolean; // 🔥 ДОБАВЛЕНО
-  confirmationSent?: boolean; // 🔥 ДОБАВЛЕНО
+  actualDuration?: number;
+  reminderSent?: boolean;
+  confirmationSent?: boolean;
 }
 
 // 🔥 Smart Scheduling Types

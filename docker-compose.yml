@@ -15,6 +15,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    # 🔥 RESOURCE LIMITS: Production security
+    deploy:
+      resources:
+        limits:
+          memory: 1G        # Максимум 1GB RAM
+          cpus: '1.0'       # Максимум 1 CPU core
+        reservations:
+          memory: 512M      # Гарантированно 512MB RAM
+          cpus: '0.5'       # Гарантированно 0.5 CPU core
 
   redis:
     image: redis:7-alpine
@@ -29,7 +38,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    # 🔥 RESOURCE LIMITS: Production security
+    deploy:
+      resources:
+        limits:
+          memory: 256M      # Максимум 256MB RAM для Redis
+          cpus: '0.5'       # Максимум 0.5 CPU core
+        reservations:
+          memory: 128M      # Гарантированно 128MB RAM
+          cpus: '0.25'      # Гарантированно 0.25 CPU core
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local

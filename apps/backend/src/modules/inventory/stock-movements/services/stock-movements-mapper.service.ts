@@ -1,84 +1,81 @@
-// src/modules/inventory/stock-movements/services/stock-movements-mapper.service.ts
+// path: apps/backend/src/modules/inventory/stock-movements/services/stock-movements-mapper.service.ts
 import { Injectable } from '@nestjs/common';
 import { StockMovement } from '../../../../database/entities';
-// 🔥 ИСПРАВЛЯЕМ: Правильные импорты типов
-import { StockMovementType, StockMovementReason } from '../../constants/inventory.constants';
+import { StockMovementType, StockMovementReason, INVENTORY_CONSTANTS } from '../../constants/inventory.constants';
 import { StockMovementResponseDto } from '../dto/response/movement-response.dto';
 import { PaginatedMovementsResponseDto } from '../dto/response/paginated-movements-response.dto';
 import { MovementSummaryResponseDto } from '../dto/response/movement-summary-response.dto';
-import { 
-  MovementSummary,
-  MovementDisplayItem
-} from '../types/stock-movements.types';
+import { MovementSummary, MovementDisplayItem } from '../types/stock-movements.types';
 
 @Injectable()
 export class StockMovementsMapperService {
-  
-  /**
-   * 🎯 Основной маппинг StockMovement Entity → ResponseDto
-   */
-  mapToResponseDto(movement: StockMovement): StockMovementResponseDto {
+  private canViewCostsForRole(role?: string): boolean {
+    if (!role) return false;
+    return INVENTORY_CONSTANTS.ROLES.CAN_VIEW_COSTS.includes(role as any);
+  }
+
+  mapToResponseDto(movement: StockMovement, viewerRole?: string): StockMovementResponseDto {
     const impactType = this.calculateImpactType(movement);
     const canReverse = this.calculateCanReverse(movement);
+    const canViewCosts = this.canViewCostsForRole(viewerRole);
 
     return {
       id: movement.id,
       companyId: movement.companyId,
       partId: movement.partId,
-      type: movement.type,
-      typeDisplay: this.getTypeDisplayName(movement.type),
+      type: movement.type as StockMovementType,
+      typeDisplay: this.getTypeDisplayName(movement.type as StockMovementType),
       reason: movement.reason as StockMovementReason,
       reasonDisplay: this.getReasonDisplayName(movement.reason as StockMovementReason),
       quantity: movement.quantity,
       quantityDisplay: this.formatQuantityDisplay(movement.quantity),
-      price: movement.price ? parseFloat(movement.price.toString()) : undefined,
-      totalAmount: movement.totalAmount ? parseFloat(movement.totalAmount.toString()) : undefined,
-      orderId: movement.orderId,
-      supplierId: movement.supplierId,
-      documentNumber: movement.documentNumber,
-      notes: movement.notes,
+      price: canViewCosts && movement.price != null ? parseFloat((movement.price as any).toString()) : undefined,
+      totalAmount: canViewCosts && movement.totalAmount != null ? parseFloat((movement.totalAmount as any).toString()) : undefined,
+      orderId: movement.orderId || undefined,
+      supplierId: movement.supplierId || undefined,
+      documentNumber: movement.documentNumber || undefined,
+      notes: movement.notes || undefined,
       createdBy: movement.createdBy,
       createdAt: movement.createdAt,
-      
-      // 🔗 Связанная информация (если загружена)
-      part: movement.part ? {
-        id: movement.part.id,
-        name: movement.part.name,
-        partNumber: movement.part.partNumber,
-        brand: movement.part.brand,
-        category: movement.part.category ? {
-          id: movement.part.category.id,
-          name: movement.part.category.name,
-        } : undefined,
-      } : undefined,
 
-      supplier: movement.supplier ? {
-        id: movement.supplier.id,
-        name: movement.supplier.name,
-        contactName: movement.supplier.contactName,
-      } : undefined,
+      part: movement.part
+        ? {
+            id: movement.part.id,
+            name: movement.part.name,
+            partNumber: movement.part.partNumber || undefined,
+            brand: movement.part.brand || undefined,
+            category: movement.part.category
+              ? {
+                  id: movement.part.category.id,
+                  name: movement.part.category.name,
+                }
+              : undefined,
+          }
+        : undefined,
 
-      // 📊 Вычисляемые поля
+      supplier: movement.supplier
+        ? {
+            id: movement.supplier.id,
+            name: movement.supplier.name,
+            // ПДн: не возвращаем контактные данные в общих ответах
+            contactName: undefined,
+          }
+        : undefined,
+
       impactType,
-      runningBalance: undefined, // TODO: Рассчитать на основе истории
+      runningBalance: undefined,
       canReverse,
-      reversedByMovementId: movement.reversedByMovementId,
-      reversesMovementId: movement.reversesMovementId,
+      reversedByMovementId: movement.reversedByMovementId || undefined,
+      reversesMovementId: movement.reversesMovementId || undefined,
     };
   }
 
-  /**
-   * 🎯 Маппинг сводки движений
-   */
   mapToSummaryResponse(summary: MovementSummary): MovementSummaryResponseDto {
-    // 📊 Расчет дополнительных метрик
-    const averageReceiptCost = summary.receipts.totalQuantity > 0 
-      ? summary.receipts.totalValue / summary.receipts.totalQuantity 
-      : 0;
+    const averageReceiptCost =
+      summary.receipts.totalQuantity > 0 ? summary.receipts.totalValue / summary.receipts.totalQuantity : 0;
 
-    const averageIssueCost = summary.issues.totalQuantity > 0 
-      ? summary.issues.totalValue / summary.issues.totalQuantity 
-      : 0;
+    const averageIssueCost =
+      summary.issues.totalQuantity > 0 ? summary.issues.totalValue / summary.issues.totalQuantity : 0;
 
     return {
       period: summary.period,
@@ -99,19 +96,17 @@ export class StockMovementsMapperService {
         ...summary.adjustments,
         netAdjustment: summary.adjustments.positiveAdjustments - summary.adjustments.negativeAdjustments,
       },
-      // 🔥 ИСПРАВЛЯЕМ: Добавляем недостающее поле totalValue
-      topParts: summary.topParts.map(part => ({
+      topParts: summary.topParts.map((part) => ({
         ...part,
-        totalValue: 0, // TODO: Добавить расчет totalValue в запрос
+        totalValue: 0, // TODO: добавить расчёт при наличии данных
       })),
-      topCategories: [], // TODO: Добавить в MovementSummary
-      dailyActivity: [], // TODO: Добавить генерацию дневной активности
+      topCategories: [],
+      dailyActivity: [],
     };
   }
 
-  // Остальные методы остаются без изменений...
-  mapArrayToResponseDto(movements: StockMovement[]): StockMovementResponseDto[] {
-    return movements.map(movement => this.mapToResponseDto(movement));
+  mapArrayToResponseDto(movements: StockMovement[], viewerRole?: string): StockMovementResponseDto[] {
+    return movements.map((movement) => this.mapToResponseDto(movement, viewerRole));
   }
 
   mapToPaginatedResponse(
@@ -119,12 +114,11 @@ export class StockMovementsMapperService {
     total: number,
     page: number,
     limit: number,
-    filters?: any
+    filters?: any,
+    viewerRole?: string,
   ): PaginatedMovementsResponseDto {
-    const items = this.mapArrayToResponseDto(movements);
+    const items = this.mapArrayToResponseDto(movements, viewerRole);
     const totalPages = Math.ceil(total / limit);
-
-    // 📊 Расчет сводки по текущей странице
     const summary = this.calculatePageSummary(movements);
 
     return {
@@ -135,10 +129,7 @@ export class StockMovementsMapperService {
       totalPages,
       summary,
       filters: {
-        dateRange: filters?.dateFrom && filters?.dateTo ? {
-          from: filters.dateFrom,
-          to: filters.dateTo
-        } : undefined,
+        dateRange: filters?.dateFrom && filters?.dateTo ? { from: filters.dateFrom, to: filters.dateTo } : undefined,
         partId: filters?.partId,
         type: filters?.type,
         hasActiveFilters: this.hasActiveFilters(filters),
@@ -146,51 +137,40 @@ export class StockMovementsMapperService {
     };
   }
 
-  mapToDisplayItem(movement: StockMovement): MovementDisplayItem {
+  mapToDisplayItem(movement: StockMovement, viewerRole?: string): MovementDisplayItem {
+    const canViewCosts = this.canViewCostsForRole(viewerRole);
     return {
       id: movement.id,
       partName: movement.part?.name || 'Неизвестная запчасть',
       partNumber: movement.part?.partNumber || '',
-      type: movement.type,
-      typeDisplay: this.getTypeDisplayName(movement.type),
+      type: movement.type as StockMovementType,
+      typeDisplay: this.getTypeDisplayName(movement.type as StockMovementType),
       reason: movement.reason as StockMovementReason,
       reasonDisplay: this.getReasonDisplayName(movement.reason as StockMovementReason),
       quantity: movement.quantity,
       quantityDisplay: this.formatQuantityDisplay(movement.quantity),
-      price: movement.price ? parseFloat(movement.price.toString()) : undefined,
-      totalAmount: movement.totalAmount ? parseFloat(movement.totalAmount.toString()) : undefined,
-      documentNumber: movement.documentNumber,
+      price: canViewCosts && movement.price != null ? parseFloat((movement.price as any).toString()) : undefined,
+      totalAmount: canViewCosts && movement.totalAmount != null ? parseFloat((movement.totalAmount as any).toString()) : undefined,
+      documentNumber: movement.documentNumber || undefined,
       createdAt: movement.createdAt,
       createdBy: movement.createdBy,
-      notes: movement.notes,
+      notes: movement.notes || undefined,
       impactLevel: this.calculateImpactType(movement),
     };
   }
 
-  /**
-   * 📊 Расчет типа влияния на остаток
-   */
   private calculateImpactType(movement: StockMovement): 'positive' | 'negative' | 'neutral' {
     if (movement.quantity > 0) return 'positive';
     if (movement.quantity < 0) return 'negative';
     return 'neutral';
   }
 
-  /**
-   * 📊 Проверка возможности отмены движения
-   */
   private calculateCanReverse(movement: StockMovement): boolean {
-    // Можно отменить в течение 24 часов и если еще не отменено
     const movementAge = Date.now() - movement.createdAt.getTime();
     const maxAgeHours = 24;
-    
-    return movementAge <= maxAgeHours * 60 * 60 * 1000 && 
-           !movement.reversedByMovementId;
+    return movementAge <= maxAgeHours * 60 * 60 * 1000 && !movement.reversedByMovementId;
   }
 
-  /**
-   * 📊 Получение отображаемого названия типа
-   */
   private getTypeDisplayName(type: StockMovementType): string {
     const typeNames: Record<StockMovementType, string> = {
       receipt: 'Приход',
@@ -200,13 +180,9 @@ export class StockMovementsMapperService {
       reservation: 'Резервирование',
       release: 'Освобождение резерва',
     };
-    
-    return typeNames[type] || type;
+    return typeNames[type] || (type as any);
   }
 
-  /**
-   * 📊 Получение отображаемого названия причины
-   */
   private getReasonDisplayName(reason: StockMovementReason): string {
     const reasonNames: Record<StockMovementReason, string> = {
       purchase: 'Закупка',
@@ -217,28 +193,16 @@ export class StockMovementsMapperService {
       loss: 'Потеря',
       correction: 'Корректировка',
     };
-    
-    return reasonNames[reason] || reason;
+    return reasonNames[reason] || (reason as any);
   }
 
-  /**
-   * 📊 Форматирование отображения количества
-   */
   private formatQuantityDisplay(quantity: number): string {
     const absQuantity = Math.abs(quantity);
-    
-    if (quantity > 0) {
-      return `+${absQuantity}`;
-    } else if (quantity < 0) {
-      return `-${absQuantity}`;
-    } else {
-      return '0';
-    }
+    if (quantity > 0) return `+${absQuantity}`;
+    if (quantity < 0) return `-${absQuantity}`;
+    return '0';
   }
 
-  /**
-   * 📊 Расчет сводки по странице
-   */
   private calculatePageSummary(movements: StockMovement[]): {
     receipts: number;
     issues: number;
@@ -252,7 +216,7 @@ export class StockMovementsMapperService {
     let totalValue = 0;
     let netQuantityChange = 0;
 
-    movements.forEach(movement => {
+    movements.forEach((movement) => {
       switch (movement.type) {
         case 'receipt':
           receipts += Math.abs(movement.quantity);
@@ -266,7 +230,7 @@ export class StockMovementsMapperService {
       }
 
       if (movement.totalAmount) {
-        totalValue += parseFloat(movement.totalAmount.toString());
+        totalValue += parseFloat((movement.totalAmount as any).toString());
       }
 
       netQuantityChange += movement.quantity;
@@ -281,12 +245,8 @@ export class StockMovementsMapperService {
     };
   }
 
-  /**
-   * 📊 Проверка активных фильтров
-   */
   private hasActiveFilters(filters: any): boolean {
     if (!filters) return false;
-    
     return !!(
       filters.partId ||
       filters.type ||

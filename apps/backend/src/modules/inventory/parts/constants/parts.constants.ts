@@ -1,5 +1,6 @@
+// path: apps/backend/src/modules/inventory/parts/constants/parts.constants.ts
 import { AuditAction } from '../../../../common/audit/audit.service';
-import { AuthRole } from '../../../auth/types/auth.types'; // 🔥 ИСПРАВЛЕНО
+import { AuthRole } from '../../../auth/types/auth.types';
 
 export const PARTS_CONSTANTS = {
   VALIDATION: {
@@ -21,21 +22,19 @@ export const PARTS_CONSTANTS = {
     BULK_OPERATION_MAX_ITEMS: 50,
   },
 
-  // 🔥 ДОБАВЛЕНО: Константы для поиска
   SEARCH: {
     MIN_SEARCH_LENGTH: 2,
     MAX_SEARCH_LENGTH: 100,
   },
 
-  // 🔥 ИСПРАВЛЕНИЕ: AuthRole и правильные разрешения
   PERMISSIONS: {
-    CAN_VIEW: ['superadmin', 'owner', 'admin', 'manager', 'mechanic'] as AuthRole[],
-    CAN_CREATE: ['superadmin', 'owner', 'admin', 'manager'] as AuthRole[],
-    CAN_UPDATE: ['superadmin', 'owner', 'admin', 'manager'] as AuthRole[],
-    CAN_DELETE: ['superadmin', 'owner', 'admin'] as AuthRole[],
-    CAN_BULK_UPDATE: ['superadmin', 'owner', 'admin'] as AuthRole[],
-    CAN_VIEW_COSTS: ['superadmin', 'owner', 'admin'] as AuthRole[],
-    CAN_UPDATE_PRICES: ['superadmin', 'owner', 'admin', 'manager'] as AuthRole[],
+    CAN_VIEW: ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'] as AuthRole[],
+    CAN_CREATE: ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'] as AuthRole[],
+    CAN_UPDATE: ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'] as AuthRole[],
+    CAN_DELETE: ['superadmin', 'company_owner', 'company_admin'] as AuthRole[],
+    CAN_BULK_UPDATE: ['superadmin', 'company_owner', 'company_admin'] as AuthRole[],
+    CAN_VIEW_COSTS: ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'] as AuthRole[],
+    CAN_UPDATE_PRICES: ['superadmin', 'company_owner', 'company_admin', 'inventory_manager'] as AuthRole[],
   },
 
   AUDIT_ACTIONS: {
@@ -53,7 +52,6 @@ export const PARTS_CONSTANTS = {
     SELLING_PRICE_MARKUP_WARNING: 300,
   },
 
-  // 🔥 ДОБАВЛЕНО: Файловые константы
   FILES: {
     ALLOWED_IMAGE_EXTENSIONS: ['.jpg', '.jpeg', '.png', '.webp'],
     MAX_IMAGE_SIZE_MB: 5,

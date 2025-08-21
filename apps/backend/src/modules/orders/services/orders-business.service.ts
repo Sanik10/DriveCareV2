@@ -4,10 +4,9 @@ import { OrdersDataService } from './orders-data.service';
 import { Order } from '../../../database/entities';
 import { CreateOrderData, UpdateOrderData, OrderStatus } from '../types/orders.types';
 import { AuditService } from '../../../common/audit/audit.service';
-import { 
-  OrderStatusTransitionException,
-  ValidationDataException 
-} from '../../../common/exceptions/domain.exceptions';
+import { OrderStatusTransitionException, ValidationDataException } from '../../../common/exceptions/domain.exceptions';
+import { OrdersValidationService } from './orders-validation.service';
+import { ORDERS_CONSTANTS } from '../constants/orders.constants';
 
 @Injectable()
 export class OrdersBusinessService {
@@ -16,25 +15,14 @@ export class OrdersBusinessService {
   constructor(
     private readonly ordersDataService: OrdersDataService,
     private readonly auditService: AuditService,
+    private readonly ordersValidationService: OrdersValidationService,
   ) {}
 
-  /**
-   * 📋 Создание заказа для компании с генерацией номера
-   */
   async createOrderForCompany(data: CreateOrderData, companyId: string): Promise<Order> {
-    // Генерируем номер заказа
     const orderNumber = await this.ordersDataService.generateOrderNumber(companyId);
-    
-    // Создаем заказ с номером
-    const orderData: CreateOrderData = {
-      ...data,
-      companyId,
-      orderNumber,
-    };
-
+    const orderData: CreateOrderData = { ...data, companyId, orderNumber };
     const order = await this.ordersDataService.create(orderData);
 
-    // ✅ ИСПРАВЛЕНО: Правильный вызов AuditService
     await this.auditService.logOrderCreated({
       entityType: 'Order',
       entityId: order.id,
@@ -52,88 +40,71 @@ export class OrdersBusinessService {
     return order;
   }
 
-  /**
-   * 📝 Обновление заказа с business logic
-   */
-  async updateOrder(id: string, data: UpdateOrderData): Promise<Order> {
+  async updateOrder(id: string, data: UpdateOrderData, actorUserId: string): Promise<Order> {
     const order = await this.ordersDataService.findById(id);
     if (!order) {
       throw new Error(`Order ${id} not found`);
     }
 
-    // Если изменяется статус, применяем business rules
+    // Статус — по правилам переходов
     if (data.status && data.status !== order.status) {
-      await this.validateStatusTransition(order.status as OrderStatus, data.status);
-      
-      // Автоматически устанавливаем actualCompletionTime при завершении
+      await this.ordersValidationService.validateStatusTransition(order.status as OrderStatus, data.status);
       if (data.status === OrderStatus.COMPLETED && order.status !== OrderStatus.COMPLETED) {
         data.actualCompletionTime = new Date();
       }
     }
 
-    const updatedOrder = await this.ordersDataService.update(id, data);
+    // Массовое обновление — только whitelist полей
+    const sanitized = this.sanitizeUpdateData({ ...data, updatedBy: actorUserId });
 
-    // ✅ ИСПРАВЛЕНО: Правильный вызов AuditService
+    const updatedOrder = await this.ordersDataService.update(id, sanitized);
+
     await this.auditService.logOrderUpdated({
       entityType: 'Order',
       entityId: id,
       companyId: order.companyId,
-      userId: data.updatedBy || order.createdBy,
+      userId: actorUserId,
       metadata: {
         orderNumber: order.orderNumber,
-        changes: this.detectChanges(order, data),
+        changes: this.detectChanges(order, sanitized),
       },
     });
 
     return updatedOrder;
   }
 
-  /**
-   * 🔄 Изменение статуса заказа с workflow logic
-   */
-  async changeOrderStatus(id: string, newStatus: OrderStatus): Promise<Order> {
+  async changeOrderStatus(id: string, newStatus: OrderStatus, actorUserId: string): Promise<Order> {
     const order = await this.ordersDataService.findById(id);
     if (!order) {
       throw new Error(`Order ${id} not found`);
     }
 
     const oldStatus = order.status as OrderStatus;
+    await this.ordersValidationService.validateStatusTransition(oldStatus, newStatus);
 
-    // Валидация перехода статусов
-    await this.validateStatusTransition(oldStatus, newStatus);
+    const updateData: UpdateOrderData = { status: newStatus, updatedBy: actorUserId };
 
-    // Подготавливаем данные для обновления
-    const updateData: UpdateOrderData = { status: newStatus };
-
-    // Business logic для каждого статуса
     switch (newStatus) {
       case OrderStatus.IN_PROGRESS:
-        // Проверяем назначение исполнителя
         if (!order.assignedTo) {
-          throw new ValidationDataException(
-            'assignedTo',
-            'Для перевода заказа в работу необходимо назначить исполнителя'
-          );
+          throw new ValidationDataException('assignedTo', 'Для перевода заказа в работу необходимо назначить исполнителя');
         }
         break;
-
       case OrderStatus.COMPLETED:
         updateData.actualCompletionTime = new Date();
         break;
-
       case OrderStatus.CANCELED:
-        // При отмене заказа можно добавить логику освобождения ресурсов
         break;
     }
 
     const updatedOrder = await this.ordersDataService.update(id, updateData);
 
-    // ✅ ИСПРАВЛЕНО: Правильный вызов AuditService с проверкой статуса
     if (newStatus === OrderStatus.COMPLETED) {
       await this.auditService.logOrderCompleted({
         entityType: 'Order',
         entityId: id,
         companyId: order.companyId,
+        userId: actorUserId,
         metadata: {
           orderNumber: order.orderNumber,
           oldStatus,
@@ -146,6 +117,7 @@ export class OrdersBusinessService {
         entityType: 'Order',
         entityId: id,
         companyId: order.companyId,
+        userId: actorUserId,
         metadata: {
           orderNumber: order.orderNumber,
           oldStatus,
@@ -158,10 +130,7 @@ export class OrdersBusinessService {
     return updatedOrder;
   }
 
-  /**
-   * 👤 Назначение механика на заказ
-   */
-  async assignMechanicToOrder(orderId: string, mechanicId: string): Promise<Order> {
+  async assignMechanicToOrder(orderId: string, mechanicId: string, actorUserId: string): Promise<Order> {
     const order = await this.ordersDataService.findById(orderId);
     if (!order) {
       throw new Error(`Order ${orderId} not found`);
@@ -169,13 +138,14 @@ export class OrdersBusinessService {
 
     const updatedOrder = await this.ordersDataService.update(orderId, {
       assignedTo: mechanicId,
+      updatedBy: actorUserId,
     });
 
-    // ✅ ИСПРАВЛЕНО: Правильный вызов AuditService
     await this.auditService.logOrderMechanicAssigned({
       entityType: 'Order',
       entityId: orderId,
       companyId: order.companyId,
+      userId: actorUserId,
       metadata: {
         orderNumber: order.orderNumber,
         mechanicId,
@@ -187,32 +157,22 @@ export class OrdersBusinessService {
     return updatedOrder;
   }
 
-  /**
-   * ❌ Отмена заказа
-   */
-  async cancelOrder(id: string): Promise<void> {
+  async cancelOrder(id: string, actorUserId: string): Promise<void> {
     const order = await this.ordersDataService.findById(id);
     if (!order) {
       throw new Error(`Order ${id} not found`);
     }
-
-    // Проверяем возможность отмены
     if (order.status === OrderStatus.COMPLETED) {
-      throw new ValidationDataException(
-        'status',
-        'Нельзя отменить завершенный заказ'
-      );
+      throw new ValidationDataException('status', 'Нельзя отменить завершенный заказ');
     }
 
-    await this.ordersDataService.update(id, {
-      status: OrderStatus.CANCELED,
-    });
+    await this.ordersDataService.update(id, { status: OrderStatus.CANCELED, updatedBy: actorUserId });
 
-    // ✅ ИСПРАВЛЕНО: Правильный вызов AuditService
     await this.auditService.logOrderCanceled({
       entityType: 'Order',
       entityId: id,
       companyId: order.companyId,
+      userId: actorUserId,
       metadata: {
         orderNumber: order.orderNumber,
         previousStatus: order.status,
@@ -222,24 +182,16 @@ export class OrdersBusinessService {
     this.logger.log(`Order canceled: ${order.orderNumber}`);
   }
 
-  /**
-   * 💰 Пересчет финансов заказа
-   */
-  async recalculateOrderFinancials(id: string): Promise<Order> {
+  async recalculateOrderFinancials(id: string, actorUserId: string): Promise<Order> {
     const order = await this.ordersDataService.findById(id);
     if (!order) {
       throw new Error(`Order ${id} not found`);
     }
 
-    // Расчет суммы услуг
-    const servicesTotal = order.orderServices?.reduce((sum, orderService) => {
-      return sum + parseFloat(orderService.totalAmount.toString());
-    }, 0) || 0;
-
-    // Расчет суммы запчастей
-    const partsTotal = order.orderParts?.reduce((sum, orderPart) => {
-      return sum + parseFloat(orderPart.totalAmount.toString());
-    }, 0) || 0;
+    const servicesTotal =
+      order.orderServices?.reduce((sum, s) => sum + parseFloat(s.totalAmount.toString()), 0) || 0;
+    const partsTotal =
+      order.orderParts?.reduce((sum, p) => sum + parseFloat(p.totalAmount.toString()), 0) || 0;
 
     const totalAmount = servicesTotal + partsTotal;
     const discountAmount = order.discountAmount || 0;
@@ -250,13 +202,14 @@ export class OrdersBusinessService {
       totalAmount,
       taxAmount,
       finalAmount,
+      updatedBy: actorUserId,
     });
 
-    // ✅ ИСПРАВЛЕНО: Правильный вызов AuditService
     await this.auditService.logOrderFinancialsRecalculated({
       entityType: 'Order',
       entityId: id,
       companyId: order.companyId,
+      userId: actorUserId,
       metadata: {
         orderNumber: order.orderNumber,
         servicesTotal,
@@ -270,45 +223,32 @@ export class OrdersBusinessService {
     return updatedOrder;
   }
 
-  /**
-   * ✅ Валидация перехода статусов
-   */
-  private async validateStatusTransition(currentStatus: OrderStatus, newStatus: OrderStatus): Promise<void> {
-    const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
-      [OrderStatus.NEW]: [OrderStatus.IN_PROGRESS, OrderStatus.CANCELED],
-      [OrderStatus.IN_PROGRESS]: [OrderStatus.AWAITING_PARTS, OrderStatus.COMPLETED, OrderStatus.CANCELED],
-      [OrderStatus.AWAITING_PARTS]: [OrderStatus.IN_PROGRESS, OrderStatus.CANCELED],
-      [OrderStatus.COMPLETED]: [], // Завершенный заказ нельзя изменить
-      [OrderStatus.CANCELED]: [], // Отмененный заказ нельзя изменить
-    };
-
-    if (!allowedTransitions[currentStatus]?.includes(newStatus)) {
-      throw new OrderStatusTransitionException(currentStatus, newStatus);
-    }
+  private sanitizeUpdateData(data: UpdateOrderData): UpdateOrderData {
+    const allowed = new Set(ORDERS_CONSTANTS.ALLOWED_UPDATE_FIELDS);
+    const sanitized: UpdateOrderData = { updatedBy: data.updatedBy };
+    Object.entries(data).forEach(([k, v]) => {
+      if (allowed.has(k as any)) {
+        (sanitized as any)[k] = v;
+      }
+    });
+    return sanitized;
   }
 
-  /**
-   * 💰 Расчет налога (18% НДС по умолчанию)
-   */
-  private calculateTax(amount: number, taxRate: number = 0.18): number {
-    return Math.round(amount * taxRate * 100) / 100;
+  private calculateTax(amount: number): number {
+    const rate = ORDERS_CONSTANTS.DEFAULTS.TAX_RATE;
+    return Math.round(amount * rate * 100) / 100;
   }
 
-  /**
-   * 📊 Определение изменений для аудита
-   */
   private detectChanges(original: Order, updates: UpdateOrderData): Record<string, any> {
     const changes: Record<string, any> = {};
-    
-    Object.keys(updates).forEach(key => {
-      if (updates[key] !== original[key]) {
+    Object.keys(updates).forEach((key) => {
+      if ((updates as any)[key] !== (original as any)[key]) {
         changes[key] = {
-          from: original[key],
-          to: updates[key],
+          from: (original as any)[key],
+          to: (updates as any)[key],
         };
       }
     });
-
     return changes;
   }
 }

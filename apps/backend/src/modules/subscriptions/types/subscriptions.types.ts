@@ -1,21 +1,15 @@
-export enum SubscriptionStatus {
-  ACTIVE = 'active',
-  PENDING = 'pending',
-  SUSPENDED = 'suspended',
-  CANCELED = 'canceled',
-  EXPIRED = 'expired',
-  INACTIVE = 'inactive',
-}
+// apps/backend/src/modules/subscriptions/types/subscriptions.types.ts
+export { SubscriptionStatus } from '../../../database/entities/subscription.entity';
 
 export type SortOrder = 'asc' | 'desc';
 export type SubscriptionSortField = 'startDate' | 'endDate' | 'createdAt' | 'status';
 
-// 🔥 ДОБАВЛЕНО: Строгие типы для проверки лимитов
+// 🔥 Строгие типы для проверки лимитов
 export type LimitCheckType = 'maxUsers' | 'maxCustomers' | 'maxVehicles' | 'maxOrders';
 
 export interface SubscriptionFilter {
   companyId?: string;
-  status?: SubscriptionStatus;
+  status?: import('../../../database/entities/subscription.entity').SubscriptionStatus;
   page?: number;
   limit?: number;
   sortField?: SubscriptionSortField;
@@ -27,7 +21,7 @@ export interface CreateSubscriptionData {
   tariffId: string;
   startDate?: Date;
   endDate: Date;
-  status?: SubscriptionStatus;
+  status?: import('../../../database/entities/subscription.entity').SubscriptionStatus; // будет игнорироваться (ставим PENDING в data-слое)
   paymentMethod?: string;
   autoRenew?: boolean;
 }
@@ -35,7 +29,7 @@ export interface CreateSubscriptionData {
 export interface UpdateSubscriptionData {
   tariffId?: string;
   endDate?: Date;
-  status?: SubscriptionStatus;
+  status?: import('../../../database/entities/subscription.entity').SubscriptionStatus;
   paymentMethod?: string;
   autoRenew?: boolean;
 }
@@ -54,16 +48,15 @@ export interface LimitCheckResult {
   limitType: string;
 }
 
-// 🔥 ИСПРАВЛЕНО: Убран any тип
+// Сохраняем совместимость: возвращаем список DTO в пагинации
 export interface PaginatedSubscriptionsResult {
-  items: import('../dto/response/subscription-response.dto').SubscriptionResponseDto[]; // 🔥 СТРОГИЙ ТИП
+  items: import('../dto/response/subscription-response.dto').SubscriptionResponseDto[];
   total: number;
   page: number;
   limit: number;
   totalPages: number;
 }
 
-// 🔥 ДОБАВЛЕНО: Новые типы для улучшенной типизации
 export interface SubscriptionRenewalInfo {
   id: string;
   companyId: string;
@@ -77,7 +70,7 @@ export interface SubscriptionRenewalInfo {
 export interface SubscriptionStatsInfo {
   id: string;
   companyId: string;
-  status: SubscriptionStatus;
+  status: import('../../../database/entities/subscription.entity').SubscriptionStatus;
   startDate: Date;
   endDate: Date;
   daysRemaining: number;

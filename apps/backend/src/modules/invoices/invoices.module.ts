@@ -1,54 +1,45 @@
-// src/modules/invoices/invoices.module.ts
+// path: apps/backend/src/modules/invoices/invoices.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CommonModule } from '../../common/common.module';
+import { AuthModule } from '../auth/auth.module';
+
+// Entities
+import { Invoice, Order, Company, Payment } from '../../database/entities';
+
+// Controllers и Services
 import { InvoicesController } from './invoices.controller';
 import { InvoicesService } from './invoices.service';
-import { InvoicesDataService } from './services/invoices-data.service';
+
+// 4-layer архитектура
 import { InvoicesBusinessService } from './services/invoices-business.service';
-import { InvoicesValidationService } from './services/invoices-validation.service';
+import { InvoicesDataService } from './services/invoices-data.service';
 import { InvoicesMapperService } from './services/invoices-mapper.service';
-import { 
-  Invoice, 
-  Payment, 
-  Order, 
-  Company, 
-  Customer, 
-  Vehicle, 
-  User,
-  PaymentMethod,
-  Subscription
-} from '../../database/entities';
-import { AuditService } from '../../common/audit/audit.service';
-import { SubscriptionLimitsService } from '../subscriptions/services/subscription-limits.service';
+import { InvoicesValidationService } from './services/invoices-validation.service';
+
+// Импортируем модуль подписок, который уже экспортирует SubscriptionLimitsService
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      Invoice,      // 🎯 Основная entity
-      Payment,      // 🔗 Для связи с платежами
-      Order,        // 🔗 Для создания из заказа
-      Company,      // 🔒 Для проверки принадлежности
-      Customer,     // 🔗 Для информации о клиенте
-      Vehicle,      // 🔗 Для информации об автомобиле
-      User,         // 🔗 Для createdBy
-      PaymentMethod, // 🔗 Для интеграции с платежами
-      Subscription, // 🔥 Для SubscriptionLimitsService
-    ]),
+    TypeOrmModule.forFeature([Invoice, Order, Company, Payment]),
+    CommonModule,
+    AuthModule,
+    SubscriptionsModule, // ⬅️ важное: получаем SubscriptionLimitsService из этого модуля
   ],
   controllers: [InvoicesController],
   providers: [
     InvoicesService,
-    InvoicesDataService,
     InvoicesBusinessService,
-    InvoicesValidationService,
+    InvoicesDataService,
     InvoicesMapperService,
-    AuditService,
-    SubscriptionLimitsService,
+    InvoicesValidationService,
+    // НЕ добавляем здесь SubscriptionLimitsService (его провайдит SubscriptionsModule)
   ],
   exports: [
     InvoicesService,
     InvoicesDataService,
-    InvoicesMapperService,
+    InvoicesValidationService,
   ],
 })
 export class InvoicesModule {}

@@ -1,5 +1,6 @@
-// src/modules/inventory/inventory-alerts/inventory-alerts.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+// path: apps/backend/src/modules/inventory/inventory-alerts/inventory-alerts.service.ts
+import { Injectable, Logger, ConflictException, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AlertsDataService } from './services/alerts-data.service';
 import { AlertsBusinessService } from './services/alerts-business.service';
 import { AlertsValidationService } from './services/alerts-validation.service';
@@ -10,249 +11,301 @@ import { AlertResponseDto } from './dto/response/alert-response.dto';
 import { PaginatedAlertsResponseDto } from './dto/response/paginated-alerts-response.dto';
 import { AlertSettingsResponseDto } from './dto/response/alert-settings-response.dto';
 import { TestNotificationResponseDto } from './dto/response/test-notification-response.dto';
-import { 
+import {
   AlertFilter,
   AlertSettings,
   AlertStats,
-  AlertTriggerContext,
   NotificationRequest,
-  NotificationResult
+  NotificationResult,
 } from './types/alerts.types';
 import { RequestWithUser } from '../../auth/interfaces/request-with-user.interface';
+import { AuditService, AuditAction } from '../../../common/audit/audit.service';
+import { INVENTORY_CONSTANTS } from '../constants/inventory.constants';
+import { createHash } from 'crypto';
+import { Inject } from '@nestjs/common';
+import type { Redis } from 'ioredis';
+import { REDIS_CLIENT } from '../../../common/redis/redis.constants';
 
 @Injectable()
 export class InventoryAlertsService {
   private readonly logger = new Logger(InventoryAlertsService.name);
+  private readonly idempTtlMs: number;
 
   constructor(
     private readonly alertsDataService: AlertsDataService,
     private readonly alertsBusinessService: AlertsBusinessService,
     private readonly alertsValidationService: AlertsValidationService,
     private readonly alertsMapperService: AlertsMapperService,
-  ) {}
+    private readonly configService: ConfigService,
+    private readonly auditService: AuditService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {
+    this.idempTtlMs = this.configService.get<number>('inventory.idempotencyTtlMs') || 6 * 60 * 60 * 1000;
+  }
 
-  /**
-   * 🔒 Получение всех уведомлений с фильтрацией
-   */
-  async findAll(filter: AlertFilter): Promise<PaginatedAlertsResponseDto> {
-    this.logger.log(`Finding alerts with filters: ${JSON.stringify(filter)}`);
-
+  async findAll(filter: AlertFilter, user: RequestWithUser['user']): Promise<PaginatedAlertsResponseDto> {
+    this.logger.log(`Finding alerts with filters: ${JSON.stringify({ ...filter, metadata: undefined })}`);
     const [alerts, total] = await this.alertsDataService.findWithFilters(filter);
-
+    const canViewCosts = INVENTORY_CONSTANTS.ROLES.CAN_VIEW_COSTS.includes(user.role as any);
     return this.alertsMapperService.mapToPaginatedResponse(
       alerts,
       total,
       filter.page || 1,
       filter.limit || 25,
-      filter
+      filter,
+      { canViewCosts },
     );
   }
 
-  /**
-   * 🔒 Получение уведомления по ID
-   */
-  async findOne(id: string): Promise<AlertResponseDto> {
+  async findOne(id: string, user: RequestWithUser['user']): Promise<AlertResponseDto> {
     this.logger.log(`Finding alert: ${id}`);
-
     const alert = await this.alertsValidationService.validateAlertExists(id);
-    return this.alertsMapperService.mapToResponseDto(alert);
+    const canViewCosts = INVENTORY_CONSTANTS.ROLES.CAN_VIEW_COSTS.includes(user.role as any);
+    return this.alertsMapperService.mapToResponseDto(alert, { canViewCosts });
   }
 
-  /**
-   * 🚫 Отклонение уведомления
-   */
   async dismissAlert(alertId: string, user: RequestWithUser['user']): Promise<AlertResponseDto> {
     this.logger.log(`Dismissing alert: ${alertId} by user: ${user.id}`);
-
     const dismissedAlert = await this.alertsBusinessService.dismissAlert(alertId, user);
-    return this.alertsMapperService.mapToResponseDto(dismissedAlert);
+    const canViewCosts = INVENTORY_CONSTANTS.ROLES.CAN_VIEW_COSTS.includes(user.role as any);
+    return this.alertsMapperService.mapToResponseDto(dismissedAlert, { canViewCosts });
   }
 
-  /**
-   * 🚨 Получение критических уведомлений
-   */
-  async getCriticalAlerts(companyId: string): Promise<AlertResponseDto[]> {
+  async getCriticalAlerts(companyId: string, user: RequestWithUser['user']): Promise<AlertResponseDto[]> {
     this.logger.log(`Getting critical alerts for company: ${companyId}`);
-
     const criticalAlerts = await this.alertsBusinessService.getCriticalAlerts(companyId);
-    return this.alertsMapperService.mapArrayToResponseDto(criticalAlerts);
+    const canViewCosts = INVENTORY_CONSTANTS.ROLES.CAN_VIEW_COSTS.includes(user.role as any);
+    return this.alertsMapperService.mapArrayToResponseDto(criticalAlerts, { canViewCosts });
   }
 
-  /**
-   * 📊 Получение статистики уведомлений
-   */
   async getAlertStats(companyId: string, dateFrom: Date, dateTo: Date): Promise<any> {
     this.logger.log(`Getting alert stats for company: ${companyId}`);
-
     const stats = await this.alertsBusinessService.getAlertStats(companyId, dateFrom, dateTo);
     return this.alertsMapperService.mapStatsToResponse(stats);
   }
 
-  /**
-   * ⚙️ Получение настроек уведомлений
-   */
   async getAlertSettings(companyId: string): Promise<AlertSettingsResponseDto> {
     this.logger.log(`Getting alert settings for company: ${companyId}`);
+    const settingsEntity = await this.alertsDataService.getOrCreateSettings(companyId);
 
-    // TODO: Реализовать получение настроек из БД
-    const defaultSettings: AlertSettings = {
-      companyId,
-      enableEmailNotifications: true,
-      enablePushNotifications: true,
-      emailAddresses: [],
-      lowStockThreshold: 5,
-      criticalStockThreshold: 2,
-      overstockMultiplier: 5,
-      enabledAlertTypes: ['low_stock', 'out_of_stock', 'overstock'],
-      alertFrequency: 'immediate',
-      autoDismissAfterRestock: true,
-      autoDismissAfterHours: 72,
-    };
-
-    const currentActiveAlerts = await this.alertsDataService.findWithFilters({
+    const currentActive = await this.alertsDataService.findWithFilters({
       companyId,
       isActive: true,
-      limit: 1000,
+      limit: 1,
+      page: 1,
     });
-
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayAlerts = await this.alertsDataService.findWithFilters({
       companyId,
       createdFrom: todayStart,
-      limit: 1000,
+      limit: 1,
+      page: 1,
     });
 
+    const settings: AlertSettings = {
+      companyId,
+      userId: settingsEntity.userId || undefined,
+      enableEmailNotifications: settingsEntity.enableEmailNotifications,
+      enablePushNotifications: settingsEntity.enablePushNotifications,
+      emailAddresses: settingsEntity.emailAddresses,
+      lowStockThreshold: settingsEntity.lowStockThreshold,
+      criticalStockThreshold: settingsEntity.criticalStockThreshold,
+      overstockMultiplier: settingsEntity.overstockMultiplier,
+      enabledAlertTypes: settingsEntity.enabledAlertTypes as any,
+      alertFrequency: settingsEntity.alertFrequency,
+      autoDismissAfterRestock: settingsEntity.autoDismissAfterRestock,
+      autoDismissAfterHours: settingsEntity.autoDismissAfterHours,
+      workingHoursStart: settingsEntity.workingHoursStart || undefined,
+      workingHoursEnd: settingsEntity.workingHoursEnd || undefined,
+      workingDays: settingsEntity.workingDays || undefined,
+      timezone: settingsEntity.timezone || undefined,
+    };
+
     return this.alertsMapperService.mapSettingsToResponseDto(
-      defaultSettings,
-      currentActiveAlerts[1], // total count
-      todayAlerts[1] // total count
+      settings,
+      currentActive[1],
+      todayAlerts[1],
+      settingsEntity.lastNotificationSent || undefined,
     );
   }
 
-  /**
-   * ⚙️ Обновление настроек уведомлений
-   */
-  async updateAlertSettings(
-    companyId: string,
-    updateSettingsDto: UpdateAlertSettingsDto
-  ): Promise<AlertSettingsResponseDto> {
+  async updateAlertSettings(companyId: string, updateSettingsDto: UpdateAlertSettingsDto, user?: RequestWithUser['user']): Promise<AlertSettingsResponseDto> {
     this.logger.log(`Updating alert settings for company: ${companyId}`);
-
-    // Валидация настроек
     await this.alertsValidationService.validateAlertSettings(updateSettingsDto, companyId);
 
-    // TODO: Реализовать сохранение настроек в БД
-    this.logger.log(`Alert settings updated for company: ${companyId}`);
+    await this.alertsDataService.updateSettings(companyId, {
+      enableEmailNotifications: updateSettingsDto.enableEmailNotifications ?? undefined,
+      enablePushNotifications: updateSettingsDto.enablePushNotifications ?? undefined,
+      emailAddresses: updateSettingsDto.emailAddresses ?? undefined,
+      lowStockThreshold: updateSettingsDto.lowStockThreshold ?? undefined,
+      criticalStockThreshold: updateSettingsDto.criticalStockThreshold ?? undefined,
+      overstockMultiplier: updateSettingsDto.overstockMultiplier ?? undefined,
+      enabledAlertTypes: updateSettingsDto.enabledAlertTypes as any,
+      alertFrequency: updateSettingsDto.alertFrequency ?? undefined,
+      autoDismissAfterRestock: updateSettingsDto.autoDismissAfterRestock ?? undefined,
+      autoDismissAfterHours: updateSettingsDto.autoDismissAfterHours ?? undefined,
+      workingHoursStart: updateSettingsDto.workingHoursStart ?? null,
+      workingHoursEnd: updateSettingsDto.workingHoursEnd ?? null,
+      workingDays: updateSettingsDto.workingDays ?? null,
+      timezone: updateSettingsDto.timezone ?? null,
+    } as any);
 
-    // Возвращаем обновленные настройки
+    // Аудит
+    await this.auditService.log(AuditAction.INVENTORY_ALERT_SETTINGS_UPDATED, {
+      companyId,
+      userId: user?.id,
+      details: {
+        updatedFields: Object.keys(updateSettingsDto),
+      },
+    });
+
     return this.getAlertSettings(companyId);
   }
 
-  /**
-   * 📧 Отправка тестового уведомления
-   */
   async sendTestNotification(
     companyId: string,
     testNotificationDto: TestNotificationDto,
-    user: RequestWithUser['user']
+    user: RequestWithUser['user'],
+    idempotencyKey: string,
   ): Promise<TestNotificationResponseDto> {
-    this.logger.log(`Sending test notification for company: ${companyId}`);
+    if (!idempotencyKey) {
+      throw new BadRequestException('X-Idempotency-Key header is required');
+    }
 
-    // Валидация запроса
-    const notificationRequest: NotificationRequest = {
+    const req: NotificationRequest = {
       type: testNotificationDto.type,
       priority: testNotificationDto.priority,
       subject: `Тестовое уведомление - ${testNotificationDto.type}`,
       message: testNotificationDto.customMessage || 'Это тестовое уведомление системы управления складом',
-      recipients: testNotificationDto.recipients || [user.email],
+      recipients: (testNotificationDto.recipients && testNotificationDto.recipients.length > 0)
+        ? testNotificationDto.recipients
+        : [user.email].filter(Boolean) as string[],
     };
 
-    this.alertsValidationService.validateNotificationRequest(notificationRequest);
+    this.alertsValidationService.validateNotificationRequest(req);
 
-    // Отправка уведомления (заглушка)
-    const mockResult: NotificationResult = {
-      success: true,
-      sentCount: notificationRequest.recipients.length,
-      failedCount: 0,
-      errors: [],
-      sentAt: new Date(),
-    };
+    const area = 'alerts';
+    const op = 'test';
+    const key = idempotencyKey;
 
-    return this.alertsMapperService.mapTestNotificationResult(
-      mockResult,
-      testNotificationDto.type,
-      testNotificationDto.priority,
-      notificationRequest.message
-    );
+    return this.withIdempotency(area, op, companyId, key, async () => {
+      // mock notification sending
+      const mockResult: NotificationResult = {
+        success: true,
+        sentCount: req.recipients.length,
+        failedCount: 0,
+        errors: [],
+        sentAt: new Date(),
+      };
+
+      await this.auditService.log(AuditAction.INVENTORY_ALERT_TEST_NOTIFICATION, {
+        companyId,
+        userId: user.id,
+        details: {
+          recipientsCount: req.recipients.length,
+          type: req.type,
+          priority: req.priority,
+        },
+      });
+
+      return this.alertsMapperService.mapTestNotificationResult(
+        mockResult,
+        testNotificationDto.type,
+        testNotificationDto.priority,
+        req.message,
+        req.recipients,
+      );
+    });
   }
 
-  /**
-   * 🧹 Очистка истекших уведомлений
-   */
   async cleanupExpiredAlerts(companyId: string): Promise<number> {
     this.logger.log(`Cleaning up expired alerts for company: ${companyId}`);
-
-    return this.alertsBusinessService.cleanupExpiredAlerts(companyId);
+    const count = await this.alertsBusinessService.cleanupExpiredAlerts(companyId);
+    return count;
   }
 
-  /**
-   * 📊 Массовое отклонение уведомлений
-   */
   async batchDismissAlerts(
     alertIds: string[],
-    user: RequestWithUser['user']
+    user: RequestWithUser['user'],
+    idempotencyKey: string,
   ): Promise<{ dismissedCount: number; failedCount: number; errors: string[] }> {
-    this.logger.log(`Batch dismissing ${alertIds.length} alerts by user: ${user.id}`);
-
-    let dismissedCount = 0;
-    let failedCount = 0;
-    const errors: string[] = [];
-
-    for (const alertId of alertIds) {
-      try {
-        await this.alertsBusinessService.dismissAlert(alertId, user);
-        dismissedCount++;
-      } catch (error) {
-        failedCount++;
-        errors.push(`Alert ${alertId}: ${error.message}`);
-      }
+    if (!idempotencyKey) {
+      throw new BadRequestException('X-Idempotency-Key header is required');
     }
+    const area = 'alerts';
+    const op = 'batch_dismiss';
+    const sorted = [...(alertIds || [])].sort();
+    const hash = createHash('sha256').update(sorted.join(',')).digest('hex');
+    const key = `${idempotencyKey}:${hash}`;
 
-    this.logger.log(`Batch dismiss completed: ${dismissedCount} success, ${failedCount} failed`);
+    return this.withIdempotency(area, op, user.companyId, key, async () => {
+      let dismissedCount = 0;
+      let failedCount = 0;
+      const errors: string[] = [];
 
-    return { dismissedCount, failedCount, errors };
+      for (const alertId of alertIds) {
+        try {
+          await this.alertsBusinessService.dismissAlert(alertId, user);
+          dismissedCount++;
+        } catch (error: any) {
+          failedCount++;
+          errors.push(`Alert ${alertId}: ${error?.message || 'Unknown error'}`);
+        }
+      }
+
+      return { dismissedCount, failedCount, errors };
+    });
   }
 
-  /**
-   * 🤖 Интеграция с inventory модулем - автоматическое создание уведомлений
-   */
+  // Integrations
   async handleStockMovement(
     partId: string,
     companyId: string,
     previousQuantity: number,
     newQuantity: number,
     movementId: string,
-    userId: string
+    userId: string,
   ): Promise<void> {
     this.logger.log(`Handling stock movement for part ${partId}: ${previousQuantity} -> ${newQuantity}`);
-
-    return this.alertsBusinessService.handleStockMovement(
-      partId,
-      companyId,
-      previousQuantity,
-      newQuantity,
-      movementId,
-      userId
-    );
+    return this.alertsBusinessService.handleStockMovement(partId, companyId, previousQuantity, newQuantity, movementId, userId);
   }
 
-  /**
-   * 🎯 Создание уведомления из внешних модулей
-   */
-  async createSmartAlert(context: AlertTriggerContext, user?: RequestWithUser['user']): Promise<void> {
+  async createSmartAlert(context: any, user?: RequestWithUser['user']): Promise<void> {
     this.logger.log(`Creating smart alert for part ${context.partId}`);
-
     await this.alertsBusinessService.createSmartAlert(context, user);
+  }
+
+  // Idempotency helper
+  private async withIdempotency<T>(
+    area: string,
+    op: string,
+    companyId: string,
+    key: string,
+    executor: () => Promise<T>,
+  ): Promise<T> {
+    const lockKey = `idemp:${area}:${op}:lock:${companyId}:${key}`;
+    const resultKey = `idemp:${area}:${op}:result:${companyId}:${key}`;
+
+    // cached result
+    const cached = await this.redis.get(resultKey);
+    if (cached) {
+      return JSON.parse(cached) as T;
+    }
+
+    // acquire lock
+    const lock = await this.redis.set(lockKey, '1', 'PX', this.idempTtlMs, 'NX');
+    if (!lock) {
+      throw new ConflictException('Operation is already in progress');
+    }
+
+    try {
+      const result = await executor();
+      await this.redis.psetex(resultKey, this.idempTtlMs, JSON.stringify(result));
+      return result;
+    } finally {
+      // best effort unlock
+      await this.redis.del(lockKey).catch(() => undefined);
+    }
   }
 }

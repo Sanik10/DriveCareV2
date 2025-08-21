@@ -1,4 +1,4 @@
-// src/modules/inventory/parts/dto/response/part-response.dto.ts
+// path: apps/backend/src/modules/inventory/parts/dto/response/part-response.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class PartCategoryDto {
@@ -37,17 +37,17 @@ export class PartResponseDto {
   @ApiPropertyOptional({ description: 'Описание запчасти' })
   description?: string;
 
-  @ApiProperty({ description: 'Себестоимость (цена закупки)' })
-  costPrice: number;
+  @ApiPropertyOptional({ description: 'Себестоимость (цена закупки)' })
+  costPrice?: number;
 
-  @ApiProperty({ description: 'Цена продажи' })
-  sellingPrice: number;
+  @ApiPropertyOptional({ description: 'Цена продажи' })
+  sellingPrice?: number;
 
-  @ApiProperty({ description: 'Наценка в процентах' })
-  marginPercent: number;
+  @ApiPropertyOptional({ description: 'Наценка в процентах' })
+  marginPercent?: number;
 
-  @ApiProperty({ description: 'Прибыль с единицы' })
-  profitPerUnit: number;
+  @ApiPropertyOptional({ description: 'Прибыль с единицы' })
+  profitPerUnit?: number;
 
   @ApiPropertyOptional({ description: 'URL изображения' })
   imageUrl?: string;
@@ -61,7 +61,6 @@ export class PartResponseDto {
   @ApiProperty({ description: 'Дата последнего обновления' })
   updatedAt: Date;
 
-  // Дополнительные вычисляемые поля
   @ApiPropertyOptional({ description: 'Текущий остаток на складе' })
   currentStock?: number;
 

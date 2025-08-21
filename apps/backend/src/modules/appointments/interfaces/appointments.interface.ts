@@ -1,13 +1,16 @@
+// path: apps/backend/src/modules/appointments/interfaces/appointments.interface.ts
 import { Appointment } from '../../../database/entities';
-import { 
-  CreateAppointmentData, 
-  UpdateAppointmentData, 
+import {
+  CreateAppointmentData,
+  UpdateAppointmentData,
   AppointmentFilter,
   SmartSchedulingRequest,
   SmartSchedulingResponse,
   AppointmentTracking,
-  AvailableSlot
+  AvailableSlot,
 } from '../types/appointments.types';
+import { AppointmentStatus } from '../../../database/entities';
+import { AppointmentResponseDto } from '../dto/response/appointment-response.dto';
 
 export interface IAppointmentsDataService {
   create(data: CreateAppointmentData): Promise<Appointment>;
@@ -19,10 +22,16 @@ export interface IAppointmentsDataService {
   delete(id: string): Promise<void>;
   softDelete(id: string): Promise<void>;
   findByCustomer(customerId: string, companyId: string): Promise<Appointment[]>;
-  findByMechanic(mechanicId: string, dateFrom: Date, dateTo: Date): Promise<Appointment[]>;
+  findByMechanic(mechanicId: string, companyId: string, dateFrom: Date, dateTo: Date): Promise<Appointment[]>;
   findByDateRange(companyId: string, dateFrom: Date, dateTo: Date): Promise<Appointment[]>;
-  countByStatus(companyId: string, status: string): Promise<number>;
-  findConflicts(mechanicId: string, startTime: Date, endTime: Date, excludeAppointmentId?: string): Promise<Appointment[]>;
+  countByStatus(companyId: string, status: AppointmentStatus): Promise<number>;
+  findConflicts(
+    mechanicId: string,
+    startTime: Date,
+    endTime: Date,
+    excludeAppointmentId?: string,
+    companyId?: string,
+  ): Promise<Appointment[]>;
   existsForCompany(id: string, companyId: string): Promise<boolean>;
 }
 
@@ -44,7 +53,13 @@ export interface IAppointmentsValidationService {
   validateUpdateData(id: string, data: UpdateAppointmentData): Promise<void>;
   validateAppointmentExists(id: string): Promise<Appointment>;
   validateAppointmentOwnership(appointmentId: string, userCompanyId: string): Promise<Appointment>;
-  validateTimeSlot(mechanicId: string, startTime: Date, endTime: Date, excludeAppointmentId?: string): Promise<void>;
+  validateTimeSlot(
+    mechanicId: string,
+    startTime: Date,
+    endTime: Date,
+    excludeAppointmentId?: string,
+    companyId?: string,
+  ): Promise<void>;
   validateMechanicAvailability(mechanicId: string, startTime: Date, endTime: Date): Promise<void>;
   validateServicesExist(serviceIds: string[], companyId: string): Promise<void>;
   validateCustomerAndVehicle(customerId: string, vehicleId: string, companyId: string): Promise<void>;
@@ -55,12 +70,15 @@ export interface IAppointmentsValidationService {
 }
 
 export interface IAppointmentsMapperService {
-  mapToResponseDto(appointment: Appointment): any; // AppointmentResponseDto
-  mapArrayToResponseDto(appointments: Appointment[]): any[]; // AppointmentResponseDto[]
+  mapToResponseDto(appointment: Appointment, options?: { role?: string; maskPII?: boolean }): AppointmentResponseDto;
+  mapArrayToResponseDto(
+    appointments: Appointment[],
+    options?: { role?: string; maskPII?: boolean },
+  ): AppointmentResponseDto[];
   mapToBasicInfo(appointment: Appointment): { id: string; startTime: Date; status: string; customerName: string };
   mapToTrackingDto(appointment: Appointment): AppointmentTracking;
   mapToCalendarEvent(appointment: Appointment): any;
-  mapToAuditData(appointment: Appointment): any;
+  mapToAuditData(appointment: Appointment): Record<string, unknown>;
 }
 
 export interface ISmartSchedulingService {
@@ -75,6 +93,9 @@ export interface ISmartSchedulingService {
 export interface IConflictResolutionService {
   detectConflicts(mechanicId: string, startTime: Date, endTime: Date, excludeAppointmentId?: string): Promise<any[]>;
   resolveConflicts(conflicts: any[]): Promise<any>;
-  suggestAlternatives(originalRequest: SmartSchedulingRequest, conflicts: any[]): Promise<AvailableSlot[]>;
+  suggestAlternatives(
+    originalRequest: SmartSchedulingRequest,
+    conflicts: any[],
+  ): Promise<AvailableSlot[]>;
   validateNoConflicts(mechanicId: string, startTime: Date, endTime: Date): Promise<boolean>;
 }

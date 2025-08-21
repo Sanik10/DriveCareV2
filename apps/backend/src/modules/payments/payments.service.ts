@@ -14,6 +14,7 @@ import { CompanyBalanceDto } from './dto/response/company-balance.dto';
 import { PaymentFilter, CreatePaymentData, UserWithCompany } from './types/payments.types';
 import { RequestWithUser } from '../auth/interfaces/request-with-user.interface';
 import { PAYMENTS_CONSTANTS } from './constants/payments.constants';
+import { AuthRole } from '../auth/types/auth.types'
 
 @Injectable()
 export class PaymentsService {
@@ -191,7 +192,7 @@ export class PaymentsService {
 
     const statistics = await this.paymentsDataService.getPaymentsStatistics(companyId!);
 
-    return this.paymentsMapperService.mapToStatisticsDto(statistics);
+    return this.paymentsMapperService.mapToStatisticsDto(statistics, companyId!);
   }
 
   /**
@@ -208,7 +209,7 @@ export class PaymentsService {
 
     const balance = await this.paymentsBusinessService.calculateCompanyBalance(companyId!);
 
-    return this.paymentsMapperService.mapToBalanceDto(balance);
+    return await this.paymentsMapperService.mapToBalanceDto(balance);
   }
 
   /**
@@ -275,9 +276,11 @@ export class PaymentsService {
    */
   async getPayments(filter: PaymentFilter): Promise<PaginatedPaymentsResponseDto> {
     // Создаем пользователя из companyId для совместимости
-    const mockUser = { 
+    const mockUser = {
+      id: 'system-payment-user',
+      email: 'system@payment.local',
       companyId: filter.companyId,
-      role: 'admin' 
+      role: 'company_admin' as AuthRole, // ✅ Правильная новая роль
     } as RequestWithUser['user'];
     
     return this.findAll(filter, mockUser);

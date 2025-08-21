@@ -1,12 +1,12 @@
-// src/modules/work-schedules/dto/request/create-schedule.dto.ts
-import { IsString, IsUUID, IsNumber, IsOptional, IsBoolean, IsArray, Min, Max, Matches } from 'class-validator';
+// path: apps/backend/src/modules/work-schedules/dto/request/create-schedule.dto.ts
+import { IsString, IsUUID, IsNumber, IsOptional, IsBoolean, IsArray, Min, Max, Matches, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { WORK_SCHEDULES_CONSTANTS, WORK_SCHEDULES_VALIDATION_MESSAGES } from '../../constants/work-schedules.constants';
+import { WORK_SCHEDULES_CONSTANTS, WORK_SCHEDULES_VALIDATION_MESSAGES, SHIFT_TYPES } from '../../constants/work-schedules.constants';
 
 export class CreateScheduleDto {
   @ApiProperty({
     description: 'ID пользователя (мастера)',
-    example: '123e4567-e89b-12d3-a456-426614174000'
+    example: '123e4567-e89b-12d3-a456-426614174000',
   })
   @IsUUID('4', { message: 'Некорректный ID пользователя' })
   userId: string;
@@ -15,33 +15,35 @@ export class CreateScheduleDto {
     description: 'День недели (0-6, где 0 = воскресенье)',
     example: 1,
     minimum: 0,
-    maximum: 6
+    maximum: 6,
   })
   @IsNumber({}, { message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_DAY_OF_WEEK })
   @Min(0, { message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_DAY_OF_WEEK })
   @Max(6, { message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_DAY_OF_WEEK })
   dayOfWeek: number;
 
-  @ApiProperty({
-    description: 'Время начала работы (HH:MM)',
-    example: '09:00'
+  @ApiPropertyOptional({
+    description: 'Время начала работы (HH:MM) — требуется, если не выходной',
+    example: '09:00',
   })
+  @IsOptional()
   @IsString({ message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_TIME_FORMAT })
   @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_TIME_FORMAT })
-  startTime: string;
+  startTime?: string;
 
-  @ApiProperty({
-    description: 'Время окончания работы (HH:MM)',
-    example: '18:00'
+  @ApiPropertyOptional({
+    description: 'Время окончания работы (HH:MM) — требуется, если не выходной',
+    example: '18:00',
   })
+  @IsOptional()
   @IsString({ message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_TIME_FORMAT })
   @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_TIME_FORMAT })
-  endTime: string;
+  endTime?: string;
 
   @ApiPropertyOptional({
     description: 'Является ли день выходным',
     example: false,
-    default: false
+    default: false,
   })
   @IsOptional()
   @IsBoolean()
@@ -49,7 +51,7 @@ export class CreateScheduleDto {
 
   @ApiPropertyOptional({
     description: 'Время начала обеденного перерыва (HH:MM)',
-    example: '13:00'
+    example: '13:00',
   })
   @IsOptional()
   @IsString()
@@ -58,7 +60,7 @@ export class CreateScheduleDto {
 
   @ApiPropertyOptional({
     description: 'Время окончания обеденного перерыва (HH:MM)',
-    example: '14:00'
+    example: '14:00',
   })
   @IsOptional()
   @IsString()
@@ -69,7 +71,7 @@ export class CreateScheduleDto {
     description: 'Коэффициент эффективности мастера',
     example: 1.2,
     minimum: WORK_SCHEDULES_CONSTANTS.MIN_EFFICIENCY,
-    maximum: WORK_SCHEDULES_CONSTANTS.MAX_EFFICIENCY
+    maximum: WORK_SCHEDULES_CONSTANTS.MAX_EFFICIENCY,
   })
   @IsOptional()
   @IsNumber({}, { message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_EFFICIENCY })
@@ -78,9 +80,9 @@ export class CreateScheduleDto {
   efficiency?: number;
 
   @ApiPropertyOptional({
-    description: 'Массив ID услуг, которые может выполнять мастер',
-    example: ['service-1', 'service-2'],
-    type: [String]
+    description: 'Массив ID услуг, которые может выполнять мастер (UUIDv4)',
+    example: ['123e4567-e89b-12d3-a456-426614174001', '123e4567-e89b-12d3-a456-426614174002'],
+    type: [String],
   })
   @IsOptional()
   @IsArray()
@@ -90,17 +92,17 @@ export class CreateScheduleDto {
   @ApiPropertyOptional({
     description: 'Тип смены',
     example: 'morning',
-    enum: ['morning', 'afternoon', 'evening', 'night', 'flexible']
+    enum: Object.values(SHIFT_TYPES),
   })
   @IsOptional()
-  @IsString()
+  @IsEnum(SHIFT_TYPES, { message: 'Некорректный тип смены' })
   shiftType?: string;
 
   @ApiPropertyOptional({
     description: 'Максимальное количество рабочих дней подряд',
     example: 5,
     minimum: 1,
-    maximum: WORK_SCHEDULES_CONSTANTS.MAX_CONSECUTIVE_DAYS
+    maximum: WORK_SCHEDULES_CONSTANTS.MAX_CONSECUTIVE_DAYS,
   })
   @IsOptional()
   @IsNumber()
@@ -111,7 +113,7 @@ export class CreateScheduleDto {
   @ApiPropertyOptional({
     description: 'Предпочитаемые дни отдыха (0-6)',
     example: [0, 6],
-    type: [Number]
+    type: [Number],
   })
   @IsOptional()
   @IsArray()

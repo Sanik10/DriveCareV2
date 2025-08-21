@@ -1,6 +1,6 @@
-// src/modules/payments/dto/response/payment-response.dto.ts (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+// src/modules/payments/dto/response/payment-response.dto.ts (✅ SECURITY FIXED)
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PaymentStatus, PaymentCurrency } from '../../types/payments.types'; // ✅ ИСПРАВЛЕНО
+import { PaymentStatus, PaymentCurrency } from '../../types/payments.types';
 
 export class PaymentResponseDto {
   @ApiProperty({ description: 'ID платежа', example: '123e4567-e89b-12d3-a456-426614174000' })
@@ -28,7 +28,7 @@ export class PaymentResponseDto {
   transactionId?: string;
 
   @ApiProperty({ description: 'Статус платежа', enum: PaymentStatus, example: PaymentStatus.PROCESSED })
-  status: PaymentStatus; // ✅ ИСПРАВЛЕНО
+  status: PaymentStatus;
 
   @ApiPropertyOptional({ description: 'Примечания к платежу', example: 'Оплата за услуги автосервиса' })
   notes?: string;
@@ -39,7 +39,7 @@ export class PaymentResponseDto {
   @ApiProperty({ description: 'Дата последнего обновления', example: '2024-01-15T10:30:00Z' })
   updatedAt: Date;
 
-  // ✅ НОВЫЕ ПОЛЯ
+  // ✅ ВАЛЮТНЫЕ ПОЛЯ (БЕЗОПАСНЫЕ)
   @ApiPropertyOptional({ description: 'Курс обмена валют', example: 75.50 })
   exchangeRate?: number;
 
@@ -49,14 +49,41 @@ export class PaymentResponseDto {
   @ApiPropertyOptional({ description: 'Оригинальная валюта', enum: PaymentCurrency, example: PaymentCurrency.USD })
   originalCurrency?: PaymentCurrency;
 
-  @ApiPropertyOptional({ description: 'ID транзакции в платежном шлюзе', example: 'GATEWAY_TXN_XYZ789' })
-  gatewayTransactionId?: string;
-
   @ApiPropertyOptional({ description: 'Комиссия платежного шлюза', example: 45.50 })
   gatewayFee?: number;
 
-  @ApiPropertyOptional({ description: 'Дополнительные метаданные', example: { gateway: 'stripe' } })
-  metadata?: Record<string, any>;
+  // ✅ НОВЫЕ БЕЗОПАСНЫЕ ПОЛЯ ВМЕСТО SENSITIVE DATA
+  @ApiPropertyOptional({ 
+    description: 'Статус обработки шлюзом', 
+    example: 'approved',
+    enum: ['pending', 'approved', 'declined', 'error', 'timeout']
+  })
+  gatewayStatus?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Маскированный номер карты (последние 4 цифры)', 
+    example: '**** 1234'
+  })
+  maskedCardNumber?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Тип платежной системы', 
+    example: 'Visa',
+    enum: ['Visa', 'MasterCard', 'Mir', 'AmEx', 'UnionPay', 'JCB']
+  })
+  cardBrand?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Код авторизации (маскированный)', 
+    example: 'AUTH***'
+  })
+  maskedAuthCode?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'ID платежного терминала', 
+    example: 'TERMINAL_001'
+  })
+  terminalId?: string;
 
   // ✅ СВЯЗАННЫЕ ДАННЫЕ
   @ApiPropertyOptional({ 
@@ -91,4 +118,21 @@ export class PaymentResponseDto {
 
   @ApiProperty({ description: 'Отображаемый статус', example: 'Успешно обработан' })
   statusDisplay: string;
+
+  // ✅ ДОПОЛНИТЕЛЬНЫЕ БЕЗОПАСНЫЕ МЕТАДАННЫЕ
+  @ApiPropertyOptional({ 
+    description: 'Безопасные метаданные (без чувствительной информации)',
+    example: {
+      source: 'mobile_app',
+      version: '1.0.2',
+      processed_by: 'AUTO'
+    }
+  })
+  safeMetadata?: {
+    source?: string;
+    version?: string;
+    processed_by?: string;
+    campaign?: string;
+    [key: string]: string | number | boolean | undefined;
+  };
 }

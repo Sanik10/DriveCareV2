@@ -1,17 +1,24 @@
-// src/modules/invoices/invoices.service.ts (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+// src/modules/invoices/invoices.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { InvoicesDataService } from './services/invoices-data.service';
 import { InvoicesBusinessService } from './services/invoices-business.service';
 import { InvoicesValidationService } from './services/invoices-validation.service';
 import { InvoicesMapperService } from './services/invoices-mapper.service';
-import { CreateInvoiceDto } from './dto/request/create-invoice.dto';
-import { CreateInvoiceFromOrderDto } from './dto/request/create-invoice.dto';
+import { CreateInvoiceDto, CreateInvoiceFromOrderDto } from './dto/request/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/request/update-invoice.dto';
 import { InvoiceResponseDto } from './dto/response/invoice-response.dto';
 import { PaginatedInvoicesResponseDto } from './dto/response/paginated-invoices-response.dto';
-import { InvoiceFilter, InvoiceStatus, CreateInvoiceData, UserWithCompany, InvoiceStatistics, OverdueInvoicesReport } from './types/invoices.types';
+import {
+  InvoiceFilter,
+  InvoiceStatus,
+  CreateInvoiceData,
+  UserWithCompany,
+  InvoiceStatistics,
+  OverdueInvoicesReport,
+} from './types/invoices.types';
 import { RequestWithUser } from '../auth/interfaces/request-with-user.interface';
 import { INVOICES_CONSTANTS } from './constants/invoices.constants';
+import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class InvoicesService {
@@ -24,21 +31,16 @@ export class InvoicesService {
     private readonly invoicesMapperService: InvoicesMapperService,
   ) {}
 
-  /**
-   * 🔒 Создание счета для пользователя
-   */
-  async createForUser(createInvoiceDto: CreateInvoiceDto, user: RequestWithUser['user']): Promise<InvoiceResponseDto> {
+  async createForUser(dto: CreateInvoiceDto, user: RequestWithUser['user']): Promise<InvoiceResponseDto> {
     this.logger.log(`Creating invoice for user ${user.id} in company ${user.companyId}`);
 
-    // 🔥 Преобразуем DTO в CreateInvoiceData
-    const createInvoiceData: CreateInvoiceData = {
-      ...createInvoiceDto,
-      companyId: createInvoiceDto.companyId || user.companyId!,
-      dueDate: new Date(createInvoiceDto.dueDate),
-      issueDate: createInvoiceDto.issueDate ? new Date(createInvoiceDto.issueDate) : undefined,
+    const createData: CreateInvoiceData = {
+      ...dto,
+      companyId: dto.companyId || user.companyId!,
+      dueDate: new Date(dto.dueDate),
+      issueDate: dto.issueDate ? new Date(dto.issueDate) : undefined,
     };
 
-    // 🔥 ИСПРАВЛЕНО: Преобразуем RequestWithUser['user'] в UserWithCompany
     const userWithCompany: UserWithCompany = {
       id: user.id,
       email: user.email,
@@ -48,24 +50,16 @@ export class InvoicesService {
       lastName: user.lastName,
     };
 
-    // Валидация данных с проверкой принадлежности
-    await this.invoicesValidationService.validateCreateDataForUser(createInvoiceData, userWithCompany);
+    await this.invoicesValidationService.validateCreateDataForUser(createData, userWithCompany);
 
-    // Создание через бизнес-сервис
-    const invoice = await this.invoicesBusinessService.createInvoiceForCompany(createInvoiceData, user.companyId!, userWithCompany);
+    const invoice = await this.invoicesBusinessService.createInvoiceForCompany(createData, user.companyId!, userWithCompany);
 
-    this.logger.log(`Invoice created: ${invoice.invoiceNumber} (${invoice.id})`);
-
-    return this.invoicesMapperService.mapToResponseDto(invoice);
+    return this.invoicesMapperService.mapToResponseDto(invoice, this.effectiveRole(user.role));
   }
 
-  /**
-   * 🎯 Создание счета из заказа (умная генерация)
-   */
-  async createFromOrder(createFromOrderDto: CreateInvoiceFromOrderDto, user: RequestWithUser['user']): Promise<InvoiceResponseDto> {
-    this.logger.log(`Creating invoice from order ${createFromOrderDto.orderId} for user ${user.id}`);
+  async createFromOrder(dto: CreateInvoiceFromOrderDto, user: RequestWithUser['user']): Promise<InvoiceResponseDto> {
+    this.logger.log(`Creating invoice from order ${dto.orderId} for user ${user.id}`);
 
-    // 🔥 ИСПРАВЛЕНО: Преобразуем тип пользователя
     const userWithCompany: UserWithCompany = {
       id: user.id,
       email: user.email,
@@ -75,30 +69,23 @@ export class InvoicesService {
       lastName: user.lastName,
     };
 
-    // Создание через бизнес-сервис с опциями
     const invoice = await this.invoicesBusinessService.createInvoiceFromOrder(
-      createFromOrderDto.orderId,
+      dto.orderId,
       user.companyId!,
       userWithCompany,
       {
-        paymentTermsDays: createFromOrderDto.paymentTermsDays,
-        discountPercent: createFromOrderDto.discountPercent,
-        notes: createFromOrderDto.notes,
-      }
+        paymentTermsDays: dto.paymentTermsDays,
+        discountPercent: dto.discountPercent,
+        notes: dto.notes,
+      },
     );
 
-    this.logger.log(`Invoice created from order: ${invoice.invoiceNumber} (${invoice.id})`);
-
-    return this.invoicesMapperService.mapToResponseDto(invoice);
+    return this.invoicesMapperService.mapToResponseDto(invoice, this.effectiveRole(user.role));
   }
 
-  /**
-   * 🔒 Получение всех счетов с фильтрацией по принадлежности
-   */
   async findAll(filter: InvoiceFilter = {}, user: RequestWithUser['user']): Promise<PaginatedInvoicesResponseDto> {
     this.logger.log(`Finding invoices with filters: ${JSON.stringify(filter)} for user ${user.id}`);
 
-    // 🔒 КРИТИЧНО: Фильтрация по принадлежности
     const secureFilter: InvoiceFilter = {
       ...filter,
       companyId: user.role === 'superadmin' ? filter.companyId : user.companyId!,
@@ -110,55 +97,46 @@ export class InvoicesService {
     const limit = Math.min(filter.limit || INVOICES_CONSTANTS.DEFAULTS.PAGE_SIZE, INVOICES_CONSTANTS.DEFAULTS.MAX_ITEMS);
     const totalPages = Math.ceil(total / limit);
 
-    // 📊 Получение дополнительной статистики для админки
-    const statistics = user.role !== 'mechanic' 
-      ? await this.invoicesDataService.getInvoicesStatistics(secureFilter.companyId!)
-      : null;
+    const statistics =
+      user.role !== 'mechanic' ? await this.invoicesDataService.getInvoicesStatistics(secureFilter.companyId!) : null;
 
-    return {
-      items: this.invoicesMapperService.mapArrayToResponseDto(invoices),
+    const items = this.invoicesMapperService.mapArrayToResponseDto(invoices, this.effectiveRole(user.role));
+
+    const response: PaginatedInvoicesResponseDto = {
+      items,
       total,
       page,
       limit,
       totalPages,
       hasNext: page < totalPages,
       hasPrev: page > 1,
-      
-      // 📊 Статистика (если доступна)
       totalAmount: statistics?.totalAmount || 0,
       paidAmount: statistics?.paidAmount || 0,
       pendingAmount: statistics?.pendingAmount || 0,
       overdueCount: statistics?.overdueCount || 0,
+      averageAmount: statistics ? Math.round((statistics.totalAmount / (statistics.total || 1)) * 100) / 100 : 0,
+      overduePercentage: statistics ? Math.round(((statistics.overdueCount / (statistics.total || 1)) * 100) * 100) / 100 : 0,
     };
+
+    return plainToInstance(PaginatedInvoicesResponseDto, response, { groups: [this.effectiveRole(user.role)] });
   }
 
-  /**
-   * 🔒 Получение счета по ID (с проверкой в Guard)
-   */
-  async findOne(id: string): Promise<InvoiceResponseDto> {
-    this.logger.log(`Finding invoice: ${id}`);
-
+  async findOne(id: string, user: RequestWithUser['user']): Promise<InvoiceResponseDto> {
     const invoice = await this.invoicesValidationService.validateInvoiceExists(id);
-
-    return this.invoicesMapperService.mapToResponseDto(invoice);
+    if (user.role !== 'superadmin' && invoice.companyId !== user.companyId) {
+      throw new Error('Access denied: Invoice belongs to different company');
+    }
+    return this.invoicesMapperService.mapToResponseDto(invoice, this.effectiveRole(user.role));
   }
 
-  /**
-   * 🔒 Обновление счета
-   */
-  async update(id: string, updateInvoiceDto: UpdateInvoiceDto, user: RequestWithUser['user']): Promise<InvoiceResponseDto> {
+  async update(id: string, dto: UpdateInvoiceDto, user: RequestWithUser['user']): Promise<InvoiceResponseDto> {
     this.logger.log(`Updating invoice: ${id}`);
 
-    // 🔥 ИСПРАВЛЕНО: Преобразование DTO с обработкой дат
     const updateData = {
-      ...updateInvoiceDto,
-      dueDate: updateInvoiceDto.dueDate ? new Date(updateInvoiceDto.dueDate) : undefined,
+      ...dto,
+      dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
     };
 
-    // Валидация обновления
-    await this.invoicesValidationService.validateUpdateData(id, updateData);
-
-    // 🔥 ИСПРАВЛЕНО: Преобразуем тип пользователя
     const userWithCompany: UserWithCompany = {
       id: user.id,
       email: user.email,
@@ -168,25 +146,19 @@ export class InvoicesService {
       lastName: user.lastName,
     };
 
-    // Обновление через бизнес-сервис
-    const updatedInvoice = await this.invoicesBusinessService.updateInvoice(id, updateData, userWithCompany);
+    await this.invoicesValidationService.validateUpdateDataForUser(id, updateData, userWithCompany);
 
-    this.logger.log(`Invoice updated: ${updatedInvoice.invoiceNumber} (${id})`);
+    const updated = await this.invoicesBusinessService.updateInvoice(id, updateData, userWithCompany);
 
-    return this.invoicesMapperService.mapToResponseDto(updatedInvoice);
+    return this.invoicesMapperService.mapToResponseDto(updated, this.effectiveRole(user.role));
   }
 
-  /**
-   * 🔄 Изменение статуса счета с business logic
-   */
   async updateStatus(id: string, status: InvoiceStatus, user: RequestWithUser['user']): Promise<InvoiceResponseDto> {
     this.logger.log(`Updating invoice status: ${id} → ${status}`);
 
-    // Получаем счет и валидируем переход
     const invoice = await this.invoicesValidationService.validateInvoiceExists(id);
     this.invoicesValidationService.validateStatusTransition(invoice.status as InvoiceStatus, status);
 
-    // 🔥 ИСПРАВЛЕНО: Преобразуем тип пользователя
     const userWithCompany: UserWithCompany = {
       id: user.id,
       email: user.email,
@@ -196,24 +168,14 @@ export class InvoicesService {
       lastName: user.lastName,
     };
 
-    // Изменение статуса через бизнес-сервис
-    const updatedInvoice = await this.invoicesBusinessService.changeInvoiceStatus(id, status, userWithCompany);
+    const updated = await this.invoicesBusinessService.changeInvoiceStatus(id, status, userWithCompany);
 
-    this.logger.log(`Invoice status updated: ${updatedInvoice.invoiceNumber} → ${status}`);
-
-    return this.invoicesMapperService.mapToResponseDto(updatedInvoice);
+    return this.invoicesMapperService.mapToResponseDto(updated, this.effectiveRole(user.role));
   }
 
-  /**
-   * ❌ Отмена счета
-   */
   async cancel(id: string, user: RequestWithUser['user']): Promise<void> {
     this.logger.log(`Canceling invoice: ${id}`);
 
-    // Валидация возможности отмены
-    await this.invoicesValidationService.validateInvoiceCancellation(id);
-
-    // 🔥 ИСПРАВЛЕНО: Преобразуем тип пользователя
     const userWithCompany: UserWithCompany = {
       id: user.id,
       email: user.email,
@@ -223,69 +185,39 @@ export class InvoicesService {
       lastName: user.lastName,
     };
 
-    // Отмена через бизнес-сервис
+    await this.invoicesValidationService.validateInvoiceCancellationForUser(id, userWithCompany);
     await this.invoicesBusinessService.cancelInvoice(id, userWithCompany);
-
-    this.logger.log(`Invoice canceled: ${id}`);
   }
 
-  // Остальные методы остаются без изменений, но с аналогичными исправлениями типов...
-  
-  /**
-   * 💰 Обработка получения платежа (для Payments модуля)
-   */
   async processPayment(invoiceId: string, paymentAmount: number, user: UserWithCompany): Promise<InvoiceResponseDto> {
     this.logger.log(`Processing payment ${paymentAmount} for invoice ${invoiceId}`);
-
-    const updatedInvoice = await this.invoicesBusinessService.processPaymentReceived(invoiceId, paymentAmount, user);
-
-    this.logger.log(`Payment processed for invoice: ${updatedInvoice.invoiceNumber}`);
-
-    return this.invoicesMapperService.mapToResponseDto(updatedInvoice);
+    const updated = await this.invoicesBusinessService.processPaymentReceived(invoiceId, paymentAmount, user);
+    return this.invoicesMapperService.mapToResponseDto(updated);
   }
 
-  /**
-   * 📊 Получение статистики счетов
-   */
   async getStatistics(user: RequestWithUser['user']): Promise<InvoiceStatistics & { averagePaymentTime: number }> {
     this.logger.log(`Getting invoice statistics for user ${user.id}`);
 
     const companyId = user.role === 'superadmin' ? undefined : user.companyId;
-    
     if (!companyId && user.role !== 'superadmin') {
       throw new Error('Company ID is required for non-superadmin users');
     }
 
     const statistics = await this.invoicesDataService.getInvoicesStatistics(companyId!);
+    const averagePaymentTime = 15; // заглушка
 
-    // TODO: Расчет среднего времени оплаты (требует данных из Payments)
-    const averagePaymentTime = 15; // Заглушка
-
-    return {
-      ...statistics,
-      averagePaymentTime,
-    };
+    return { ...statistics, averagePaymentTime };
   }
 
-  // Остальные методы остаются аналогично исправленными...
-  
-  // ========== МЕТОДЫ ДЛЯ ДРУГИХ МОДУЛЕЙ ==========
-
-  /**
-   * 🔗 Проверка существования счета (для других модулей)
-   */
   async exists(id: string): Promise<boolean> {
     const invoice = await this.invoicesDataService.findById(id);
     return !!invoice;
   }
 
-  /**
-   * 🔗 Получение базовой информации о счете (для Payments модуля)
-   */
-  async getInvoiceInfo(id: string): Promise<{ 
-    id: string; 
-    invoiceNumber: string; 
-    companyId: string; 
+  async getInvoiceInfo(id: string): Promise<{
+    id: string;
+    invoiceNumber: string;
+    companyId: string;
     status: string;
     orderId: string;
     totalAmount: number;
@@ -295,122 +227,105 @@ export class InvoicesService {
     return invoice ? this.invoicesMapperService.mapToBasicInfo(invoice) : null;
   }
 
-  /**
-   * 🔗 Проверка принадлежности счета компании (для других модулей)
-   */
   async belongsToCompany(invoiceId: string, companyId: string): Promise<boolean> {
     const invoice = await this.invoicesDataService.findByIdForCompany(invoiceId, companyId);
     return !!invoice;
   }
 
-  /**
-   * 📊 Получение количества счетов компании (для проверки лимитов)
-   */
   async getInvoicesCountForCompany(companyId: string): Promise<number> {
     return this.invoicesDataService.getInvoicesCountForCompany(companyId);
   }
 
-  /**
-	 * 🚨 Получение просроченных счетов
-	 */
-	async getOverdueInvoices(user: RequestWithUser['user']): Promise<OverdueInvoicesReport> {
-	this.logger.log(`Getting overdue invoices for user ${user.id}`);
+  async getOverdueInvoices(user: RequestWithUser['user']): Promise<OverdueInvoicesReport> {
+    this.logger.log(`Getting overdue invoices for user ${user.id}`);
 
-	const companyId = user.role === 'superadmin' ? undefined : user.companyId;
-	
-	if (!companyId && user.role !== 'superadmin') {
-		throw new Error('Company ID is required for non-superadmin users');
-	}
+    const companyId = user.role === 'superadmin' ? undefined : user.companyId;
+    if (!companyId && user.role !== 'superadmin') {
+      throw new Error('Company ID is required for non-superadmin users');
+    }
 
-	const overdueInvoices = await this.invoicesDataService.findOverdueInvoices(companyId!);
-	
-	// Группировка по клиентам
-	const byCustomerMap = new Map();
-	let totalAmount = 0;
+    const overdueInvoices = await this.invoicesDataService.findOverdueInvoices(companyId!);
 
-	for (const invoice of overdueInvoices) {
-		totalAmount += parseFloat(invoice.totalAmount.toString());
-		
-		const customerId = invoice.order?.customerId || 'unknown';
-		if (!byCustomerMap.has(customerId)) {
-		byCustomerMap.set(customerId, {
-			customerId,
-			customerName: 'Unknown Customer', // TODO: получать из Orders/Customers
-			count: 0,
-			totalAmount: 0,
-			oldestInvoiceDate: invoice.dueDate,
-		});
-		}
-		
-		const customerData = byCustomerMap.get(customerId);
-		customerData.count += 1;
-		customerData.totalAmount += parseFloat(invoice.totalAmount.toString());
-		
-		if (new Date(invoice.dueDate) < new Date(customerData.oldestInvoiceDate)) {
-		customerData.oldestInvoiceDate = invoice.dueDate;
-		}
-	}
+    const byCustomerMap = new Map<string, any>();
+    let totalAmount = 0;
 
-	return {
-		totalOverdue: overdueInvoices.length,
-		totalAmount,
-		byCustomer: Array.from(byCustomerMap.values()),
-	};
-	}
+    for (const invoice of overdueInvoices) {
+      totalAmount += parseFloat(invoice.totalAmount.toString());
+      const customerId = (invoice as any).order?.customerId || 'unknown';
 
-	/**
-	 * 🔍 Поиск счетов
-	 */
-	async search(query: string, user: RequestWithUser['user']): Promise<InvoiceResponseDto[]> {
-	this.logger.log(`Searching invoices with query: "${query}" for user ${user.id}`);
+      if (!byCustomerMap.has(customerId)) {
+        byCustomerMap.set(customerId, {
+          customerId,
+          customerName: 'Unknown Customer',
+          count: 0,
+          totalAmount: 0,
+          oldestInvoiceDate: invoice.dueDate,
+        });
+      }
 
-	const companyId = user.role === 'superadmin' ? undefined : user.companyId;
-	
-	if (!companyId && user.role !== 'superadmin') {
-		throw new Error('Company ID is required for non-superadmin users');
-	}
+      const customerData = byCustomerMap.get(customerId);
+      customerData.count += 1;
+      customerData.totalAmount += parseFloat(invoice.totalAmount.toString());
+      if (new Date(invoice.dueDate) < new Date(customerData.oldestInvoiceDate)) {
+        customerData.oldestInvoiceDate = invoice.dueDate;
+      }
+    }
 
-	const searchFilter: InvoiceFilter = {
-		companyId: companyId!,
-		search: query,
-		limit: 50, // Ограничиваем результаты поиска
-	};
+    return {
+      totalOverdue: overdueInvoices.length,
+      totalAmount,
+      byCustomer: Array.from(byCustomerMap.values()),
+    };
+  }
 
-	const [invoices] = await this.invoicesDataService.findWithFilters(searchFilter);
+  async search(query: string, user: RequestWithUser['user']): Promise<InvoiceResponseDto[]> {
+    this.logger.log(`Searching invoices with query: "${query}" for user ${user.id}`);
 
-	return this.invoicesMapperService.mapArrayToResponseDto(invoices);
-	}
+    const companyId = user.role === 'superadmin' ? undefined : user.companyId;
+    if (!companyId && user.role !== 'superadmin') {
+      throw new Error('Company ID is required for non-superadmin users');
+    }
 
-	/**
-	 * 📋 Получение счетов для dropdown/select
-	 */
-	async getForSelect(user: RequestWithUser['user'], options?: { status?: InvoiceStatus }) {
-	this.logger.log(`Getting invoices for select for user ${user.id}`);
+    const searchFilter: InvoiceFilter = {
+      companyId: companyId!,
+      search: query,
+      limit: 50,
+    };
 
-	const companyId = user.role === 'superadmin' ? undefined : user.companyId;
-	
-	if (!companyId && user.role !== 'superadmin') {
-		throw new Error('Company ID is required for non-superadmin users');
-	}
+    const [invoices] = await this.invoicesDataService.findWithFilters(searchFilter);
+    return this.invoicesMapperService.mapArrayToResponseDto(invoices, this.effectiveRole(user.role));
+  }
 
-	const filter: InvoiceFilter = {
-		companyId: companyId!,
-		status: options?.status,
-		limit: 100,
-		sortField: 'invoiceNumber',
-		sortOrder: 'desc',
-	};
+  async getForSelect(user: RequestWithUser['user'], options?: { status?: InvoiceStatus }) {
+    this.logger.log(`Getting invoices for select for user ${user.id}`);
 
-	const [invoices] = await this.invoicesDataService.findWithFilters(filter);
+    const companyId = user.role === 'superadmin' ? undefined : user.companyId;
+    if (!companyId && user.role !== 'superadmin') {
+      throw new Error('Company ID is required for non-superadmin users');
+    }
 
-	return invoices.map(invoice => ({
-		id: invoice.id,
-		invoiceNumber: invoice.invoiceNumber,
-		totalAmount: invoice.totalAmount,
-		status: invoice.status,
-		dueDate: invoice.dueDate,
-		label: `${invoice.invoiceNumber} (${invoice.totalAmount} ₽)`,
-		value: invoice.id,
-	}));
-	}
+    const filter: InvoiceFilter = {
+      companyId: companyId!,
+      status: options?.status,
+      limit: 100,
+      sortField: 'invoiceNumber',
+      sortOrder: 'desc',
+    };
+
+    const [invoices] = await this.invoicesDataService.findWithFilters(filter);
+
+    return invoices.map((invoice) => ({
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      totalAmount: invoice.totalAmount,
+      status: invoice.status,
+      dueDate: invoice.dueDate,
+      label: `${invoice.invoiceNumber} (${invoice.totalAmount} ₽)`,
+      value: invoice.id,
+    }));
+  }
+
+  private effectiveRole(role: string): any {
+    return role === 'superadmin' ? 'company_admin' : role;
+  }
 }

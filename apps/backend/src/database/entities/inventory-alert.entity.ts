@@ -1,8 +1,23 @@
-// database/entities/inventory-alert.entity.ts - ПОЛНОЕ ОБНОВЛЕНИЕ
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+// path: apps/backend/src/database/entities/inventory-alert.entity.ts
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+  Check,
+} from 'typeorm';
 import { Part } from './part.entity';
 
 @Entity('inventory_alerts')
+@Index('idx_inventory_alerts_companyid', ['companyId'])
+@Index('idx_inventory_alerts_partid', ['partId'])
+@Index('idx_inventory_alerts_createdat', ['createdAt'])
+@Check('chk_alert_current_qty_nonneg', '"currentQuantity" IS NULL OR "currentQuantity" >= 0')
+@Check('chk_alert_threshold_qty_nonneg', '"thresholdQuantity" IS NULL OR "thresholdQuantity" >= 0')
 export class InventoryAlert {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -10,92 +25,58 @@ export class InventoryAlert {
   @Column({ type: 'uuid' })
   companyId: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: 'uuid', name: 'part_id' })
   partId: string;
 
-  @ManyToOne(() => Part)
-  @JoinColumn({ name: 'part_id' })
+  @ManyToOne(() => Part, { eager: false })
+  @JoinColumn({ name: 'part_id', referencedColumnName: 'id' })
   part: Part;
 
-  // 🔥 НОВЫЕ ПОЛЯ для расширенной alerts системы
-  @Column({ 
-    type: 'varchar', 
+  @Column({
+    type: 'varchar',
     length: 50,
-    default: 'low_stock' // Значение по умолчанию для совместимости
+    default: 'low_stock',
   })
   type: 'low_stock' | 'out_of_stock' | 'overstock' | 'expired_reservation';
 
-  @Column({ 
-    type: 'varchar', 
+  @Column({
+    type: 'varchar',
     length: 20,
-    default: 'medium' // Значение по умолчанию
+    default: 'medium',
   })
   priority: 'low' | 'medium' | 'high' | 'critical';
 
-  @Column({ 
-    type: 'varchar', 
-    length: 200,
-    nullable: true // Сделаем nullable для совместимости
-  })
+  @Column({ type: 'varchar', length: 200, nullable: true })
   title: string | null;
 
-  @Column({ 
-    type: 'text',
-    nullable: true // Сделаем nullable для совместимости
-  })
+  @Column({ type: 'text', nullable: true })
   message: string | null;
 
-  @Column({ 
-    type: 'integer', 
-    nullable: true 
-  })
+  @Column({ type: 'integer', nullable: true })
   currentQuantity: number | null;
 
-  @Column({ 
-    type: 'integer', 
-    nullable: true 
-  })
+  @Column({ type: 'integer', nullable: true })
   thresholdQuantity: number | null;
 
-  @Column({ 
-    type: 'jsonb', 
-    nullable: true 
-  })
+  @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any> | null;
 
-  @Column({ 
-    type: 'boolean', 
-    default: true 
-  })
+  @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
-  @Column({ 
-    type: 'boolean', 
-    default: false 
-  })
+  @Column({ type: 'boolean', default: false })
   isDismissed: boolean;
 
-  @Column({ 
-    type: 'varchar', 
-    length: 255, 
-    nullable: true 
-  })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   dismissedBy: string | null;
 
-  @Column({ 
-    type: 'timestamp', 
-    nullable: true 
-  })
+  @Column({ type: 'timestamptz', nullable: true })
   dismissedAt: Date | null;
 
-  @Column({ 
-    type: 'varchar', 
-    length: 255, 
-    nullable: true 
-  })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   triggeredBy: string | null;
 
-  // СУЩЕСТВУЮЩИЕ ПОЛЯ (для обратной совместимости)
+  // Legacy-compatible fields
   @Column({ type: 'integer', default: 0 })
   minQuantity: number;
 
@@ -108,12 +89,12 @@ export class InventoryAlert {
   @Column({ type: 'boolean', default: false })
   notified: boolean;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   lastNotificationDate: Date | null;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 }

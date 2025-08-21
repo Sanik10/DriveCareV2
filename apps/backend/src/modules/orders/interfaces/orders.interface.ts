@@ -13,11 +13,11 @@ export interface IOrdersDataService {
 
 export interface IOrdersBusinessService {
   createOrderForCompany(data: CreateOrderData, companyId: string): Promise<Order>;
-  updateOrder(id: string, data: UpdateOrderData): Promise<Order>;
-  changeOrderStatus(id: string, newStatus: OrderStatus): Promise<Order>;
-  assignMechanicToOrder(orderId: string, mechanicId: string): Promise<Order>;
-  cancelOrder(id: string): Promise<void>;
-  recalculateOrderFinancials(id: string): Promise<Order>;
+  updateOrder(id: string, data: UpdateOrderData, actorUserId: string): Promise<Order>;
+  changeOrderStatus(id: string, newStatus: OrderStatus, actorUserId: string): Promise<Order>;
+  assignMechanicToOrder(orderId: string, mechanicId: string, actorUserId: string): Promise<Order>;
+  cancelOrder(id: string, actorUserId: string): Promise<void>;
+  recalculateOrderFinancials(id: string, actorUserId: string): Promise<Order>;
 }
 
 export interface IOrdersValidationService {
@@ -31,8 +31,8 @@ export interface IOrdersValidationService {
 }
 
 export interface IOrdersMapperService {
-  mapToResponseDto(order: Order): any; // OrderResponseDto
-  mapArrayToResponseDto(orders: Order[]): any[]; // OrderResponseDto[]
+  mapToResponseDto(order: Order): any;
+  mapArrayToResponseDto(orders: Order[]): any[];
   mapToBasicInfo(order: Order): {
     id: string;
     orderNumber: string;

@@ -1,6 +1,6 @@
-// src/modules/payments/payments.module.ts - ИСПРАВИТЬ ИМПОРТЫ:
+// src/modules/payments/payments.module.ts (✅ DEPENDENCIES FIXED)
 
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Payment, Invoice, PaymentMethod } from '../../database/entities';
 
@@ -25,10 +25,10 @@ import { AuditService } from '../../common/audit/audit.service';
     // ✅ ДОБАВЛЯЕМ СУЩНОСТИ
     TypeOrmModule.forFeature([Payment, Invoice, PaymentMethod]),
     
-    // ✅ ИМПОРТИРУЕМ ЗАВИСИМЫЕ МОДУЛИ
-    InvoicesModule,        // Для InvoicesService
-    PaymentMethodsModule,  // Для PaymentMethodsService
-    SubscriptionsModule,   // Для SubscriptionLimitsService
+    // ✅ ИСПРАВЛЕНЫ CIRCULAR DEPENDENCIES
+    forwardRef(() => InvoicesModule),        // Для InvoicesService
+    forwardRef(() => PaymentMethodsModule),  // Для PaymentMethodsService
+    SubscriptionsModule,                     // Для SubscriptionLimitsService
   ],
   controllers: [PaymentsController],
   providers: [
@@ -42,6 +42,7 @@ import { AuditService } from '../../common/audit/audit.service';
   exports: [
     PaymentsService,
     PaymentsDataService,  // Экспортируем для других модулей
+    PaymentsValidationService, // ✅ ДОБАВЛЕНО для CompanyOwnershipGuard
   ],
 })
 export class PaymentsModule {}

@@ -1,5 +1,5 @@
-// src/modules/inventory/suppliers/suppliers.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+// path: apps/backend/src/modules/inventory/suppliers/suppliers.service.ts
+import { Injectable, Logger, Inject, ConflictException } from '@nestjs/common';
 import { SuppliersDataService } from './services/suppliers-data.service';
 import { SuppliersBusinessService } from './services/suppliers-business.service';
 import { SuppliersValidationService } from './services/suppliers-validation.service';
@@ -11,253 +11,274 @@ import { SupplierResponseDto } from './dto/response/supplier-response.dto';
 import { PaginatedSuppliersResponseDto } from './dto/response/paginated-suppliers-response.dto';
 import { SupplierRatingResponseDto } from './dto/response/supplier-rating-response.dto';
 import { SupplierAnalyticsResponseDto } from './dto/response/supplier-analytics-response.dto';
-import { 
-  SupplierFilter, 
-  SupplierRatingData, 
+import {
+  SupplierFilter,
+  SupplierRatingData,
   BulkSupplierResult,
-  CreateSupplierData // ✅ ДОБАВЛЯЕМ импорт
+  CreateSupplierData,
 } from './types/suppliers.types';
 import { RequestWithUser } from '../../auth/interfaces/request-with-user.interface';
 import { INVENTORY_CONSTANTS } from '../constants/inventory.constants';
+import { REDIS_CLIENT } from '../../../common/redis/redis.constants';
+import { Redis } from 'ioredis';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class SuppliersService {
   private readonly logger = new Logger(SuppliersService.name);
+  private readonly idempTtlMs: number;
 
   constructor(
     private readonly suppliersDataService: SuppliersDataService,
     private readonly suppliersBusinessService: SuppliersBusinessService,
     private readonly suppliersValidationService: SuppliersValidationService,
     private readonly suppliersMapperService: SuppliersMapperService,
-  ) {}
+    private readonly configService: ConfigService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {
+    this.idempTtlMs = this.configService.get<number>('inventory.idempotencyTtlMs') ?? 21600000;
+  }
 
-  /**
-   * 🔒 Получение всех поставщиков с фильтрацией по принадлежности
-   */
-  async findAll(filter: SupplierFilter = {}): Promise<PaginatedSuppliersResponseDto> {
-    this.logger.log(`Finding suppliers with filters: ${JSON.stringify(filter)}`);
+  private canViewContacts(role: string): boolean {
+    return INVENTORY_CONSTANTS.ROLES.CAN_MANAGE_SUPPLIERS.includes(role as any);
+  }
 
+  async findAll(filter: SupplierFilter = {}, user: RequestWithUser['user']): Promise<PaginatedSuppliersResponseDto> {
+    this.logger.log(`Finding suppliers with filters: ${JSON.stringify({ ...filter, search: !!filter.search })}`);
     const [suppliers, total] = await this.suppliersDataService.findWithFilters(filter);
-
     const page = filter.page || 1;
     const limit = filter.limit || INVENTORY_CONSTANTS.DEFAULTS.PAGE_SIZE;
-
+    const maskContacts = !this.canViewContacts(user.role);
     return this.suppliersMapperService.mapToPaginatedResponse(
       suppliers,
       total,
       page,
       limit,
-      filter
+      filter,
+      maskContacts,
     );
   }
 
-  /**
-   * 🔒 Получение поставщика по ID (с проверкой в Guard)
-   */
-  async findOne(id: string): Promise<SupplierResponseDto> {
+  async findOne(id: string, user: RequestWithUser['user']): Promise<SupplierResponseDto> {
     this.logger.log(`Finding supplier: ${id}`);
-
     const supplier = await this.suppliersValidationService.validateSupplierExists(id);
-
-    return this.suppliersMapperService.mapToResponseDto(supplier);
+    return this.suppliersMapperService.mapToResponseDto(supplier, !this.canViewContacts(user.role));
   }
 
-  /**
-   * 📝 Создание поставщика
-   */
-  async create(
-	createSupplierDto: CreateSupplierDto,
-	user: RequestWithUser['user']
-	): Promise<SupplierResponseDto> {
-	this.logger.log(`Creating supplier for company: ${user.companyId}`);
+  async create(createSupplierDto: CreateSupplierDto, user: RequestWithUser['user']): Promise<SupplierResponseDto> {
+    this.logger.log(`Creating supplier for company: ${user.companyId}`);
+    const supplierData: CreateSupplierData = {
+      ...createSupplierDto,
+      companyId: user.companyId,
+      createdBy: user.id,
+      isActive: createSupplierDto.isActive ?? true,
+    };
+    await this.suppliersValidationService.validateCreateSupplier(supplierData, user);
+    const supplier = await this.suppliersBusinessService.createSupplier(supplierData, user);
+    this.logger.log(`Supplier created: ${supplier.id}`);
+    return this.suppliersMapperService.mapToResponseDto(supplier, !this.canViewContacts(user.role));
+  }
 
-	// ✅ ИСПРАВЛЕНО: Используем правильный тип CreateSupplierData
-	const supplierData: CreateSupplierData = {
-		...createSupplierDto,
-		companyId: user.companyId,
-		createdBy: user.id,
-		isActive: createSupplierDto.isActive ?? true,
-	};
-
-	// Валидация создания
-	await this.suppliersValidationService.validateCreateSupplier(supplierData, user);
-
-	// Создание через бизнес-сервис
-	const supplier = await this.suppliersBusinessService.createSupplier(supplierData, user);
-
-	this.logger.log(`Supplier created: ${supplier.id}`);
-
-	return this.suppliersMapperService.mapToResponseDto(supplier);
-	}
-
-  /**
-   * 📝 Обновление поставщика
-   */
   async update(
     id: string,
     updateSupplierDto: UpdateSupplierDto,
-    user: RequestWithUser['user']
+    user: RequestWithUser['user'],
   ): Promise<SupplierResponseDto> {
     this.logger.log(`Updating supplier: ${id}`);
-
-    // Валидация обновления
     await this.suppliersValidationService.validateUpdateSupplier(id, updateSupplierDto, user);
-
-    // Обновление через бизнес-сервис
-    const updatedSupplier = await this.suppliersBusinessService.updateSupplier(
-      id, 
-      updateSupplierDto, 
-      user
-    );
-
+    const updatedSupplier = await this.suppliersBusinessService.updateSupplier(id, updateSupplierDto, user);
     this.logger.log(`Supplier updated: ${id}`);
-
-    return this.suppliersMapperService.mapToResponseDto(updatedSupplier);
+    return this.suppliersMapperService.mapToResponseDto(updatedSupplier, !this.canViewContacts(user.role));
   }
 
-  /**
-   * 🗑️ Деактивация поставщика
-   */
-  async deactivate(
-    id: string,
-    user: RequestWithUser['user']
-  ): Promise<SupplierResponseDto> {
+  async deactivate(id: string, user: RequestWithUser['user']): Promise<SupplierResponseDto> {
     this.logger.log(`Deactivating supplier: ${id}`);
-
-    // Валидация деактивации
     await this.suppliersValidationService.validateDeactivateSupplier(id, user);
-
-    // Деактивация через бизнес-сервис
     const deactivatedSupplier = await this.suppliersBusinessService.deactivateSupplier(id, user);
-
     this.logger.log(`Supplier deactivated: ${id}`);
-
-    return this.suppliersMapperService.mapToResponseDto(deactivatedSupplier);
+    return this.suppliersMapperService.mapToResponseDto(deactivatedSupplier, !this.canViewContacts(user.role));
   }
 
-  /**
-   * ⭐ Оценка поставщика
-   */
+  // ВАЖНО: добавлен опциональный idempotencyKey (4-й аргумент)
   async rateSupplier(
     id: string,
     ratingData: SupplierRatingData,
-    user: RequestWithUser['user']
+    user: RequestWithUser['user'],
+    idempotencyKey?: string,
   ): Promise<SupplierRatingResponseDto> {
     this.logger.log(`Rating supplier: ${id}`);
 
-    // Валидация рейтинга
+    if (idempotencyKey) {
+      const lockKey = `idemp:inventory:suppliers:rate:lock:${user.companyId}:${id}:${user.id}:${idempotencyKey}`;
+      const resultKey = `idemp:inventory:suppliers:rate:result:${user.companyId}:${id}:${user.id}:${idempotencyKey}`;
+
+      const cached = await this.redis.get(resultKey);
+      if (cached) {
+        this.logger.log(`Returning cached rating for key ${idempotencyKey}`);
+        return JSON.parse(cached);
+      }
+
+      // Порядок аргументов для ioredis типов: 'PX', ttl, 'NX'
+      const locked = await this.redis.set(lockKey, '1', 'PX', this.idempTtlMs, 'NX');
+      if (!locked) {
+        throw new ConflictException('Оценка уже обрабатывается (идемпотентность). Повторите позже.');
+      }
+
+      try {
+        await this.suppliersValidationService.validateRateSupplier(id, ratingData, user);
+        const rating = await this.suppliersBusinessService.rateSupplier(id, ratingData, user);
+        const dto = this.suppliersMapperService.mapToRatingResponse(rating);
+        await this.redis.set(resultKey, JSON.stringify(dto), 'PX', this.idempTtlMs);
+        return dto;
+      } finally {
+        await this.redis.del(lockKey).catch(() => void 0);
+      }
+    }
+
     await this.suppliersValidationService.validateRateSupplier(id, ratingData, user);
-
-    // Создание рейтинга через бизнес-сервис
     const rating = await this.suppliersBusinessService.rateSupplier(id, ratingData, user);
-
-    this.logger.log(`Supplier rated: ${id}, rating: ${rating.averageRating}`);
-
     return this.suppliersMapperService.mapToRatingResponse(rating);
   }
 
-  /**
-   * 💰 Сравнение цен на запчасть
-   */
-  async comparePartPrices(
-    partId: string,
-    companyId: string
-  ): Promise<any> {
+  async comparePartPrices(partId: string, companyId: string): Promise<any> {
     this.logger.log(`Comparing prices for part: ${partId}`);
-
     return this.suppliersBusinessService.comparePartPrices(partId, companyId);
   }
 
-  /**
-   * 📊 Аналитика по поставщику
-   */
   async getSupplierAnalytics(
     id: string,
     period: 'month' | 'quarter' | 'year',
-    companyId: string
+    companyId: string,
   ): Promise<SupplierAnalyticsResponseDto> {
     this.logger.log(`Getting analytics for supplier: ${id}, period: ${period}`);
-
-    const analytics = await this.suppliersBusinessService.getSupplierAnalytics(
-      id, 
-      period, 
-      companyId
-    );
-
+    const analytics = await this.suppliersBusinessService.getSupplierAnalytics(id, period, companyId);
     return this.suppliersMapperService.mapToAnalyticsResponse(analytics);
   }
 
-  /**
-   * 📦 Массовые операции
-   */
   async bulkOperations(
     bulkSuppliersDto: BulkSuppliersDto,
-    user: RequestWithUser['user']
+    user: RequestWithUser['user'],
+    idempotencyKey?: string,
   ): Promise<BulkSupplierResult> {
-    this.logger.log(`Bulk operations: ${bulkSuppliersDto.operation} for ${bulkSuppliersDto.suppliers.length} suppliers`);
+    this.logger.log(
+      `Bulk operations: ${bulkSuppliersDto.operation} for ${bulkSuppliersDto.suppliers.length} suppliers`,
+    );
 
-    // Валидация bulk операции
+    if (idempotencyKey) {
+      const lockKey = `idemp:inventory:suppliers:bulk:lock:${user.companyId}:${idempotencyKey}`;
+      const resultKey = `idemp:inventory:suppliers:bulk:result:${user.companyId}:${idempotencyKey}`;
+
+      const cached = await this.redis.get(resultKey);
+      if (cached) {
+        this.logger.log(`Returning cached bulk result for key ${idempotencyKey}`);
+        return JSON.parse(cached);
+      }
+
+      const locked = await this.redis.set(lockKey, '1', 'PX', this.idempTtlMs, 'NX');
+      if (!locked) {
+        throw new ConflictException('Идет обработка аналогичной операции (идемпотентность). Повторите позже.');
+      }
+
+      try {
+        await this.suppliersValidationService.validateBulkOperation(bulkSuppliersDto, user);
+        const result = await this.suppliersBusinessService.bulkOperations(bulkSuppliersDto, user);
+        await this.redis.set(resultKey, JSON.stringify(result), 'PX', this.idempTtlMs);
+        return result;
+      } finally {
+        await this.redis.del(lockKey).catch(() => void 0);
+      }
+    }
+
     await this.suppliersValidationService.validateBulkOperation(bulkSuppliersDto, user);
-
-    // Выполнение через бизнес-сервис
-    const result = await this.suppliersBusinessService.bulkOperations(bulkSuppliersDto, user);
-
-    this.logger.log(`Bulk operation completed: ${result.successCount} success, ${result.failureCount} failures`);
-
-    return result;
+    return this.suppliersBusinessService.bulkOperations(bulkSuppliersDto, user);
   }
 
-  /**
-   * 🔍 Поиск лучшего поставщика для запчасти
-   */
-  async findBestSupplierForPart(
-    partId: string,
-    prioritize: 'price' | 'quality' | 'delivery',
-    companyId: string
-  ): Promise<any> {
-    this.logger.log(`Finding best supplier for part: ${partId}, prioritize: ${prioritize}`);
-
-    return this.suppliersBusinessService.findBestSupplierForPart(partId, prioritize, companyId);
-  }
-
-  /**
-   * 📈 Топ поставщики компании
-   */
-  async getTopPerformers(
-    companyId: string,
-    period: 'month' | 'quarter' | 'year',
-    limit: number
-  ): Promise<any> {
-    this.logger.log(`Getting top performers for company: ${companyId}, period: ${period}`);
-
-    return this.suppliersBusinessService.getTopPerformers(companyId, period, limit);
-  }
-
-  /**
-   * 📋 Для других модулей - проверка существования поставщика
-   */
   async exists(id: string, companyId: string): Promise<boolean> {
     const supplier = await this.suppliersDataService.findByIdForCompany(id, companyId);
     return !!supplier;
   }
 
-  /**
-   * 📊 Для stock-movements - получение информации о поставщике
-   */
   async getSupplierInfo(id: string, companyId: string): Promise<any> {
     const supplier = await this.suppliersDataService.findByIdForCompany(id, companyId);
-    
-    if (!supplier) {
-      return null;
-    }
-
+    if (!supplier) return null;
     return this.suppliersMapperService.mapToBasicInfo(supplier);
   }
 
-  /**
-   * 🔄 Для orders модуля - получение активных поставщиков для запчасти
-   */
   async getActiveSuppliersForPart(partId: string, companyId: string): Promise<any[]> {
     return this.suppliersDataService.findActiveSuppliersForPart(partId, companyId);
+  }
+
+  // Добавлено ранее: лучшая рекомендация поставщика по запчасти (скоринг)
+  async findBestSupplierForPart(
+    partId: string,
+    prioritize: 'price' | 'quality' | 'delivery',
+    companyId: string,
+  ) {
+    const comparison = await this.suppliersBusinessService.comparePartPrices(partId, companyId);
+    const suppliers = Array.isArray(comparison?.suppliers) ? comparison.suppliers : [];
+    if (suppliers.length === 0) {
+      return { partId, bestSupplier: null, alternatives: [] };
+    }
+
+    const prices = suppliers.map((s: any) => Number(s.price) || 0).filter((p: number) => p > 0);
+    const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+    const deliveries = suppliers.map((s: any) => Number(s.deliveryTime) || Infinity);
+    const minDelivery = deliveries.length > 0 ? Math.min(...deliveries) : Infinity;
+
+    const weights =
+      prioritize === 'price'
+        ? { price: 0.6, quality: 0.2, delivery: 0.2 }
+        : prioritize === 'quality'
+        ? { price: 0.2, quality: 0.6, delivery: 0.2 }
+        : { price: 0.2, quality: 0.2, delivery: 0.6 };
+
+    const scored = suppliers.map((s: any) => {
+      const price = Number(s.price) || 0;
+      const rating = Number(s.rating) || 0;
+      const delivery = Number(s.deliveryTime) || (minDelivery === Infinity ? 0 : minDelivery);
+
+      const normPrice = minPrice > 0 && price > 0 ? minPrice / price : 0;
+      const normQuality = rating > 0 ? rating / 5 : 0;
+      const normDelivery = minDelivery > 0 && delivery > 0 ? minDelivery / delivery : 0;
+
+      const score = weights.price * normPrice + weights.quality * normQuality + weights.delivery * normDelivery;
+
+      return {
+        id: s.supplierId || s.id,
+        name: s.supplierName || s.name,
+        price,
+        rating,
+        deliveryTime: delivery,
+        score: Math.round(score * 1000) / 1000,
+      };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    const [best, ...rest] = scored;
+
+    return {
+      partId,
+      bestSupplier: best || null,
+      alternatives: rest,
+    };
+  }
+
+  // Добавлено ранее: топ-поставщики за период
+  async getTopPerformers(
+    companyId: string,
+    period: 'month' | 'quarter' | 'year',
+    limit: number,
+  ) {
+    const rows = await this.suppliersDataService.getTopPerformers(companyId, period, limit);
+    const topSuppliers = rows.map((r: any) => ({
+      id: r.supplierId,
+      name: r.supplierName,
+      totalOrders: Number(r.totalOrders) || 0,
+      totalValue: Number(r.totalValue) || 0,
+      averageRating: Number(r.averageRating) || 0,
+      onTimeDeliveryRate: Number(r.onTimeDeliveryRate) || 0,
+      rank: Number(r.rank) || 0,
+    }));
+    return { period, topSuppliers };
   }
 }

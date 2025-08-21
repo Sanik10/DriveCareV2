@@ -1,3 +1,4 @@
+// apps/backend/src/modules/customers/dto/request/update-customer.dto.ts
 import { PartialType } from '@nestjs/swagger';
 import { CreateCustomerDto } from './create-customer.dto';
 
@@ -6,6 +7,5 @@ import { CreateCustomerDto } from './create-customer.dto';
  * 🔒 SECURITY: companyId нельзя изменить - клиент всегда принадлежит к исходной компании
  */
 export class UpdateCustomerDto extends PartialType(CreateCustomerDto) {
-  // 🔥 ИСПРАВЛЕНО: Убрали возможность изменять companyId
-  // Клиент не может быть перенесен в другую компанию
+  // companyId не передаётся и не может быть изменён
 }

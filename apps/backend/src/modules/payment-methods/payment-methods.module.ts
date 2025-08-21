@@ -1,9 +1,8 @@
-// src/modules/payment-methods/payment-methods.module.ts
+// path: apps/backend/src/modules/payment-methods/payment-methods.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { PaymentMethod } from '../../database/entities';
+import { PaymentMethod, Payment } from '../../database/entities';
 
-// 🎯 Main PaymentMethods
 import { PaymentMethodsController } from './payment-methods.controller';
 import { PaymentMethodsService } from './payment-methods.service';
 import { PaymentMethodsBusinessService } from './services/payment-methods-business.service';
@@ -13,13 +12,10 @@ import { PaymentMethodsMapperService } from './services/payment-methods-mapper.s
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PaymentMethod]), // 🔧 Правильный импорт entities
+    TypeOrmModule.forFeature([PaymentMethod, Payment]),
   ],
-  controllers: [
-    PaymentMethodsController,
-  ],
+  controllers: [PaymentMethodsController],
   providers: [
-    // 🎯 Main PaymentMethods Services
     PaymentMethodsService,
     PaymentMethodsBusinessService,
     PaymentMethodsDataService,
@@ -28,8 +24,8 @@ import { PaymentMethodsMapperService } from './services/payment-methods-mapper.s
   ],
   exports: [
     PaymentMethodsService,
-    PaymentMethodsValidationService, // 🔒 Экспортируем для CompanyOwnershipGuard
-    PaymentMethodsBusinessService, // 🔗 Для других модулей (Orders, Payments)
+    PaymentMethodsValidationService,
+    PaymentMethodsBusinessService,
   ],
 })
 export class PaymentMethodsModule {}

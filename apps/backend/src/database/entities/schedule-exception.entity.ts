@@ -1,5 +1,13 @@
-// src/database/entities/schedule-exception.entity.ts
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+// path: apps/backend/src/database/entities/schedule-exception.entity.ts
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  Index,
+  Check,
+} from 'typeorm';
 
 export enum ExceptionType {
   VACATION = 'vacation',
@@ -17,6 +25,14 @@ export enum ExceptionStatus {
 }
 
 @Entity('schedule_exceptions')
+@Index('idx_se_company_user', ['companyId', 'userId'])
+@Index('idx_se_company_status', ['companyId', 'status'])
+@Index('idx_se_company_start_end', ['companyId', 'startDate', 'endDate'])
+@Check('chk_se_date_range', '("endDate" >= "startDate")')
+@Check(
+  'chk_se_partial_time_valid',
+  '("isFullDay" = true) OR ("startTime" IS NOT NULL AND "endTime" IS NOT NULL AND "endTime" > "startTime")',
+)
 export class ScheduleException {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -28,8 +44,7 @@ export class ScheduleException {
   userId: string;
 
   @Column({
-    type: 'varchar',
-    length: 20,
+    type: 'enum',
     enum: ExceptionType,
   })
   type: ExceptionType;
@@ -44,40 +59,40 @@ export class ScheduleException {
   isFullDay: boolean;
 
   @Column({ type: 'time', nullable: true })
-  startTime: string;
+  startTime: string | null;
 
   @Column({ type: 'time', nullable: true })
-  endTime: string;
+  endTime: string | null;
 
   @Column({ type: 'text', nullable: true })
-  reason: string;
+  reason: string | null;
 
   @Column({
-    type: 'varchar',
-    length: 20,
+    type: 'enum',
     enum: ExceptionStatus,
-    default: ExceptionStatus.PENDING
+    default: ExceptionStatus.PENDING,
   })
   status: ExceptionStatus;
 
   @Column({ type: 'uuid', nullable: true })
-  approvedBy: string;
+  approvedBy: string | null;
 
-  @Column({ type: 'timestamp', nullable: true })
-  approvedAt: Date;
+  @Column({ type: 'timestamptz', nullable: true })
+  approvedAt: Date | null;
 
   @Column({ type: 'text', nullable: true })
-  rejectionReason: string;
+  rejectionReason: string | null;
 
-  @Column({ type: 'integer', default: 0 })
-  affectedAppointments: number;
+  // Список ID затронутых записей (jsonb) — удобно для последующей аналитики
+  @Column({ type: 'jsonb', nullable: false, default: () => `('[]')::jsonb` })
+  affectedAppointments: string[];
 
-  @Column({ type: 'json', nullable: true })
-  coverageAnalysis: string;
+  @Column({ type: 'jsonb', nullable: true })
+  coverageAnalysis: Record<string, any> | null;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 }

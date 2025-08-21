@@ -1,4 +1,4 @@
-// src/modules/inventory/suppliers/suppliers.controller.ts
+// path: apps/backend/src/modules/inventory/suppliers/suppliers.controller.ts
 import {
   Controller,
   Get,
@@ -6,14 +6,15 @@ import {
   Body,
   Patch,
   Param,
-  Delete,
   Query,
-  HttpCode,
   HttpStatus,
   ParseUUIDPipe,
   DefaultValuePipe,
   ParseIntPipe,
   Req,
+  Headers,
+  BadRequestException,
+  ParseBoolPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,16 +24,17 @@ import {
   ApiQuery,
   ApiBody,
   ApiUnauthorizedResponse,
-  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiBadRequestResponse,
   ApiTooManyRequestsResponse,
+  ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { SuppliersService } from './suppliers.service';
 import { CreateSupplierDto } from './dto/request/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/request/update-supplier.dto';
 import { BulkSuppliersDto } from './dto/request/bulk-suppliers.dto';
+import { RateSupplierDto } from './dto/request/rate-supplier.dto';
 import { SupplierResponseDto } from './dto/response/supplier-response.dto';
 import { PaginatedSuppliersResponseDto } from './dto/response/paginated-suppliers-response.dto';
 import { SupplierRatingResponseDto } from './dto/response/supplier-rating-response.dto';
@@ -48,99 +50,255 @@ import { INVENTORY_CONSTANTS } from '../constants/inventory.constants';
 export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
-  /**
-   * 🔒 Получение всех поставщиков компании
-   */
+  // =========================
+  // Статические маршруты (выше ':id')
+  // =========================
+
+  @Get('best-for-part/:partId')
+  @AuthWithOwnership()
+  @Roles('superadmin', 'company_owner', 'company_admin', 'inventory_manager')
+  @ApiOperation({
+    summary: 'Поиск лучшего поставщика для запчасти',
+    description: 'Автоматический подбор оптимального поставщика на основе цены, рейтинга и сроков доставки.',
+  })
+  @ApiParam({ name: 'partId', description: 'ID запчасти' })
+  @ApiQuery({
+    name: 'prioritize',
+    required: false,
+    description: 'Приоритет выбора',
+    enum: ['price', 'quality', 'delivery'],
+  })
+  @ApiQuery({
+    name: 'companyId',
+    required: false,
+    description: 'ID компании (обязательно для superadmin)',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    schema: {
+      properties: {
+        partId: { type: 'string' },
+        bestSupplier: {
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            price: { type: 'number' },
+            rating: { type: 'number' },
+            deliveryTime: { type: 'number' },
+            score: { type: 'number' },
+          },
+        },
+        alternatives: { type: 'array' },
+      },
+    },
+  })
+  @Throttle({ default: { limit: 50, ttl: 60000 } })
+  async findBestSupplierForPart(
+    @Param('partId', ParseUUIDPipe) partId: string,
+    @Query('prioritize') prioritize: 'price' | 'quality' | 'delivery' = 'price',
+    @Query('companyId') companyId: string | undefined,
+    @Req() req: RequestWithUser,
+  ): Promise<any> {
+    const effectiveCompanyId = req.user.role === 'superadmin' ? companyId : req.user.companyId;
+    if (req.user.role === 'superadmin' && !effectiveCompanyId) {
+      throw new BadRequestException('companyId обязателен для superadmin');
+    }
+    return this.suppliersService.findBestSupplierForPart(partId, prioritize, effectiveCompanyId!);
+  }
+
+  @Get('top/performers')
+  @AuthWithOwnership()
+  @Roles('superadmin', 'company_owner', 'company_admin', 'inventory_manager')
+  @ApiOperation({
+    summary: 'Топ поставщики компании',
+    description: 'Рейтинг лучших поставщиков по объемам, качеству и надежности.',
+  })
+  @ApiQuery({ name: 'limit', required: false, description: 'Количество поставщиков в топе' })
+  @ApiQuery({
+    name: 'period',
+    required: false,
+    description: 'Период анализа',
+    enum: ['month', 'quarter', 'year'],
+  })
+  @ApiQuery({
+    name: 'companyId',
+    required: false,
+    description: 'ID компании (обязательно для superadmin)',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    schema: {
+      properties: {
+        period: { type: 'string' },
+        topSuppliers: {
+          type: 'array',
+          items: {
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              totalOrders: { type: 'number' },
+              totalValue: { type: 'number' },
+              averageRating: { type: 'number' },
+              onTimeDeliveryRate: { type: 'number' },
+              rank: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+  })
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  async getTopPerformers(
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number = 10,
+    @Query('period') period: 'month' | 'quarter' | 'year' = 'quarter',
+    @Query('companyId') companyId: string | undefined,
+    @Req() req: RequestWithUser,
+  ): Promise<any> {
+    const effectiveCompanyId = req.user.role === 'superadmin' ? companyId : req.user.companyId;
+    if (req.user.role === 'superadmin' && !effectiveCompanyId) {
+      throw new BadRequestException('companyId обязателен для superadmin');
+    }
+    const safeLimit = Math.min(Math.max(1, limit), INVENTORY_CONSTANTS.DEFAULTS.MAX_ITEMS);
+    return this.suppliersService.getTopPerformers(effectiveCompanyId!, period, safeLimit);
+  }
+
+  @Post('bulk')
+  @AuthWithOwnership()
+  @Roles('company_owner', 'company_admin')
+  @ApiOperation({
+    summary: 'Массовые операции с поставщиками',
+    description: 'Массовое создание, обновление или деактивация поставщиков.',
+  })
+  @ApiBody({ type: BulkSuppliersDto })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    schema: {
+      properties: {
+        successCount: { type: 'number' },
+        failureCount: { type: 'number' },
+        results: {
+          type: 'array',
+          items: {
+            properties: {
+              identifier: { type: 'string' },
+              success: { type: 'boolean' },
+              supplierId: { type: 'string' },
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  })
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  async bulkOperations(
+    @Body() bulkSuppliersDto: BulkSuppliersDto,
+    @Headers('x-idempotency-key') idempotencyKey: string | undefined,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.suppliersService.bulkOperations(bulkSuppliersDto, req.user, idempotencyKey);
+  }
+
+  // =========================
+  // Динамические маршруты (:id)
+  // =========================
+
   @Get()
-  @AuthWithOwnership() // 🛡️ JWT + Roles + Ownership
-  @ApiOperation({ 
+  @AuthWithOwnership()
+  @Roles('superadmin', 'company_owner', 'company_admin', 'inventory_manager')
+  @ApiOperation({
     summary: 'Получение списка поставщиков',
-    description: 'Получение всех поставщиков компании с фильтрацией и поиском. Суперадмин видит все, остальные - только своих поставщиков.'
+    description:
+      'Получение всех поставщиков компании с фильтрацией и поиском. Суперадмин видит данные только при явном companyId.',
   })
   @ApiQuery({ name: 'search', required: false, description: 'Поиск по названию, email или телефону' })
   @ApiQuery({ name: 'isActive', required: false, description: 'Фильтр по активности', type: Boolean })
   @ApiQuery({ name: 'hasRecentDeliveries', required: false, description: 'Поставщики с недавними поставками', type: Boolean })
   @ApiQuery({ name: 'minRating', required: false, description: 'Минимальный рейтинг', type: Number })
   @ApiQuery({ name: 'city', required: false, description: 'Фильтр по городу' })
+  @ApiQuery({ name: 'country', required: false, description: 'Фильтр по стране' })
+  @ApiQuery({ name: 'supplierType', required: false, description: 'Тип поставщика' })
   @ApiQuery({ name: 'page', required: false, description: 'Номер страницы' })
   @ApiQuery({ name: 'limit', required: false, description: 'Размер страницы' })
+  @ApiQuery({ name: 'companyId', required: false, description: 'ID компании (обязательно для superadmin)' })
   @ApiResponse({ status: HttpStatus.OK, type: PaginatedSuppliersResponseDto })
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
+  @ApiForbiddenResponse({ description: '❌ Нет доступа' })
+  @ApiTooManyRequestsResponse({ description: '❌ Слишком много запросов' })
   @Throttle({ default: { limit: 50, ttl: 60000 } })
   async findAll(
     @Req() req: RequestWithUser,
     @Query('search') search?: string,
-    @Query('isActive') isActive?: boolean,
-    @Query('hasRecentDeliveries') hasRecentDeliveries?: boolean,
+    @Query('isActive', new ParseBoolPipe({ optional: true })) isActive?: boolean,
+    @Query('hasRecentDeliveries', new ParseBoolPipe({ optional: true })) hasRecentDeliveries?: boolean,
     @Query('minRating') minRating?: number,
     @Query('city') city?: string,
+    @Query('country') country?: string,
+    @Query('supplierType') supplierType?: string,
+    @Query('companyId') companyId?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query('limit', new DefaultValuePipe(INVENTORY_CONSTANTS.DEFAULTS.PAGE_SIZE), ParseIntPipe) limit: number = INVENTORY_CONSTANTS.DEFAULTS.PAGE_SIZE,
+    @Query('limit', new DefaultValuePipe(INVENTORY_CONSTANTS.DEFAULTS.PAGE_SIZE), ParseIntPipe)
+    limit: number = INVENTORY_CONSTANTS.DEFAULTS.PAGE_SIZE,
   ): Promise<PaginatedSuppliersResponseDto> {
+    const effectiveCompanyId = req.user.role === 'superadmin' ? companyId : req.user.companyId;
+    if (req.user.role === 'superadmin' && !effectiveCompanyId) {
+      throw new BadRequestException('companyId обязателен для superadmin');
+    }
+
     const filter: SupplierFilter = {
-      search,
+      search: typeof search === 'string' ? search.trim() : search,
       isActive,
       hasRecentDeliveries,
-      minRating,
-      city,
+      minRating: typeof minRating === 'string' ? Number(minRating) : minRating,
+      city: typeof city === 'string' ? city.trim() : city,
+      country: typeof country === 'string' ? country.trim() : country,
+      supplierType: supplierType as any,
       page,
-      limit: Math.min(limit, INVENTORY_CONSTANTS.DEFAULTS.MAX_ITEMS),
-      // 🔒 КРИТИЧНО: Автоматическая фильтрация по принадлежности
-      companyId: req.user.role === 'superadmin' ? undefined : req.user.companyId,
+      limit: Math.min(Math.max(1, limit), INVENTORY_CONSTANTS.DEFAULTS.MAX_ITEMS),
+      companyId: effectiveCompanyId,
     };
 
-    return this.suppliersService.findAll(filter);
+    return this.suppliersService.findAll(filter, req.user);
   }
 
-  /**
-   * 🔒 Получение конкретного поставщика
-   */
   @Get(':id')
   @AuthWithOwnership()
-  @SupplierResource() // 🛡️ Проверка ownership через CompanyOwnershipGuard
-  @ApiOperation({ 
+  @SupplierResource()
+  @Roles('superadmin', 'company_owner', 'company_admin', 'inventory_manager')
+  @ApiOperation({
     summary: 'Получение информации о поставщике',
-    description: 'Получение детальной информации о поставщике с рейтингом и статистикой.'
+    description: 'Получение детальной информации о поставщике с рейтингом и статистикой.',
   })
   @ApiParam({ name: 'id', description: 'ID поставщика' })
   @ApiResponse({ status: HttpStatus.OK, type: SupplierResponseDto })
   @ApiNotFoundResponse({ description: '❌ Поставщик не найден или нет доступа' })
   @Throttle({ default: { limit: 100, ttl: 60000 } })
-  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<SupplierResponseDto> {
-    return this.suppliersService.findOne(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @Req() req: RequestWithUser): Promise<SupplierResponseDto> {
+    return this.suppliersService.findOne(id, req.user);
   }
 
-  /**
-   * 📝 Создание поставщика
-   */
   @Post()
   @AuthWithOwnership()
-  @Roles('owner', 'admin', 'manager') // 🔐 RBAC: только менеджеры и выше
-  @ApiOperation({ 
+  @Roles('company_owner', 'company_admin', 'inventory_manager')
+  @ApiOperation({
     summary: 'Создание нового поставщика',
-    description: 'Создание нового поставщика с автоматической привязкой к компании пользователя.'
+    description: 'Создание нового поставщика с автоматической привязкой к компании пользователя.',
   })
   @ApiBody({ type: CreateSupplierDto })
   @ApiResponse({ status: HttpStatus.CREATED, type: SupplierResponseDto })
   @ApiBadRequestResponse({ description: '❌ Ошибка валидации данных' })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  async create(
-    @Body() createSupplierDto: CreateSupplierDto,
-    @Req() req: RequestWithUser,
-  ): Promise<SupplierResponseDto> {
+  async create(@Body() createSupplierDto: CreateSupplierDto, @Req() req: RequestWithUser): Promise<SupplierResponseDto> {
     return this.suppliersService.create(createSupplierDto, req.user);
   }
 
-  /**
-   * 📝 Обновление поставщика
-   */
   @Patch(':id')
   @AuthWithOwnership()
   @SupplierResource()
-  @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @Roles('company_owner', 'company_admin', 'inventory_manager')
+  @ApiOperation({
     summary: 'Обновление информации о поставщике',
-    description: 'Обновление данных поставщика с сохранением истории изменений.'
+    description: 'Обновление данных поставщика с сохранением истории изменений.',
   })
   @ApiParam({ name: 'id', description: 'ID поставщика' })
   @ApiBody({ type: UpdateSupplierDto })
@@ -154,78 +312,58 @@ export class SuppliersController {
     return this.suppliersService.update(id, updateSupplierDto, req.user);
   }
 
-  /**
-   * 🗑️ Деактивация поставщика
-   */
   @Patch(':id/deactivate')
   @AuthWithOwnership()
   @SupplierResource()
-  @Roles('owner', 'admin')
-  @ApiOperation({ 
+  @Roles('company_owner', 'company_admin')
+  @ApiOperation({
     summary: 'Деактивация поставщика',
-    description: 'Деактивация поставщика (soft delete). Поставщик останется в системе, но станет неактивным.'
+    description: 'Деактивация поставщика (soft delete). Поставщик останется в системе, но станет неактивным.',
   })
   @ApiParam({ name: 'id', description: 'ID поставщика' })
   @ApiResponse({ status: HttpStatus.OK, type: SupplierResponseDto })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  async deactivate(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Req() req: RequestWithUser,
-  ): Promise<SupplierResponseDto> {
+  async deactivate(@Param('id', ParseUUIDPipe) id: string, @Req() req: RequestWithUser): Promise<SupplierResponseDto> {
     return this.suppliersService.deactivate(id, req.user);
   }
 
-  /**
-   * ⭐ Оценка поставщика
-   */
   @Post(':id/rate')
   @AuthWithOwnership()
   @SupplierResource()
-  @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @Roles('company_owner', 'company_admin', 'inventory_manager')
+  @ApiOperation({
     summary: 'Оценка поставщика',
-    description: 'Выставление оценки поставщику по качеству, доставке и ценам.'
+    description: 'Выставление оценки поставщику по качеству, доставке и ценам.',
   })
   @ApiParam({ name: 'id', description: 'ID поставщика' })
-  @ApiBody({
-    schema: {
-      properties: {
-        qualityRating: { type: 'number', minimum: 1, maximum: 5, description: 'Оценка качества (1-5)' },
-        deliveryRating: { type: 'number', minimum: 1, maximum: 5, description: 'Оценка доставки (1-5)' },
-        priceRating: { type: 'number', minimum: 1, maximum: 5, description: 'Оценка цен (1-5)' },
-        comment: { type: 'string', description: 'Комментарий к оценке' },
-      },
-      required: ['qualityRating', 'deliveryRating', 'priceRating']
-    }
-  })
+  @ApiBody({ type: RateSupplierDto })
   @ApiResponse({ status: HttpStatus.OK, type: SupplierRatingResponseDto })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async rateSupplier(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() ratingData: {
-      qualityRating: number;
-      deliveryRating: number;
-      priceRating: number;
-      comment?: string;
-    },
+    @Body() ratingData: RateSupplierDto,
+    @Headers('x-idempotency-key') idempotencyKey: string | undefined,
     @Req() req: RequestWithUser,
   ): Promise<SupplierRatingResponseDto> {
-    return this.suppliersService.rateSupplier(id, ratingData, req.user);
+    return this.suppliersService.rateSupplier(id, ratingData, req.user, idempotencyKey);
   }
 
-  /**
-   * 💰 Сравнение цен между поставщиками
-   */
   @Get(':id/price-comparison/:partId')
   @AuthWithOwnership()
   @SupplierResource()
-  @ApiOperation({ 
+  @Roles('superadmin', 'company_owner', 'company_admin', 'inventory_manager')
+  @ApiOperation({
     summary: 'Сравнение цен на запчасть',
-    description: 'Сравнение цен на конкретную запчасть между всеми поставщиками компании.'
+    description: 'Сравнение цен на конкретную запчасть между всеми поставщиками компании.',
   })
   @ApiParam({ name: 'id', description: 'ID основного поставщика' })
   @ApiParam({ name: 'partId', description: 'ID запчасти' })
-  @ApiResponse({ 
+  @ApiQuery({
+    name: 'companyId',
+    required: false,
+    description: 'ID компании (обязательно для superadmin)',
+  })
+  @ApiResponse({
     status: HttpStatus.OK,
     schema: {
       properties: {
@@ -241,174 +379,63 @@ export class SuppliersController {
               deliveryTime: { type: 'number' },
               rating: { type: 'number' },
               lastOrderDate: { type: 'string' },
-              isPreferred: { type: 'boolean' }
-            }
-          }
+              isPreferred: { type: 'boolean' },
+            },
+          },
         },
         bestPrice: { type: 'number' },
-        bestPriceSupplierId: { type: 'string' }
-      }
-    }
+        bestPriceSupplierId: { type: 'string' },
+      },
+    },
   })
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   async comparePartPrices(
-    @Param('id', ParseUUIDPipe) supplierId: string,
+    @Param('id', ParseUUIDPipe) _supplierId: string,
     @Param('partId', ParseUUIDPipe) partId: string,
+    @Query('companyId') companyId: string | undefined,
     @Req() req: RequestWithUser,
   ): Promise<any> {
-    return this.suppliersService.comparePartPrices(partId, req.user.companyId);
+    const effectiveCompanyId =
+      req.user.role === 'superadmin' ? companyId : req.user.companyId;
+    if (req.user.role === 'superadmin' && !effectiveCompanyId) {
+      throw new BadRequestException('companyId обязателен для superadmin');
+    }
+    return this.suppliersService.comparePartPrices(partId, effectiveCompanyId!);
   }
 
-  /**
-   * 📊 Аналитика по поставщику
-   */
   @Get(':id/analytics')
   @AuthWithOwnership()
   @SupplierResource()
-  @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @Roles('superadmin', 'company_owner', 'company_admin', 'inventory_manager')
+  @ApiOperation({
     summary: 'Аналитика по поставщику',
-    description: 'Детальная аналитика: объемы закупок, частота поставок, рейтинги, тренды.'
+    description: 'Детальная аналитика: объемы закупок, частота поставок, рейтинги, тренды.',
   })
   @ApiParam({ name: 'id', description: 'ID поставщика' })
-  @ApiQuery({ name: 'period', required: false, description: 'Период анализа', enum: ['month', 'quarter', 'year'] })
+  @ApiQuery({
+    name: 'period',
+    required: false,
+    description: 'Период анализа',
+    enum: ['month', 'quarter', 'year'],
+  })
+  @ApiQuery({
+    name: 'companyId',
+    required: false,
+    description: 'ID компании (обязательно для superadmin)',
+  })
   @ApiResponse({ status: HttpStatus.OK, type: SupplierAnalyticsResponseDto })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   async getSupplierAnalytics(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('period') period: 'month' | 'quarter' | 'year' = 'quarter',
+    @Query('companyId') companyId: string | undefined,
     @Req() req: RequestWithUser,
   ): Promise<SupplierAnalyticsResponseDto> {
-    return this.suppliersService.getSupplierAnalytics(id, period, req.user.companyId);
-  }
-
-  /**
-   * 📦 Массовые операции
-   */
-  @Post('bulk')
-  @AuthWithOwnership()
-  @Roles('owner', 'admin')
-  @ApiOperation({ 
-    summary: 'Массовые операции с поставщиками',
-    description: 'Массовое создание, обновление или деактивация поставщиков.'
-  })
-  @ApiBody({ type: BulkSuppliersDto })
-  @ApiResponse({ 
-    status: HttpStatus.OK,
-    schema: {
-      properties: {
-        successCount: { type: 'number' },
-        failureCount: { type: 'number' },
-        results: {
-          type: 'array',
-          items: {
-            properties: {
-              identifier: { type: 'string' },
-              success: { type: 'boolean' },
-              supplierId: { type: 'string' },
-              error: { type: 'string' }
-            }
-          }
-        }
-      }
+    const effectiveCompanyId =
+      req.user.role === 'superadmin' ? companyId : req.user.companyId;
+    if (req.user.role === 'superadmin' && !effectiveCompanyId) {
+      throw new BadRequestException('companyId обязателен для superadmin');
     }
-  })
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
-  async bulkOperations(
-    @Body() bulkSuppliersDto: BulkSuppliersDto,
-    @Req() req: RequestWithUser,
-  ): Promise<{
-    successCount: number;
-    failureCount: number;
-    results: Array<{
-      identifier: string;
-      success: boolean;
-      supplierId?: string;
-      error?: string;
-    }>;
-  }> {
-    return this.suppliersService.bulkOperations(bulkSuppliersDto, req.user);
-  }
-
-  /**
-   * 🔍 Поиск лучшего поставщика для запчасти
-   */
-  @Get('best-for-part/:partId')
-  @AuthWithOwnership()
-  @ApiOperation({ 
-    summary: 'Поиск лучшего поставщика для запчасти',
-    description: 'Автоматический подбор оптимального поставщика на основе цены, рейтинга и сроков доставки.'
-  })
-  @ApiParam({ name: 'partId', description: 'ID запчасти' })
-  @ApiQuery({ name: 'prioritize', required: false, description: 'Приоритет выбора', enum: ['price', 'quality', 'delivery'] })
-  @ApiResponse({ 
-    status: HttpStatus.OK,
-    schema: {
-      properties: {
-        partId: { type: 'string' },
-        bestSupplier: {
-          properties: {
-            id: { type: 'string' },
-            name: { type: 'string' },
-            price: { type: 'number' },
-            rating: { type: 'number' },
-            deliveryTime: { type: 'number' },
-            score: { type: 'number' }
-          }
-        },
-        alternatives: { type: 'array' }
-      }
-    }
-  })
-  @Throttle({ default: { limit: 50, ttl: 60000 } })
-  async findBestSupplierForPart(
-    @Param('partId', ParseUUIDPipe) partId: string,
-    @Query('prioritize') prioritize: 'price' | 'quality' | 'delivery' = 'price',
-    @Req() req: RequestWithUser,
-  ): Promise<any> {
-    return this.suppliersService.findBestSupplierForPart(partId, prioritize, req.user.companyId);
-  }
-
-  /**
-   * 📈 Топ поставщики компании
-   */
-  @Get('top/performers')
-  @AuthWithOwnership()
-  @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
-    summary: 'Топ поставщики компании',
-    description: 'Рейтинг лучших поставщиков по объемам, качеству и надежности.'
-  })
-  @ApiQuery({ name: 'limit', required: false, description: 'Количество поставщиков в топе' })
-  @ApiQuery({ name: 'period', required: false, description: 'Период анализа', enum: ['month', 'quarter', 'year'] })
-  @ApiResponse({ 
-    status: HttpStatus.OK,
-    schema: {
-      properties: {
-        period: { type: 'string' },
-        topSuppliers: {
-          type: 'array',
-          items: {
-            properties: {
-              id: { type: 'string' },
-              name: { type: 'string' },
-              totalOrders: { type: 'number' },
-              totalValue: { type: 'number' },
-              averageRating: { type: 'number' },
-              onTimeDeliveryRate: { type: 'number' },
-              rank: { type: 'number' }
-            }
-          }
-        }
-      }
-    }
-  })
-  @Throttle({ default: { limit: 20, ttl: 60000 } })
-  async getTopPerformers(
-    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number = 10,
-    @Query('period') period: 'month' | 'quarter' | 'year' = 'quarter',
-    @Req() req: RequestWithUser,
-  ): Promise<any> {
-    return this.suppliersService.getTopPerformers(req.user.companyId, period, limit);
+    return this.suppliersService.getSupplierAnalytics(id, period, effectiveCompanyId!);
   }
 }

@@ -1,10 +1,19 @@
-// src/modules/payment-methods/dto/request/create-payment-method.dto.ts
-import { IsString, IsOptional, IsBoolean, IsNumber, IsEnum, IsObject, ValidateNested, Min, Max, Length } from 'class-validator';
+// path: apps/backend/src/modules/payment-methods/dto/request/create-payment-method.dto.ts
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsNumber,
+  IsEnum,
+  ValidateNested,
+  Min,
+  Max,
+  Length,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PAYMENT_METHODS_CONSTANTS, PAYMENT_METHOD_VALIDATION_MESSAGES } from '../../constants/payment-methods.constants';
 
-// 🔥 Enterprise Configuration DTOs
 export class InstallmentConfigDto {
   @ApiProperty({ description: 'Максимальный период рассрочки в месяцах', example: 12 })
   @IsNumber({}, { message: 'Период рассрочки должен быть числом' })
@@ -18,7 +27,7 @@ export class InstallmentConfigDto {
   @Max(100, { message: 'Процентная ставка не может превышать 100%' })
   interestRate: number;
 
-  @ApiProperty({ description: 'Минимальный первоначальный взнос в процентах', example: 20 })
+  @ApiProperty({ description: 'Минимальный первоначальный взнос, %', example: 20 })
   @IsNumber()
   @Min(PAYMENT_METHODS_CONSTANTS.MIN_DOWN_PAYMENT_PERCENT)
   @Max(100)
@@ -27,8 +36,8 @@ export class InstallmentConfigDto {
 
 export class IntegrationConfigDto {
   @ApiProperty({ description: 'Тип платежного шлюза', enum: PAYMENT_METHODS_CONSTANTS.SUPPORTED_GATEWAYS })
-  @IsEnum(PAYMENT_METHODS_CONSTANTS.SUPPORTED_GATEWAYS, { 
-    message: PAYMENT_METHOD_VALIDATION_MESSAGES.GATEWAY_NOT_SUPPORTED 
+  @IsEnum(PAYMENT_METHODS_CONSTANTS.SUPPORTED_GATEWAYS, {
+    message: PAYMENT_METHOD_VALIDATION_MESSAGES.GATEWAY_NOT_SUPPORTED,
   })
   gatewayType: string;
 
@@ -76,22 +85,25 @@ export class PaymentLimitsDto {
 export class CreatePaymentMethodDto {
   @ApiProperty({ description: 'Название способа оплаты', example: 'Банковская карта' })
   @IsString({ message: PAYMENT_METHOD_VALIDATION_MESSAGES.NAME_REQUIRED })
-  @Length(1, PAYMENT_METHODS_CONSTANTS.MAX_NAME_LENGTH, { 
-    message: PAYMENT_METHOD_VALIDATION_MESSAGES.NAME_TOO_LONG 
+  @Length(1, PAYMENT_METHODS_CONSTANTS.MAX_NAME_LENGTH, {
+    message: PAYMENT_METHOD_VALIDATION_MESSAGES.NAME_TOO_LONG,
   })
   name: string;
 
   @ApiPropertyOptional({ description: 'Описание способа оплаты' })
   @IsOptional()
   @IsString()
-  @Length(0, PAYMENT_METHODS_CONSTANTS.MAX_DESCRIPTION_LENGTH, { 
-    message: PAYMENT_METHOD_VALIDATION_MESSAGES.DESCRIPTION_TOO_LONG 
+  @Length(0, PAYMENT_METHODS_CONSTANTS.MAX_DESCRIPTION_LENGTH, {
+    message: PAYMENT_METHOD_VALIDATION_MESSAGES.DESCRIPTION_TOO_LONG,
   })
   description?: string;
 
-  @ApiProperty({ description: 'Тип платежного метода', enum: ['cash', 'card', 'bank_transfer', 'installments', 'corporate'] })
-  @IsEnum(['cash', 'card', 'bank_transfer', 'installments', 'corporate', 'digital_wallet'], {
-    message: 'Некорректный тип платежного метода'
+  @ApiProperty({
+    description: 'Тип платежного метода',
+    enum: ['cash', 'card', 'bank_transfer', 'installments', 'corporate', 'digital_wallet', 'cryptocurrency'],
+  })
+  @IsEnum(['cash', 'card', 'bank_transfer', 'installments', 'corporate', 'digital_wallet', 'cryptocurrency'], {
+    message: 'Некорректный тип платежного метода',
   })
   type: string;
 

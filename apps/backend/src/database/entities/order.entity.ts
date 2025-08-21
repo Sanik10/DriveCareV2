@@ -1,14 +1,14 @@
 // src/database/entities/order.entity.ts
-import { 
-  Entity, 
-  Column, 
-  PrimaryGeneratedColumn, 
-  CreateDateColumn, 
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
   OneToMany,
   JoinColumn,
-  Index
+  Index,
 } from 'typeorm';
 import { Company } from './company.entity';
 import { Customer } from './customer.entity';
@@ -32,7 +32,7 @@ export enum OrderStatus {
 @Index(['status'])
 @Index(['createdBy'])
 @Index(['assignedTo'])
-@Index(['orderNumber'], { unique: true })
+@Index(['companyId', 'orderNumber'], { unique: true }) // уникальность номера внутри компании
 export class Order {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -46,14 +46,14 @@ export class Order {
   @Column({ type: 'uuid' })
   vehicleId: string;
 
-  @Column({ type: 'varchar', length: 50, unique: true })
+  @Column({ type: 'varchar', length: 50 })
   orderNumber: string;
 
-  @Column({ 
-    type: 'varchar', 
+  @Column({
+    type: 'varchar',
     length: 20,
-    enum: OrderStatus,
-    default: OrderStatus.NEW
+    default: OrderStatus.NEW,
+    comment: 'Статус заказа (enum как строка)',
   })
   status: OrderStatus;
 
@@ -61,68 +61,68 @@ export class Order {
   createdBy: string;
 
   @Column({ type: 'uuid', nullable: true })
-  assignedTo: string;
+  assignedTo: string | null;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description: string | null;
 
   @Column({ type: 'text', nullable: true })
-  customerComplaints: string;
+  customerComplaints: string | null;
 
   @Column({ type: 'text', nullable: true })
-  diagnosticResults: string;
+  diagnosticResults: string | null;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   totalAmount: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   discountAmount: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   taxAmount: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   finalAmount: number;
 
   @Column({ type: 'integer', nullable: true })
-  mileage: number;
+  mileage: number | null;
 
-  @Column({ type: 'timestamp', nullable: true })
-  estimatedCompletionTime: Date;
+  @Column({ type: 'timestamptz', nullable: true })
+  estimatedCompletionTime: Date | null;
 
-  @Column({ type: 'timestamp', nullable: true })
-  actualCompletionTime: Date;
+  @Column({ type: 'timestamptz', nullable: true })
+  actualCompletionTime: Date | null;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
-  // 🔗 TypeORM Relationships
-  @ManyToOne(() => Company)
+  // Relations
+  @ManyToOne(() => Company, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'companyId' })
   company: Company;
 
-  @ManyToOne(() => Customer)
+  @ManyToOne(() => Customer, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'customerId' })
   customer: Customer;
 
-  @ManyToOne(() => Vehicle)
+  @ManyToOne(() => Vehicle, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'vehicleId' })
   vehicle: Vehicle;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'createdBy' })
   createdByUser: User;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'assignedTo' })
   assignedToUser: User;
 
-  @OneToMany(() => OrderService, orderService => orderService.order)
+  @OneToMany(() => OrderService, (orderService) => orderService.order)
   orderServices: OrderService[];
 
-  @OneToMany(() => OrderPart, orderPart => orderPart.order)
+  @OneToMany(() => OrderPart, (orderPart) => orderPart.order)
   orderParts: OrderPart[];
 }

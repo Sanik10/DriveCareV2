@@ -1,25 +1,25 @@
-// src/database/entities/stock-movement.entity.ts
+// path: apps/backend/src/database/entities/stock-movement.entity.ts
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { Part } from './part.entity';
 import { Supplier } from './supplier.entity';
 
 export enum StockMovementType {
-  RECEIPT = 'receipt',      // Приход
-  ISSUE = 'issue',          // Расход
-  ADJUSTMENT = 'adjustment', // Корректировка/Инвентаризация
-  TRANSFER = 'transfer',    // Перемещение
-  RESERVATION = 'reservation', // Резервирование
-  RELEASE = 'release',      // Освобождение резерва
+  RECEIPT = 'receipt',
+  ISSUE = 'issue',
+  ADJUSTMENT = 'adjustment',
+  TRANSFER = 'transfer',
+  RESERVATION = 'reservation',
+  RELEASE = 'release',
 }
 
 export enum StockMovementReason {
-  PURCHASE = 'purchase',         // Закупка
-  ORDER_FULFILLMENT = 'order_fulfillment', // Выполнение заказа
-  INVENTORY_COUNT = 'inventory_count',      // Инвентаризация
-  DAMAGE = 'damage',            // Брак/повреждение
-  EXPIRY = 'expiry',           // Истечение срока
-  LOSS = 'loss',               // Потеря
-  CORRECTION = 'correction',    // Корректировка
+  PURCHASE = 'purchase',
+  ORDER_FULFILLMENT = 'order_fulfillment',
+  INVENTORY_COUNT = 'inventory_count',
+  DAMAGE = 'damage',
+  EXPIRY = 'expiry',
+  LOSS = 'loss',
+  CORRECTION = 'correction',
 }
 
 @Entity('stock_movements')
@@ -50,7 +50,6 @@ export class StockMovement {
   @Column({ type: 'enum', enum: StockMovementType })
   type: StockMovementType;
 
-  // 🔥 ДОБАВЛЯЕМ НЕДОСТАЮЩЕЕ ПОЛЕ
   @Column({ type: 'enum', enum: StockMovementReason })
   reason: StockMovementReason;
 
@@ -72,13 +71,12 @@ export class StockMovement {
   @Column({ type: 'uuid' })
   createdBy: string;
 
-  // 🔥 ДОБАВЛЯЕМ ПОЛЯ ДЛЯ ОТМЕНЫ ДВИЖЕНИЙ
   @Column({ type: 'uuid', nullable: true })
   reversedByMovementId: string | null;
 
   @Column({ type: 'uuid', nullable: true })
   reversesMovementId: string | null;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }

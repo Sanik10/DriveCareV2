@@ -1,14 +1,5 @@
-// src/database/entities/order-service.entity.ts
-import { 
-  Entity, 
-  Column, 
-  PrimaryGeneratedColumn, 
-  CreateDateColumn, 
-  UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
-  Index
-} from 'typeorm';
+// path: src/database/entities/order-service.entity.ts
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { Order } from './order.entity';
 import { Service } from './service.entity';
 import { User } from './user.entity';
@@ -45,34 +36,28 @@ export class OrderService {
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   totalAmount: number;
 
-  @Column({ 
-    type: 'varchar', 
-    length: 20,
-    enum: OrderServiceStatus,
-    default: OrderServiceStatus.PLANNED
-  })
+  @Column({ type: 'varchar', length: 20, default: OrderServiceStatus.PLANNED })
   status: OrderServiceStatus;
 
   @Column({ type: 'uuid', nullable: true })
   mechanicId: string | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   startTime: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   endTime: Date;
 
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
-  // 🔗 TypeORM Relationships
-  @ManyToOne(() => Order, order => order.orderServices)
+  @ManyToOne(() => Order, (order) => order.orderServices)
   @JoinColumn({ name: 'orderId' })
   order: Order;
 

@@ -6,45 +6,36 @@ export const ORDERS_CONSTANTS = {
     PAGE_SIZE: 20,
     MAX_ITEMS: 100,
     STATUS: OrderStatus.NEW,
-    TAX_RATE: 0.18, // 18% НДС
+    TAX_RATE: 0.18,
   },
 
   VALIDATION: {
     ORDER_NUMBER: {
       MIN_LENGTH: 10,
       MAX_LENGTH: 50,
-      PATTERN: /^ORD-\d{4}-\d{5}$/, // ORD-YYYY-NNNNN
+      PATTERN: /^ORD-\d{4}-\d{5}$/,
     },
-    DESCRIPTION: {
-      MAX_LENGTH: 1000,
-    },
-    CUSTOMER_COMPLAINTS: {
-      MAX_LENGTH: 2000,
-    },
-    DIAGNOSTIC_RESULTS: {
-      MAX_LENGTH: 2000,
-    },
-    MILEAGE: {
-      MIN: 0,
-      MAX: 9999999, // 9,999,999 км
-    },
+    DESCRIPTION: { MAX_LENGTH: 1000 },
+    CUSTOMER_COMPLAINTS: { MAX_LENGTH: 2000 },
+    DIAGNOSTIC_RESULTS: { MAX_LENGTH: 2000 },
+    MILEAGE: { MIN: 0, MAX: 9_999_999 },
   },
 
   STATUS_TRANSITIONS: {
     [OrderStatus.NEW]: [OrderStatus.IN_PROGRESS, OrderStatus.CANCELED],
     [OrderStatus.IN_PROGRESS]: [OrderStatus.AWAITING_PARTS, OrderStatus.COMPLETED, OrderStatus.CANCELED],
     [OrderStatus.AWAITING_PARTS]: [OrderStatus.IN_PROGRESS, OrderStatus.CANCELED],
-    [OrderStatus.COMPLETED]: [], // Завершенный заказ нельзя изменить
-    [OrderStatus.CANCELED]: [], // Отмененный заказ нельзя изменить
-  } as const,
+    [OrderStatus.COMPLETED]: [],
+    [OrderStatus.CANCELED]: [],
+  } as Record<OrderStatus, OrderStatus[]>,
 
   ROLES: {
-    CAN_CREATE: ['owner', 'admin', 'manager'],
-    CAN_UPDATE: ['owner', 'admin', 'manager'],
-    CAN_DELETE: ['owner', 'admin'],
-    CAN_ASSIGN_MECHANIC: ['owner', 'admin', 'manager'],
-    CAN_CHANGE_STATUS: ['owner', 'admin', 'manager', 'mechanic'],
-    CAN_VIEW_ALL: ['owner', 'admin', 'manager'],
+    CAN_CREATE: ['company_owner', 'company_admin', 'manager'],
+    CAN_UPDATE: ['company_owner', 'company_admin', 'manager'],
+    CAN_DELETE: ['company_owner', 'company_admin'],
+    CAN_ASSIGN_MECHANIC: ['company_owner', 'company_admin', 'manager', 'lead_mechanic'],
+    CAN_CHANGE_STATUS: ['company_owner', 'company_admin', 'manager', 'mechanic', 'lead_mechanic', 'service_advisor'],
+    CAN_VIEW_ALL: ['company_owner', 'company_admin', 'manager', 'mechanic', 'lead_mechanic', 'service_advisor'],
     CAN_VIEW_ASSIGNED: ['mechanic'],
   },
 
@@ -66,4 +57,16 @@ export const ORDERS_CONSTANTS = {
     AUTO_CALCULATE_TAX: true,
     SEND_NOTIFICATIONS_ON_STATUS_CHANGE: true,
   },
+
+  ALLOWED_UPDATE_FIELDS: [
+    'status',
+    'assignedTo',
+    'description',
+    'customerComplaints',
+    'diagnosticResults',
+    'mileage',
+    'estimatedCompletionTime',
+    'actualCompletionTime',
+    'discountAmount',
+  ] as const,
 } as const;

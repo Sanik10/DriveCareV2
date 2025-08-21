@@ -1,20 +1,20 @@
+// path: apps/backend/src/modules/inventory/inventory-alerts/services/alerts-data.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { 
+import { Repository, SelectQueryBuilder } from 'typeorm';
+import {
   InventoryAlert,
   Part,
-  PartCategory,
   Inventory,
   Company,
-  User
+  User,
 } from '../../../../database/entities';
-import { 
+import { InventoryAlertSettings } from '../../../../database/entities/inventory-alert-settings.entity';
+import {
   AlertFilter,
   CreateAlertData,
   UpdateAlertData,
-  AlertSettings,
-  AlertStats
+  AlertStats,
 } from '../types/alerts.types';
 import { AlertType, AlertPriority } from '../../constants/inventory.constants';
 
@@ -31,97 +31,99 @@ export class AlertsDataService {
     private readonly companyRepository: Repository<Company>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(InventoryAlertSettings)
+    private readonly settingsRepository: Repository<InventoryAlertSettings>,
   ) {}
 
   /**
-   * 🔒 Поиск алертов с ОБЯЗАТЕЛЬНОЙ фильтрацией по компании
+   * Поиск уведомлений с фильтрацией. companyId обязателен (листинг без companyId запрещён).
    */
   async findWithFilters(filter: AlertFilter): Promise<[InventoryAlert[], number]> {
-    const query = this.alertRepository.createQueryBuilder('alert')
-      .leftJoinAndSelect('alert.part', 'part')
-      .leftJoinAndSelect('part.category', 'category');
-
-    // 🔒 КРИТИЧНО: ОБЯЗАТЕЛЬНАЯ фильтрация по companyId
-    if (filter.companyId) {
-      query.andWhere('alert.companyId = :companyId', { companyId: filter.companyId });
+    if (!filter.companyId) {
+      // Жёсткая защита от утечек: без companyId возвращаем пусто
+      return [[], 0];
     }
 
-    // Фильтр по конкретной запчасти
+    const query = this.alertRepository
+      .createQueryBuilder('alert')
+      .leftJoinAndSelect('alert.part', 'part')
+      .leftJoinAndSelect('part.category', 'category')
+      .where('alert.companyId = :companyId', { companyId: filter.companyId });
+
+    // Безопасные фильтры
     if (filter.partId) {
       query.andWhere('alert.partId = :partId', { partId: filter.partId });
     }
 
-    // Фильтр по типу алерта
     if (filter.type) {
       query.andWhere('alert.type = :type', { type: filter.type });
     }
 
-    // Фильтр по приоритету
     if (filter.priority) {
       query.andWhere('alert.priority = :priority', { priority: filter.priority });
     }
 
-    // Фильтр по статусу активности
-    if (filter.isActive !== undefined) {
+    if (typeof filter.isActive === 'boolean') {
       query.andWhere('alert.isActive = :isActive', { isActive: filter.isActive });
     }
 
-    // Фильтр по статусу отклонения
-    if (filter.isDismissed !== undefined) {
+    if (typeof filter.isDismissed === 'boolean') {
       query.andWhere('alert.isDismissed = :isDismissed', { isDismissed: filter.isDismissed });
     }
 
-    // Фильтр по категории
     if (filter.categoryId) {
       query.andWhere('part.categoryId = :categoryId', { categoryId: filter.categoryId });
     }
 
-    // Поиск по названию запчасти
     if (filter.search) {
-      query.andWhere(
-        '(part.name ILIKE :search OR part.partNumber ILIKE :search OR alert.title ILIKE :search)',
-        { search: `%${filter.search}%` }
-      );
+      const s = String(filter.search).trim().slice(0, 100);
+      if (s.length > 0) {
+        query.andWhere(
+          '(part.name ILIKE :search OR part.partNumber ILIKE :search OR alert.title ILIKE :search)',
+          { search: `%${s}%` },
+        );
+      }
     }
 
-    // Фильтр по дате создания
     if (filter.createdFrom) {
       query.andWhere('alert.createdAt >= :createdFrom', { createdFrom: filter.createdFrom });
     }
-
     if (filter.createdTo) {
       query.andWhere('alert.createdAt <= :createdTo', { createdTo: filter.createdTo });
     }
 
-    // Сортировка
+    // Whitelist сортировки
     const sortField = filter.sortField || 'createdAt';
-    const sortOrder = filter.sortOrder || 'desc';
-    
+    const sortOrder = (filter.sortOrder || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
     switch (sortField) {
       case 'createdAt':
-        query.orderBy('alert.createdAt', sortOrder.toUpperCase() as 'ASC' | 'DESC');
+        query.orderBy('alert.createdAt', sortOrder as 'ASC' | 'DESC');
         break;
       case 'priority':
-        // Сортируем по приоритету: critical > high > medium > low
-        query.orderBy(`CASE 
-          WHEN alert.priority = 'critical' THEN 1
-          WHEN alert.priority = 'high' THEN 2
-          WHEN alert.priority = 'medium' THEN 3
-          WHEN alert.priority = 'low' THEN 4
-          ELSE 5
-        END`, sortOrder.toUpperCase() as 'ASC' | 'DESC');
+        // critical > high > medium > low
+        query.orderBy(
+          `CASE 
+            WHEN alert.priority = 'critical' THEN 1
+            WHEN alert.priority = 'high' THEN 2
+            WHEN alert.priority = 'medium' THEN 3
+            WHEN alert.priority = 'low' THEN 4
+            ELSE 5
+          END`,
+          sortOrder as 'ASC' | 'DESC',
+        );
         break;
       case 'type':
-        query.orderBy('alert.type', sortOrder.toUpperCase() as 'ASC' | 'DESC');
+        query.orderBy('alert.type', sortOrder as 'ASC' | 'DESC');
         break;
       case 'partName':
-        query.orderBy('part.name', sortOrder.toUpperCase() as 'ASC' | 'DESC');
+        query.orderBy('part.name', sortOrder as 'ASC' | 'DESC');
         break;
       case 'currentQuantity':
-        query.orderBy('alert.currentQuantity', sortOrder.toUpperCase() as 'ASC' | 'DESC');
+        query.orderBy('alert.currentQuantity', sortOrder as 'ASC' | 'DESC');
         break;
       case 'shortage':
-        query.orderBy('(alert.thresholdQuantity - alert.currentQuantity)', sortOrder.toUpperCase() as 'ASC' | 'DESC');
+        query.orderBy('(alert.thresholdQuantity - alert.currentQuantity)', sortOrder as 'ASC' | 'DESC');
         break;
       default:
         query.orderBy('alert.createdAt', 'DESC');
@@ -136,9 +138,6 @@ export class AlertsDataService {
     return query.getManyAndCount();
   }
 
-  /**
-   * 🔒 Поиск алерта по ID
-   */
   async findById(id: string): Promise<InventoryAlert | null> {
     return this.alertRepository.findOne({
       where: { id },
@@ -146,125 +145,79 @@ export class AlertsDataService {
     });
   }
 
-  /**
-   * 🔒 Поиск алерта по ID для конкретной компании
-   */
   async findByIdForCompany(id: string, companyId: string): Promise<InventoryAlert | null> {
     return this.alertRepository.findOne({
-      where: { 
-        id,
-        companyId, // 🔒 КРИТИЧНО: проверяем принадлежность
-      },
+      where: { id, companyId },
       relations: ['part', 'part.category'],
     });
   }
 
-  /**
-   * 📝 Создание нового алерта
-   */
   async create(data: CreateAlertData): Promise<InventoryAlert> {
-	const alert = this.alertRepository.create({
-		companyId: data.companyId,
-		partId: data.partId,
-		type: data.type,
-		priority: data.priority,
-		title: data.title,
-		message: data.message,
-		currentQuantity: data.currentQuantity,
-		thresholdQuantity: data.thresholdQuantity,
-		metadata: data.metadata,
-		triggeredBy: data.triggeredBy,
-		isActive: true,
-		isDismissed: false,
-		// 🔥 ДОБАВЛЕНО: Дефолтные значения для старых полей
-		minQuantity: data.thresholdQuantity || 0,
-		alertEnabled: true,
-		notified: false,
-	});
-	
-	return this.alertRepository.save(alert);
+    const alert = this.alertRepository.create({
+      companyId: data.companyId,
+      partId: data.partId,
+      type: data.type,
+      priority: data.priority,
+      title: data.title,
+      message: data.message,
+      currentQuantity: data.currentQuantity,
+      thresholdQuantity: data.thresholdQuantity,
+      metadata: data.metadata,
+      triggeredBy: data.triggeredBy,
+      isActive: true,
+      isDismissed: false,
+      minQuantity: data.thresholdQuantity || 0,
+      alertEnabled: true,
+      notified: false,
+    });
+
+    return this.alertRepository.save(alert);
   }
 
-  /**
-   * 📝 Обновление алерта
-   */
   async update(id: string, data: UpdateAlertData): Promise<InventoryAlert> {
-	// 🔥 ИСПРАВЛЕНО: Правильное обновление с преобразованием типов
-	const updateFields: any = {};
-	
-	Object.keys(data).forEach(key => {
-		if (data[key] !== undefined) {
-		updateFields[key] = data[key];
-		}
-	});
+    const updateFields: any = {};
+    Object.keys(data).forEach((key) => {
+      if ((data as any)[key] !== undefined) {
+        (updateFields as any)[key] = (data as any)[key];
+      }
+    });
 
-	await this.alertRepository.update(id, updateFields);
-	
-	const updatedAlert = await this.findById(id);
-	if (!updatedAlert) {
-		throw new Error(`Alert with id ${id} not found after update`);
-	}
-	
-	return updatedAlert;
-	}
-
-
-  /**
-   * 🚫 Отклонение алерта
-   */
-  async dismiss(id: string, userId: string): Promise<InventoryAlert> {
-	const updateData = {
-		isDismissed: true,
-		dismissedBy: userId,
-		dismissedAt: new Date(),
-		isActive: false,
-	};
-
-	return this.update(id, updateData);
+    await this.alertRepository.update(id, updateFields);
+    const updatedAlert = await this.findById(id);
+    if (!updatedAlert) {
+      throw new Error(`Alert with id ${id} not found after update`);
+    }
+    return updatedAlert;
   }
 
-  /**
-   * 🔒 Получение активных алертов для запчасти
-   */
+  async dismiss(id: string, userId: string): Promise<InventoryAlert> {
+    const updateData = {
+      isDismissed: true,
+      dismissedBy: userId,
+      dismissedAt: new Date(),
+      isActive: false,
+    };
+    return this.update(id, updateData);
+  }
+
   async findActiveAlertsForPart(partId: string, companyId: string): Promise<InventoryAlert[]> {
     return this.alertRepository.find({
-      where: { 
-        partId,
-        companyId, // 🔒 КРИТИЧНО: фильтрация по компании
-        isActive: true,
-        isDismissed: false,
-      },
+      where: { partId, companyId, isActive: true, isDismissed: false },
       relations: ['part'],
       order: { createdAt: 'DESC' },
     });
   }
 
-  /**
-   * 🔒 Проверка существования активного алерта типа для запчасти
-   */
-  async existsActiveAlertForPart(
-    partId: string, 
-    companyId: string, 
-    type: AlertType
-  ): Promise<boolean> {
+  async existsActiveAlertForPart(partId: string, companyId: string, type: AlertType): Promise<boolean> {
     const count = await this.alertRepository.count({
-      where: { 
-        partId,
-        companyId, // 🔒 КРИТИЧНО: фильтрация по компании
-        type,
-        isActive: true,
-        isDismissed: false,
-      },
+      where: { partId, companyId, type, isActive: true, isDismissed: false },
     });
-    
     return count > 0;
   }
 
-  /**
-   * 📊 Получение статистики алертов
-   */
   async getAlertStats(companyId: string, dateFrom: Date, dateTo: Date): Promise<AlertStats> {
-    const baseQuery = this.alertRepository.createQueryBuilder('alert')
+    const baseQuery = this.alertRepository
+      .createQueryBuilder('alert')
       .where('alert.companyId = :companyId', { companyId })
       .andWhere('alert.createdAt >= :dateFrom', { dateFrom })
       .andWhere('alert.createdAt <= :dateTo', { dateTo });
@@ -276,62 +229,52 @@ export class AlertsDataService {
       typeStats,
       priorityStats,
       topParts,
-      dailyActivity
+      dailyActivity,
     ] = await Promise.all([
-      // Общее количество
       baseQuery.getCount(),
-      
-      // Активные
       baseQuery.clone().andWhere('alert.isActive = true').getCount(),
-      
-      // Отклоненные
       baseQuery.clone().andWhere('alert.isDismissed = true').getCount(),
-      
-      // По типам
-      baseQuery.clone()
-        .select(['alert.type', 'COUNT(*) as count'])
+      baseQuery
+        .clone()
+        .select(['alert.type AS "type"', 'COUNT(*)::int as "count"'])
         .groupBy('alert.type')
         .getRawMany(),
-      
-      // По приоритетам
-      baseQuery.clone()
-        .select(['alert.priority', 'COUNT(*) as count'])
+      baseQuery
+        .clone()
+        .select(['alert.priority AS "priority"', 'COUNT(*)::int as "count"'])
         .groupBy('alert.priority')
         .getRawMany(),
-      
-      // Топ запчастей с алертами
-      baseQuery.clone()
+      baseQuery
+        .clone()
         .leftJoin('alert.part', 'part')
-        .leftJoin('part.inventory', 'inventory')
+        .leftJoin(Inventory, 'inventory', 'inventory.partId = alert.partId AND inventory.companyId = alert.companyId')
         .select([
-          'alert.partId',
-          'part.name as partName',
-          'COUNT(*) as alertCount',
-          'COALESCE(inventory.quantity, 0) as currentQuantity',
-          'COALESCE(inventory.minQuantity, 0) as minQuantity'
+          'alert.partId AS "partId"',
+          'part.name AS "partName"',
+          'COUNT(*)::int AS "alertCount"',
+          'COALESCE(inventory.quantity, 0)::int AS "currentQuantity"',
+          'COALESCE(inventory.minQuantity, 0)::int AS "minQuantity"',
         ])
         .groupBy('alert.partId, part.name, inventory.quantity, inventory.minQuantity')
-        .orderBy('alertCount', 'DESC')
+        .orderBy('"alertCount"', 'DESC')
         .limit(10)
         .getRawMany(),
-      
-      // Дневная активность
-      baseQuery.clone()
+      baseQuery
+        .clone()
         .select([
-          'DATE(alert.createdAt) as date',
-          'COUNT(*) as created',
-          'SUM(CASE WHEN alert.isDismissed THEN 1 ELSE 0 END) as dismissed',
-          'SUM(CASE WHEN alert.isActive THEN 1 ELSE 0 END) as active'
+          'DATE(alert.createdAt) as "date"',
+          'COUNT(*)::int as "created"',
+          'SUM(CASE WHEN alert.isDismissed THEN 1 ELSE 0 END)::int as "dismissed"',
+          'SUM(CASE WHEN alert.isActive THEN 1 ELSE 0 END)::int as "active"',
         ])
         .groupBy('DATE(alert.createdAt)')
-        .orderBy('date', 'ASC')
+        .orderBy('"date"', 'ASC')
         .getRawMany(),
     ]);
 
-    // Обработка результатов
     const byType = {} as Record<AlertType, { count: number; percentage: number }>;
-    typeStats.forEach(stat => {
-      const count = parseInt(stat.count);
+    typeStats.forEach((stat: any) => {
+      const count = stat.count as number;
       byType[stat.type as AlertType] = {
         count,
         percentage: totalAlerts > 0 ? Math.round((count / totalAlerts) * 100) : 0,
@@ -339,43 +282,22 @@ export class AlertsDataService {
     });
 
     const byPriority = {} as Record<AlertPriority, { count: number; percentage: number }>;
-    priorityStats.forEach(stat => {
-      const count = parseInt(stat.count);
+    priorityStats.forEach((stat: any) => {
+      const count = stat.count as number;
       byPriority[stat.priority as AlertPriority] = {
         count,
         percentage: totalAlerts > 0 ? Math.round((count / totalAlerts) * 100) : 0,
       };
     });
 
-    const topPartsWithAlerts = topParts.map(part => ({
-      partId: part.partid,
-      partName: part.partname,
-      alertCount: parseInt(part.alertcount),
-      currentQuantity: parseInt(part.currentquantity),
-      minQuantity: parseInt(part.minquantity),
-    }));
-
     const trends = {
-      daily: dailyActivity.map(day => ({
+      daily: dailyActivity.map((day: any) => ({
         date: day.date,
-        created: parseInt(day.created),
-        dismissed: parseInt(day.dismissed),
-        active: parseInt(day.active),
+        created: day.created,
+        dismissed: day.dismissed,
+        active: day.active,
       })),
     };
-
-    // Расчет среднего времени реакции
-    const responseTimeQuery = await this.alertRepository
-      .createQueryBuilder('alert')
-      .select('AVG(EXTRACT(EPOCH FROM (alert.dismissedAt - alert.createdAt))/3600) as avgHours')
-      .where('alert.companyId = :companyId', { companyId })
-      .andWhere('alert.isDismissed = true')
-      .andWhere('alert.createdAt >= :dateFrom', { dateFrom })
-      .andWhere('alert.createdAt <= :dateTo', { dateTo })
-      .getRawOne();
-
-    const averageResponseTime = parseFloat(responseTimeQuery?.avgHours || '0');
-    const criticalAlertsResolved = dismissedAlerts; // Упрощение для примера
 
     return {
       companyId,
@@ -386,15 +308,25 @@ export class AlertsDataService {
       byType,
       byPriority,
       trends,
-      topPartsWithAlerts,
-      averageResponseTime,
-      criticalAlertsResolved,
+      topPartsWithAlerts: topParts,
+      averageResponseTime: await this.getAverageResponseTime(companyId, dateFrom, dateTo),
+      criticalAlertsResolved: dismissedAlerts, // упрощение
     };
   }
 
-  /**
-   * 🔒 Автоматическое отклонение истекших алертов
-   */
+  private async getAverageResponseTime(companyId: string, dateFrom: Date, dateTo: Date): Promise<number> {
+    const responseTimeQuery = await this.alertRepository
+      .createQueryBuilder('alert')
+      .select('AVG(EXTRACT(EPOCH FROM (alert.dismissedAt - alert.createdAt))/3600) as "avgHours"')
+      .where('alert.companyId = :companyId', { companyId })
+      .andWhere('alert.isDismissed = true')
+      .andWhere('alert.createdAt >= :dateFrom', { dateFrom })
+      .andWhere('alert.createdAt <= :dateTo', { dateTo })
+      .getRawOne();
+
+    return parseFloat(responseTimeQuery?.avgHours || '0');
+  }
+
   async dismissExpiredAlerts(companyId: string, hoursAgo: number): Promise<number> {
     const expiryDate = new Date();
     expiryDate.setHours(expiryDate.getHours() - hoursAgo);
@@ -417,25 +349,14 @@ export class AlertsDataService {
     return result.affected || 0;
   }
 
-  /**
-   * 🔒 Получение критических алертов
-   */
   async findCriticalAlerts(companyId: string): Promise<InventoryAlert[]> {
     return this.alertRepository.find({
-      where: { 
-        companyId,
-        priority: 'critical',
-        isActive: true,
-        isDismissed: false,
-      },
+      where: { companyId, priority: 'critical', isActive: true, isDismissed: false },
       relations: ['part', 'part.category'],
       order: { createdAt: 'DESC' },
     });
   }
 
-  /**
-   * 🔒 Автоотклонение алертов после пополнения
-   */
   async dismissAlertsAfterRestock(partId: string, companyId: string): Promise<number> {
     const result = await this.alertRepository
       .createQueryBuilder()
@@ -456,32 +377,18 @@ export class AlertsDataService {
     return result.affected || 0;
   }
 
-  /**
-   * 🔒 Проверка существования компании
-   */
   async validateCompanyExists(companyId: string): Promise<boolean> {
-    const count = await this.companyRepository.count({
-      where: { id: companyId },
-    });
+    const count = await this.companyRepository.count({ where: { id: companyId } });
     return count > 0;
   }
 
-  /**
-   * 🔒 Проверка существования запчасти в компании
-   */
   async validatePartExists(partId: string, companyId: string): Promise<Part | null> {
     return this.partRepository.findOne({
-      where: { 
-        id: partId,
-        companyId, // 🔒 КРИТИЧНО: проверяем принадлежность
-      },
+      where: { id: partId, companyId },
       relations: ['category'],
     });
   }
 
-  /**
-   * 🔒 Получение информации о пользователе
-   */
   async findUserById(userId: string): Promise<User | null> {
     return this.userRepository.findOne({
       where: { id: userId },
@@ -489,38 +396,50 @@ export class AlertsDataService {
     });
   }
 
-  /**
-   * ❌ Удаление алерта (только для неактивных)
-   */
-  async remove(id: string): Promise<void> {
-    await this.alertRepository.delete(id);
-  }
+  // 402-ФЗ: публичный hard delete не предоставляем
 
-  /**
-   * 🔄 Получение остатка запчасти
-   */
   async getPartCurrentStock(partId: string, companyId: string): Promise<number> {
-    const inventory = await this.inventoryRepository.findOne({
-      where: { 
-        partId,
-        companyId, // 🔒 КРИТИЧНО: фильтрация по компании
-      },
-    });
-    
+    const inventory = await this.inventoryRepository.findOne({ where: { partId, companyId } });
     return inventory?.quantity || 0;
+    }
+
+  async getPartMinStock(partId: string, companyId: string): Promise<number> {
+    const inventory = await this.inventoryRepository.findOne({ where: { partId, companyId } });
+    return inventory?.minQuantity || 5;
   }
 
-  /**
-   * 🔄 Получение минимального остатка запчасти
-   */
-  async getPartMinStock(partId: string, companyId: string): Promise<number> {
-    const inventory = await this.inventoryRepository.findOne({
-      where: { 
-        partId,
-        companyId, // 🔒 КРИТИЧНО: фильтрация по компании
-      },
-    });
-    
-    return inventory?.minQuantity || 5; // По умолчанию 5
+  // Alert Settings persistence
+  async getOrCreateSettings(companyId: string): Promise<InventoryAlertSettings> {
+    let settings = await this.settingsRepository.findOne({ where: { companyId, userId: null } });
+    if (!settings) {
+      settings = this.settingsRepository.create({
+        companyId,
+        userId: null,
+        enableEmailNotifications: true,
+        enablePushNotifications: true,
+        emailAddresses: [],
+        lowStockThreshold: 5,
+        criticalStockThreshold: 2,
+        overstockMultiplier: 5,
+        enabledAlertTypes: ['low_stock', 'out_of_stock', 'overstock'],
+        alertFrequency: 'immediate',
+        autoDismissAfterRestock: true,
+        autoDismissAfterHours: 72,
+        workingHoursStart: null,
+        workingHoursEnd: null,
+        workingDays: null,
+        timezone: null,
+        lastNotificationSent: null,
+      });
+      settings = await this.settingsRepository.save(settings);
+    }
+    return settings;
+  }
+
+  async updateSettings(companyId: string, patch: Partial<InventoryAlertSettings>): Promise<InventoryAlertSettings> {
+    let settings = await this.getOrCreateSettings(companyId);
+    Object.assign(settings, patch, { companyId, userId: null });
+    settings = await this.settingsRepository.save(settings);
+    return settings;
   }
 }

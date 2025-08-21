@@ -1,7 +1,7 @@
+// apps/backend/src/modules/customers/types/customers.types.ts
 import { CustomerType } from '../../../database/entities/customer.entity';
 
 export type CustomerSortField = 'firstName' | 'lastName' | 'email' | 'createdAt' | 'loyaltyPoints' | 'companyName';
-
 export type SortOrder = 'asc' | 'desc';
 
 export interface CustomerFilter {
@@ -35,6 +35,15 @@ export interface CreateCustomerData {
   loyaltyPoints?: number;
   notes?: string;
   isActive?: boolean;
+
+  // Consents
+  marketingConsent?: boolean;
+  marketingConsentDate?: Date | null;
+  pdpConsentVersion?: string | null;
+  pdpConsentDate?: Date | null;
+
+  // Retention (server sets)
+  dataRetentionUntil?: Date | null;
 }
 
 export interface UpdateCustomerData {
@@ -50,10 +59,16 @@ export interface UpdateCustomerData {
   loyaltyPoints?: number;
   notes?: string;
   isActive?: boolean;
+
+  // Consents
+  marketingConsent?: boolean;
+  marketingConsentDate?: Date | null;
+  pdpConsentVersion?: string | null;
+  pdpConsentDate?: Date | null;
 }
 
 export interface PaginatedCustomersResult {
-  items: any[]; // CustomerResponseDto[] - будет типизировано после создания DTO
+  items: any[];
   total: number;
   page: number;
   limit: number;
@@ -74,7 +89,7 @@ export interface CustomerStats {
 
 export interface CustomerBasicInfo {
   id: string;
-  name: string; // Форматированное имя (firstName + lastName или companyName)
+  name: string;
   email: string;
   phone: string;
   type: CustomerType;

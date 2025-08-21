@@ -1,16 +1,16 @@
-// src/modules/invoices/constants/invoices.constants.ts (ПОЛНОСТЬЮ ИСПРАВЛЕННЫЙ)
+// src/modules/invoices/constants/invoices.constants.ts
 import { InvoiceStatus } from '../../../database/entities/invoice.entity';
-import { AuditAction } from '../../../common/audit/audit.service'; // ✅ ДОБАВЛЕН ИМПОРТ
+import { AuditAction } from '../../../common/audit/audit.service';
 
 export const INVOICES_CONSTANTS = {
   DEFAULTS: {
     PAGE_SIZE: 20,
     MAX_ITEMS: 100,
     STATUS: InvoiceStatus.ISSUED,
-    TAX_RATE: 0.20, // 20% НДС
-    PAYMENT_TERMS_DAYS: 30, // Срок оплаты по умолчанию
+    TAX_RATE: 0.2, // 20% НДС
+    PAYMENT_TERMS_DAYS: 30,
   },
-  
+
   VALIDATION: {
     INVOICE_NUMBER: {
       MIN_LENGTH: 10,
@@ -19,7 +19,7 @@ export const INVOICES_CONSTANTS = {
     },
     AMOUNT: {
       MIN: 0.01,
-      MAX: 10000000, // 10 млн рублей
+      MAX: 10000000,
     },
     DUE_DATE: {
       MIN_DAYS_FROM_NOW: 1,
@@ -27,6 +27,7 @@ export const INVOICES_CONSTANTS = {
     },
     NOTES: {
       MAX_LENGTH: 1000,
+      SAFE_PATTERN: /^[a-zA-Zа-яА-Я0-9\s\-.,;:!?()\n\r]+$/,
     },
   },
 
@@ -37,15 +38,14 @@ export const INVOICES_CONSTANTS = {
   },
 
   ROLES: {
-    CAN_CREATE: ['owner', 'admin', 'manager'],
-    CAN_UPDATE: ['owner', 'admin', 'manager'],
-    CAN_DELETE: ['owner', 'admin'],
-    CAN_CHANGE_STATUS: ['owner', 'admin', 'manager'],
-    CAN_VIEW_ALL: ['owner', 'admin', 'manager'],
-    CAN_CANCEL: ['owner', 'admin', 'manager'],
+    CAN_CREATE: ['company_owner', 'company_admin', 'manager'],
+    CAN_UPDATE: ['company_owner', 'company_admin', 'manager'],
+    CAN_DELETE: ['company_owner', 'company_admin'],
+    CAN_CHANGE_STATUS: ['company_owner', 'company_admin', 'manager'], // cashier удалён
+    CAN_VIEW_ALL: ['company_owner', 'company_admin', 'manager', 'cashier'],
+    CAN_CANCEL: ['company_owner', 'company_admin', 'manager'],
   },
 
-  // ✅ ИСПРАВЛЕНО: Используем enum значения вместо строк
   AUDIT_ACTIONS: {
     CREATED: AuditAction.INVOICE_CREATED,
     UPDATED: AuditAction.INVOICE_UPDATED,
@@ -78,12 +78,12 @@ export const INVOICES_CONSTANTS = {
 
 export const INVOICE_STATUS_DISPLAY = {
   [InvoiceStatus.ISSUED]: 'Выставлен',
-  [InvoiceStatus.PAID]: 'Оплачен', 
+  [InvoiceStatus.PAID]: 'Оплачен',
   [InvoiceStatus.CANCELED]: 'Отменен',
 } as const;
 
 export const INVOICE_STATUS_COLORS = {
-  [InvoiceStatus.ISSUED]: '#f59e0b', // yellow
-  [InvoiceStatus.PAID]: '#10b981',   // green
-  [InvoiceStatus.CANCELED]: '#ef4444', // red
+  [InvoiceStatus.ISSUED]: '#f59e0b',
+  [InvoiceStatus.PAID]: '#10b981',
+  [InvoiceStatus.CANCELED]: '#ef4444',
 } as const;

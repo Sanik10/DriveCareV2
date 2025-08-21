@@ -462,8 +462,7 @@ export class PaymentsValidationService implements IPaymentsValidationService {
     ];
 
     if (finalStatuses.includes(payment.status as PaymentStatus)) {
-      // Ограничиваем изменения для финальных статусов
-      const allowedFields = ['notes', 'metadata'];
+      const allowedFields = ['notes', 'safeMetadata'];
       const attemptedChanges = Object.keys(data).filter(key => !allowedFields.includes(key));
       
       if (attemptedChanges.length > 0) {

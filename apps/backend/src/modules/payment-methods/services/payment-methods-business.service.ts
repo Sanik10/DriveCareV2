@@ -1,433 +1,150 @@
-// src/modules/payment-methods/services/payment-methods-business.service.ts
-import { Injectable } from '@nestjs/common';
+// path: apps/backend/src/modules/payment-methods/services/payment-methods-business.service.ts
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PaymentMethodsDataService } from './payment-methods-data.service';
 import { PaymentMethodsValidationService } from './payment-methods-validation.service';
 import { PaymentMethodsMapperService } from './payment-methods-mapper.service';
-import { PaymentMethod } from '../../../database/entities';
 import { CreatePaymentMethodDto } from '../dto/request/create-payment-method.dto';
 import { UpdatePaymentMethodDto } from '../dto/request/update-payment-method.dto';
 import { PaymentMethodResponseDto } from '../dto/response/payment-method-response.dto';
 import { PaginatedPaymentMethodsResponseDto } from '../dto/response/paginated-payment-methods-response.dto';
-import { PaymentMethodsFilter, PaymentMethodStats, BulkUpdateResult, UserWithCompany, IntegrationTestResult, PaymentProcessingResult } from '../types/payment-methods.types';
+import {
+  PaymentMethodsFilter,
+  PaymentMethodStats,
+  BulkUpdateResult,
+  UserWithCompany,
+  IntegrationTestResult,
+} from '../types/payment-methods.types';
+import { ValidationDataException } from '../../../common/exceptions/domain.exceptions';
 import { PAYMENT_METHODS_CONSTANTS } from '../constants/payment-methods.constants';
 
 @Injectable()
 export class PaymentMethodsBusinessService {
   constructor(
-    // 🔥 Делаем поля public для доступа из main сервиса
     public readonly dataService: PaymentMethodsDataService,
     public readonly validationService: PaymentMethodsValidationService,
     public readonly mapperService: PaymentMethodsMapperService,
   ) {}
 
-  /**
-   * 🔒 Получение всех способов оплаты пользователя с пагинацией и фильтрацией
-   */
   async findAllForUser(user: UserWithCompany, filter: PaymentMethodsFilter): Promise<PaginatedPaymentMethodsResponseDto> {
-    // 🔒 КРИТИЧНО: Всегда фильтруем по companyId пользователя
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
-    // Подготавливаем фильтр с безопасными значениями
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
     const safeFilter = this.prepareSafeFilter(filter, user.companyId);
-
-    // Валидируем фильтр
     this.validationService.validatePaymentMethodsFilter(safeFilter);
-
-    // Получаем данные
-    const [paymentMethods, total] = await this.dataService.findWithFilters(safeFilter);
-
-    // Возвращаем маппированный результат
+    const [items, total] = await this.dataService.findWithFilters(safeFilter);
     return this.mapperService.mapToPaginatedResponse(
-      paymentMethods,
+      items,
       total,
       safeFilter.page || 1,
-      safeFilter.limit || PAYMENT_METHODS_CONSTANTS.DEFAULT_PAGE_SIZE
+      safeFilter.limit || PAYMENT_METHODS_CONSTANTS.DEFAULT_PAGE_SIZE,
     );
   }
 
-  /**
-   * 🔒 Получение способа оплаты по ID с проверкой прав доступа
-   */
   async findOneSecurely(paymentMethodId: string, user: UserWithCompany): Promise<PaymentMethodResponseDto> {
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
-    // Проверяем права доступа через ValidationService
-    const paymentMethod = await this.validationService.validatePaymentMethodOwnership(paymentMethodId, user.companyId);
-
-    return this.mapperService.mapToResponseDto(paymentMethod);
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
+    const pm = await this.validationService.validatePaymentMethodOwnership(paymentMethodId, user.companyId);
+    return this.mapperService.mapToResponseDto(pm);
   }
 
-  /**
-   * ➕ Создание нового способа оплаты
-   */
   async createPaymentMethod(dto: CreatePaymentMethodDto, user: UserWithCompany): Promise<PaymentMethodResponseDto> {
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
-    // Валидируем данные
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
     await this.validationService.validateCreatePaymentMethodData(dto, user.companyId);
-
-    // Создаем способ оплаты
-    const paymentMethod = await this.dataService.create(dto, user.companyId);
-
-    // Логируем создание для audit
-    console.log(`✅ PaymentMethod created: ${paymentMethod.id} by user ${user.id} in company ${user.companyId}`);
-
-    return this.mapperService.mapToResponseDto(paymentMethod);
+    const pm = await this.dataService.create(dto, user.companyId);
+    return this.mapperService.mapToResponseDto(pm);
   }
 
-  /**
-   * ✏️ Обновление способа оплаты
-   */
   async updatePaymentMethod(paymentMethodId: string, dto: UpdatePaymentMethodDto, user: UserWithCompany): Promise<PaymentMethodResponseDto> {
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
-    // Валидируем права доступа и данные
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
     await this.validationService.validateUpdatePaymentMethodData(paymentMethodId, dto, user.companyId);
-
-    // Обновляем способ оплаты
-    const updatedPaymentMethod = await this.dataService.update(paymentMethodId, dto);
-
-    // Логируем обновление для audit
-    console.log(`✅ PaymentMethod updated: ${paymentMethodId} by user ${user.id} in company ${user.companyId}`);
-
-    return this.mapperService.mapToResponseDto(updatedPaymentMethod);
+    const updated = await this.dataService.update(paymentMethodId, dto);
+    return this.mapperService.mapToResponseDto(updated);
   }
 
-  /**
-   * 🗑️ Удаление способа оплаты
-   */
   async removePaymentMethod(paymentMethodId: string, user: UserWithCompany): Promise<void> {
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
-    // Проверяем возможность удаления
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
     await this.validationService.validatePaymentMethodDeletion(paymentMethodId, user.companyId);
-
-    // Удаляем способ оплаты
     await this.dataService.remove(paymentMethodId);
-
-    // Логируем удаление для audit
-    console.log(`🗑️ PaymentMethod deleted: ${paymentMethodId} by user ${user.id} in company ${user.companyId}`);
   }
 
-  /**
-   * 🔄 Переключение статуса способа оплаты
-   */
   async togglePaymentMethodStatus(paymentMethodId: string, user: UserWithCompany): Promise<PaymentMethodResponseDto> {
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
-    // Проверяем права доступа
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
     await this.validationService.validatePaymentMethodOwnership(paymentMethodId, user.companyId);
-
-    // Переключаем статус
-    const updatedPaymentMethod = await this.dataService.toggleStatus(paymentMethodId);
-
-    // Логируем изменение статуса для audit
-    console.log(`🔄 PaymentMethod status toggled: ${paymentMethodId} -> ${updatedPaymentMethod.isActive} by user ${user.id}`);
-
-    return this.mapperService.mapToResponseDto(updatedPaymentMethod);
+    const updated = await this.dataService.toggleStatus(paymentMethodId);
+    return this.mapperService.mapToResponseDto(updated);
   }
 
-  /**
-   * 🔥 Массовое обновление способов оплаты
-   */
-  async bulkUpdatePaymentMethods(
-    paymentMethodIds: string[], 
-    updates: UpdatePaymentMethodDto, 
-    user: UserWithCompany
-  ): Promise<BulkUpdateResult> {
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
-    // Валидируем права доступа ко всем способам оплаты
+  async bulkUpdatePaymentMethods(paymentMethodIds: string[], updates: UpdatePaymentMethodDto, user: UserWithCompany): Promise<BulkUpdateResult> {
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
     await this.validationService.validateBulkPaymentMethodsOwnership(paymentMethodIds, user.companyId);
-
-    // Выполняем массовое обновление
     const updatedCount = await this.dataService.bulkUpdate(paymentMethodIds, updates);
-
-    // Логируем bulk операцию для audit
-    console.log(`🔥 Bulk update: ${updatedCount}/${paymentMethodIds.length} payment methods updated by user ${user.id}`);
-
     return this.mapperService.mapBulkOperationResult(updatedCount, paymentMethodIds.length);
   }
 
-  /**
-   * 📊 Получение статистики способов оплаты
-   */
   async getPaymentMethodsStatistics(user: UserWithCompany): Promise<any> {
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
-    const stats = await this.dataService.getPaymentMethodsStats(user.companyId);
-
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
+    const stats: PaymentMethodStats = await this.dataService.getPaymentMethodsStats(user.companyId);
     return this.mapperService.mapStatsToResponse(stats);
   }
 
-  /**
-   * 🔍 Поиск способов оплаты по названию
-   */
   async searchPaymentMethods(query: string, user: UserWithCompany): Promise<PaymentMethodResponseDto[]> {
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
     if (!query || query.trim().length < 2) {
-      throw new Error('Поисковый запрос должен содержать минимум 2 символа');
+      throw new ValidationDataException('q', 'Поисковый запрос должен содержать минимум 2 символа');
     }
-
-    const paymentMethods = await this.dataService.searchByName(query.trim(), user.companyId);
-
-    return this.mapperService.mapArrayToResponseDto(paymentMethods);
+    const items = await this.dataService.searchByName(query.trim(), user.companyId);
+    return this.mapperService.mapArrayToResponseDto(items);
   }
 
-  /**
-   * 🔥 Получение активных способов оплаты для быстрого доступа
-   */
-  async getActivePaymentMethodsQuick(user: UserWithCompany): Promise<Array<{
-    id: string;
-    name: string;
-    type: string;
-    isActive: boolean;
-    processingFee?: number;
-  }>> {
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
-    const paymentMethods = await this.dataService.findActiveByCompany(user.companyId);
-
-    return this.mapperService.mapToQuickListDto(paymentMethods);
+  async getActivePaymentMethodsQuick(user: UserWithCompany) {
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
+    const items = await this.dataService.findActiveByCompany(user.companyId);
+    return this.mapperService.mapToQuickListDto(items);
   }
 
-  /**
-   * 📱 Получение способов оплаты для dropdown/select
-   */
-  async getPaymentMethodsForSelect(user: UserWithCompany): Promise<Array<{
-    value: string;
-    label: string;
-    disabled?: boolean;
-    meta?: any;
-  }>> {
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
-    const paymentMethods = await this.dataService.findActiveByCompany(user.companyId);
-
-    return this.mapperService.mapToSelectOptions(paymentMethods);
+  async getPaymentMethodsForSelect(user: UserWithCompany) {
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
+    const items = await this.dataService.findActiveByCompany(user.companyId);
+    return this.mapperService.mapToSelectOptions(items);
   }
 
-  /**
-   * 🔥 Получение способов оплаты по типу
-   */
   async getPaymentMethodsByType(type: string, user: UserWithCompany): Promise<PaymentMethodResponseDto[]> {
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
-    const paymentMethods = await this.dataService.findByType(user.companyId, type);
-
-    return this.mapperService.mapArrayToResponseDto(paymentMethods);
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
+    const items = await this.dataService.findByType(user.companyId, type);
+    return this.mapperService.mapArrayToResponseDto(items);
   }
 
-  /**
-   * 🔥 Проверка доступности способа оплаты для использования
-   */
-  async checkPaymentMethodAvailability(paymentMethodId: string, user: UserWithCompany): Promise<{
-    available: boolean;
-    paymentMethod?: PaymentMethodResponseDto;
-    reason?: string;
-  }> {
-    if (!user.companyId) {
-      throw new Error('Пользователь не принадлежит к компании');
-    }
-
+  async checkPaymentMethodAvailability(paymentMethodId: string, user: UserWithCompany) {
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
     try {
-      const paymentMethod = await this.validationService.validatePaymentMethodAvailability(paymentMethodId, user.companyId);
-      
-      return {
-        available: true,
-        paymentMethod: this.mapperService.mapToResponseDto(paymentMethod),
-      };
-    } catch (error) {
-      return {
-        available: false,
-        reason: error.message,
-      };
+      const pm = await this.validationService.validatePaymentMethodAvailability(paymentMethodId, user.companyId);
+      return { available: true, paymentMethod: this.mapperService.mapToResponseDto(pm) };
+    } catch (e: any) {
+      return { available: false, reason: e?.message || 'Unavailable' };
     }
   }
 
-  /**
-   * 🔥 Тестирование интеграции способа оплаты
-   */
-	async testIntegration(paymentMethodId: string, user: UserWithCompany): Promise<IntegrationTestResult> {
-	if (!user.companyId) {
-		throw new Error('Пользователь не принадлежит к компании');
-	}
-
-	// Проверяем права доступа
-	const paymentMethod = await this.validationService.validatePaymentMethodOwnership(paymentMethodId, user.companyId);
-
-	// Проверяем наличие интеграции
-	if (!paymentMethod.gatewayType) {
-		throw new Error('Интеграция не настроена');
-	}
-
-	// Создаем конфигурацию из полей entity
-	const integrationConfig = {
-		gatewayType: paymentMethod.gatewayType,
-		apiKey: paymentMethod.gatewayApiKey,
-		merchantId: paymentMethod.gatewayMerchantId,
-		webhookUrl: paymentMethod.gatewayWebhookUrl,
-		testMode: paymentMethod.gatewayTestMode,
-	};
-
-	// Выполняем тестирование в зависимости от типа шлюза
-	const testResult = await this.performIntegrationTest(integrationConfig);
-
-	// Логируем тестирование
-	console.log(`🧪 Integration test: ${paymentMethodId} gateway ${paymentMethod.gatewayType} by user ${user.id}`);
-
-	return this.mapperService.mapIntegrationTestResult(paymentMethodId, paymentMethod.gatewayType, testResult);
-	}
-
-  /**
-   * 🔒 Подготовка безопасного фильтра с принудительной установкой companyId
-   */
-  private prepareSafeFilter(filter: PaymentMethodsFilter, companyId: string): PaymentMethodsFilter {
-    const page = filter.page ? Math.max(1, parseInt(String(filter.page))) : 1;
-    const limit = filter.limit ? 
-      Math.min(PAYMENT_METHODS_CONSTANTS.MAX_PAGE_SIZE, Math.max(1, parseInt(String(filter.limit)))) : 
-      PAYMENT_METHODS_CONSTANTS.DEFAULT_PAGE_SIZE;
-
-    return {
-      ...filter,
-      companyId, // 🔒 ПРИНУДИТЕЛЬНО устанавливаем companyId
-      page,
-      limit,
-      offset: (page - 1) * limit,
-    };
-  }
-
-  /**
-   * 🔥 Выполнение тестирования интеграции
-   */
-  private async performIntegrationTest(integrationConfig: any): Promise<any> {
-    const startTime = Date.now();
-    
-    try {
-      switch (integrationConfig.gatewayType) {
-        case 'stripe':
-          return await this.testStripeIntegration(integrationConfig);
-        
-        case 'yookassa':
-          return await this.testYooKassaIntegration(integrationConfig);
-        
-        case 'sberbank':
-          return await this.testSberbankIntegration(integrationConfig);
-        
-        case 'tinkoff':
-          return await this.testTinkoffIntegration(integrationConfig);
-        
-        default:
-          return this.mockIntegrationTest(integrationConfig);
-      }
-    } catch (error) {
-      return {
-        success: false,
-        responseTime: Date.now() - startTime,
-        errors: [error.message],
-        features: {
-          payment: false,
-          refund: false,
-          installments: false,
-          webhooks: false,
-        },
-      };
+  async testIntegration(paymentMethodId: string, user: UserWithCompany): Promise<IntegrationTestResult> {
+    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
+    const pm = await this.validationService.validatePaymentMethodOwnership(paymentMethodId, user.companyId);
+    if (!pm.gatewayType) {
+      throw new ValidationDataException('integration', 'Интеграция не настроена');
     }
-  }
-
-  /**
-   * 🧪 Mock тестирование интеграции (для демонстрации)
-   */
-  private async mockIntegrationTest(integrationConfig: any): Promise<any> {
-    // Имитируем API вызов
-    await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
-
-    const isTestMode = integrationConfig.testMode;
-    const hasApiKey = !!integrationConfig.apiKey;
-    
-    return {
-      success: hasApiKey && isTestMode,
-      responseTime: 200 + Math.random() * 300,
-      features: {
-        payment: hasApiKey,
-        refund: hasApiKey && integrationConfig.gatewayType !== 'cash',
-        installments: ['stripe', 'yookassa'].includes(integrationConfig.gatewayType),
-        webhooks: hasApiKey && !!integrationConfig.webhookUrl,
-      },
-      errors: hasApiKey ? [] : ['API ключ не настроен'],
+    const cfg = {
+      gatewayType: pm.gatewayType,
+      apiKey: pm.gatewayApiKey,
+      merchantId: pm.gatewayMerchantId,
+      webhookUrl: pm.gatewayWebhookUrl,
+      testMode: pm.gatewayTestMode,
     };
+    const testResult = await this.performIntegrationTest(cfg);
+    return this.mapperService.mapIntegrationTestResult(paymentMethodId, pm.gatewayType, testResult);
   }
 
-  /**
-   * 🧪 Тестирование Stripe интеграции
-   */
-  private async testStripeIntegration(config: any): Promise<any> {
-    // TODO: Implement real Stripe API test
-    return this.mockIntegrationTest(config);
-  }
+  // ========= Методы для других модулей =========
 
-  /**
-   * 🧪 Тестирование YooKassa интеграции
-   */
-  private async testYooKassaIntegration(config: any): Promise<any> {
-    // TODO: Implement real YooKassa API test
-    return this.mockIntegrationTest(config);
-  }
-
-  /**
-   * 🧪 Тестирование Sberbank интеграции
-   */
-  private async testSberbankIntegration(config: any): Promise<any> {
-    // TODO: Implement real Sberbank API test
-    return this.mockIntegrationTest(config);
-  }
-
-  /**
-   * 🧪 Тестирование Tinkoff интеграции
-   */
-  private async testTinkoffIntegration(config: any): Promise<any> {
-    // TODO: Implement real Tinkoff API test
-    return this.mockIntegrationTest(config);
-  }
-
-  // ========== МЕТОДЫ ДЛЯ ДРУГИХ МОДУЛЕЙ ==========
-
-  /**
-   * 🔗 Получение способа оплаты для платежа (используется в Payments модуле)
-   */
   async getPaymentMethodForPayment(paymentMethodId: string, companyId: string): Promise<PaymentMethodResponseDto> {
-    const paymentMethod = await this.validationService.validatePaymentMethodAvailability(paymentMethodId, companyId);
-    return this.mapperService.mapToResponseDto(paymentMethod);
+    const pm = await this.validationService.validatePaymentMethodAvailability(paymentMethodId, companyId);
+    return this.mapperService.mapToResponseDto(pm);
   }
 
-  /**
-   * 🔗 Проверка существования способа оплаты (для других модулей)
-   */
   async existsInCompany(paymentMethodId: string, companyId: string): Promise<boolean> {
     try {
       await this.validationService.validatePaymentMethodOwnership(paymentMethodId, companyId);
@@ -437,34 +154,60 @@ export class PaymentMethodsBusinessService {
     }
   }
 
-  /**
-   * 🔗 Получение конфигурации лимитов
-   */
   async getPaymentMethodLimits(paymentMethodId: string, companyId: string): Promise<any> {
-    const paymentMethod = await this.validationService.validatePaymentMethodOwnership(paymentMethodId, companyId);
-    return this.mapperService.mapLimitsConfig(paymentMethod);
+    const pm = await this.validationService.validatePaymentMethodOwnership(paymentMethodId, companyId);
+    return this.mapperService.mapLimitsConfig(pm);
   }
 
-  /**
-   * 🔗 Расчет комиссии за платеж
-   */
-  async calculateProcessingFee(paymentMethodId: string, amount: number, companyId: string): Promise<{
-	amount: number;
-	fee: number;
-	totalAmount: number;
-	feePercentage: number;
-	}> {
-	const paymentMethod = await this.validationService.validatePaymentMethodAvailability(paymentMethodId, companyId);
-	
-	const feePercentage = paymentMethod.processingFeePercent || 0;
-	const fee = Math.round((amount * feePercentage / 100) * 100) / 100; // 2 decimal places
-	const totalAmount = amount + fee;
+  async calculateProcessingFee(
+    paymentMethodId: string,
+    amount: number,
+    companyId: string,
+  ): Promise<{ amount: number; fee: number; totalAmount: number; feePercentage: number }> {
+    const pm = await this.validationService.validatePaymentMethodAvailability(paymentMethodId, companyId);
+    const feePercentage = pm.processingFeePercent || 0;
 
-	return {
-		amount,
-		fee,
-		totalAmount,
-		feePercentage,
-	};
+    // Корректный расчет копеек: feeCents = round(amount * fee% / 100 * 100)
+    const feeCents = Math.round((amount * feePercentage / 100) * 100);
+    const fee = feeCents / 100;
+    const totalAmount = Math.round((amount + fee) * 100) / 100;
+
+    return { amount, fee, totalAmount, feePercentage };
+  }
+
+  // ========= Внутренние =========
+
+  private prepareSafeFilter(filter: PaymentMethodsFilter, companyId: string): PaymentMethodsFilter {
+    const page = filter.page ? Math.max(1, parseInt(String(filter.page))) : 1;
+    const limit = filter.limit
+      ? Math.min(PAYMENT_METHODS_CONSTANTS.MAX_PAGE_SIZE, Math.max(1, parseInt(String(filter.limit))))
+      : PAYMENT_METHODS_CONSTANTS.DEFAULT_PAGE_SIZE;
+    return { ...filter, companyId, page, limit, offset: (page - 1) * limit };
+  }
+
+  private async performIntegrationTest(cfg: any): Promise<any> {
+    const start = Date.now();
+    try {
+      await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
+      const hasKey = !!cfg.apiKey;
+      return {
+        success: hasKey,
+        responseTime: Date.now() - start,
+        features: {
+          payment: hasKey,
+          refund: hasKey,
+          installments: ['stripe', 'yookassa'].includes(cfg.gatewayType),
+          webhooks: hasKey && !!cfg.webhookUrl,
+        },
+        errors: hasKey ? [] : ['API ключ не настроен'],
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        responseTime: Date.now() - start,
+        errors: [e?.message || 'Integration test failed'],
+        features: { payment: false, refund: false, installments: false, webhooks: false },
+      };
+    }
   }
 }

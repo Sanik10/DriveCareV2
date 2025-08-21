@@ -5,29 +5,39 @@ import { SupplierResponseDto } from '../dto/response/supplier-response.dto';
 import { PaginatedSuppliersResponseDto } from '../dto/response/paginated-suppliers-response.dto';
 import { SupplierRatingResponseDto } from '../dto/response/supplier-rating-response.dto';
 import { SupplierAnalyticsResponseDto } from '../dto/response/supplier-analytics-response.dto';
-import { 
-  SupplierFilter,
-  SupplierRating,
-  SupplierAnalytics,
-  SupplierDisplayItem,
-  QuickSupplierInfo
-} from '../types/suppliers.types';
-import { SUPPLIER_CONSTRAINTS } from '../types/suppliers.types';
+import { SupplierFilter, SupplierRating, SupplierAnalytics, SupplierDisplayItem, QuickSupplierInfo } from '../types/suppliers.types';
 
 @Injectable()
 export class SuppliersMapperService {
-  
-  /**
-   * 🎯 Основной маппинг Supplier Entity → ResponseDto
-   */
-  mapToResponseDto(supplier: Supplier): SupplierResponseDto {
+  private maskEmail(email?: string) {
+    if (!email) return undefined;
+    const [name, domain] = email.split('@');
+    if (!domain) return '***';
+    const maskedName = name.length <= 2 ? '*'.repeat(name.length) : name[0] + '***' + name.slice(-1);
+    return `${maskedName}@${domain}`;
+  }
+  private maskPhone(phone?: string) {
+    if (!phone) return undefined;
+    return phone.replace(/\d(?=\d{4})/g, '*');
+  }
+  private maskName(name?: string) {
+    if (!name) return undefined;
+    if (name.length <= 2) return '*'.repeat(name.length);
+    return name[0] + '***' + name.slice(-1);
+  }
+
+  mapToResponseDto(supplier: Supplier, maskContacts: boolean = false): SupplierResponseDto {
+    const email = supplier.email || undefined;
+    const phone = supplier.phone || undefined;
+    const contactName = supplier.contactName || undefined;
+
     return {
       id: supplier.id,
       companyId: supplier.companyId,
       name: supplier.name,
-      contactName: supplier.contactName || undefined,
-      email: supplier.email || undefined,
-      phone: supplier.phone || undefined,
+      contactName: maskContacts ? this.maskName(contactName) : contactName,
+      email: maskContacts ? this.maskEmail(email) : email,
+      phone: maskContacts ? this.maskPhone(phone) : phone,
       address: supplier.address || undefined,
       city: supplier.city || undefined,
       country: supplier.country || undefined,
@@ -36,15 +46,11 @@ export class SuppliersMapperService {
       isActive: supplier.isActive,
       createdAt: supplier.createdAt,
       updatedAt: supplier.updatedAt,
-      
-      // ✅ ИСПРАВЛЕНО: используем данные из entity
       supplierType: supplier.supplierType,
       supplierTypeDisplay: this.getSupplierTypeDisplay(supplier.supplierType),
       taxNumber: supplier.taxNumber || undefined,
       paymentTerms: supplier.paymentTerms || undefined,
       deliveryTerms: supplier.deliveryTerms || undefined,
-      
-      // 📊 Вычисляемые поля
       rating: {
         overallRating: 0,
         qualityRating: 0,
@@ -54,7 +60,6 @@ export class SuppliersMapperService {
         totalRatings: 0,
         lastRatedAt: undefined,
       },
-      
       statistics: {
         totalOrders: 0,
         totalValue: 0,
@@ -66,8 +71,6 @@ export class SuppliersMapperService {
         defectRate: 0,
         returnRate: 0,
       },
-      
-      // ✅ ДОБАВЛЯЕМ недостающие обязательные поля:
       isPreferred: false,
       reliabilityLevel: 'medium',
       cooperationStatus: 'active',
@@ -76,8 +79,6 @@ export class SuppliersMapperService {
       canEdit: true,
       canDeactivate: true,
       blockReason: undefined,
-      
-      // 🔗 Связанная информация
       preferredContact: this.determinePreferredContact(supplier),
       tags: this.generateSupplierTags(supplier),
       businessMetrics: {
@@ -89,11 +90,8 @@ export class SuppliersMapperService {
     };
   }
 
-  /**
-   * 🎯 Маппинг с дополнительными данными
-   */
   mapToResponseDtoWithStats(
-    supplier: Supplier, 
+    supplier: Supplier,
     statsData?: {
       totalOrders: number;
       totalValue: number;
@@ -110,10 +108,11 @@ export class SuppliersMapperService {
       priceAverage: number;
       communicationAverage?: number;
       lastRatedAt?: Date;
-    }
+    },
+    maskContacts: boolean = false,
   ): SupplierResponseDto {
-    const baseDto = this.mapToResponseDto(supplier);
-    
+    const baseDto = this.mapToResponseDto(supplier, maskContacts);
+
     if (statsData) {
       baseDto.statistics = {
         totalOrders: statsData.totalOrders,
@@ -127,48 +126,39 @@ export class SuppliersMapperService {
         returnRate: 0,
       };
     }
-    
+
     if (ratingData) {
       baseDto.rating = {
         overallRating: Math.round(ratingData.average * 100) / 100,
         qualityRating: Math.round(ratingData.qualityAverage * 100) / 100,
         deliveryRating: Math.round(ratingData.deliveryAverage * 100) / 100,
         priceRating: Math.round(ratingData.priceAverage * 100) / 100,
-        communicationRating: ratingData.communicationAverage 
-          ? Math.round(ratingData.communicationAverage * 100) / 100 
+        communicationRating: ratingData.communicationAverage
+          ? Math.round(ratingData.communicationAverage * 100) / 100
           : undefined,
         totalRatings: ratingData.totalRatings,
         lastRatedAt: ratingData.lastRatedAt,
       };
     }
-    
+
     return baseDto;
   }
 
-  /**
-   * 🎯 Массовый маппинг
-   */
-  mapArrayToResponseDto(suppliers: Supplier[]): SupplierResponseDto[] {
-    return suppliers.map(supplier => this.mapToResponseDto(supplier));
+  mapArrayToResponseDto(suppliers: Supplier[], maskContacts: boolean = false): SupplierResponseDto[] {
+    return suppliers.map((supplier) => this.mapToResponseDto(supplier, maskContacts));
   }
 
-  /**
-   * 🎯 Маппинг пагинированного ответа
-   */
   mapToPaginatedResponse(
     suppliers: Supplier[],
     total: number,
     page: number,
     limit: number,
-    filters?: SupplierFilter
+    filters?: SupplierFilter,
+    maskContacts: boolean = false,
   ): PaginatedSuppliersResponseDto {
-    const items = this.mapArrayToResponseDto(suppliers);
+    const items = this.mapArrayToResponseDto(suppliers, maskContacts);
     const totalPages = Math.ceil(total / limit);
-
-    // 📊 Расчет сводки по текущей странице
     const summary = this.calculatePageSummary(suppliers);
-
-    // ✅ ДОБАВЛЯЕМ недостающий typeBreakdown:
     const typeBreakdown = this.calculateTypeBreakdown(suppliers);
 
     return {
@@ -186,69 +176,49 @@ export class SuppliersMapperService {
         minRating: filters?.minRating,
         city: filters?.city,
         country: filters?.country,
-        supplierType: filters?.supplierType,
+        supplierType: filters?.supplierType as any,
         hasActiveFilters: this.hasActiveFilters(filters),
       },
     };
   }
 
-  /**
-   * 🎯 Маппинг рейтинга поставщика - ПОЛНОСТЬЮ ПЕРЕПИСАН
-   */
   mapToRatingResponse(rating: SupplierRating): SupplierRatingResponseDto {
     return {
       supplierId: rating.supplierId,
-      supplierName: 'Название поставщика', // TODO: получить из БД
+      supplierName: 'Название поставщика',
       overallRating: Math.round(rating.averageRating * 100) / 100,
       totalRatings: 1,
-      
-      // Детализация по категориям
       averageQualityRating: rating.qualityRating,
       averageDeliveryRating: rating.deliveryRating,
       averagePriceRating: rating.priceRating,
       averageCommunicationRating: rating.communicationRating,
-      
-      // Распределение оценок (заглушки)
       qualityBreakdown: { excellent: 0, good: 1, average: 0, poor: 0, terrible: 0 },
       deliveryBreakdown: { excellent: 0, good: 1, average: 0, poor: 0, terrible: 0 },
       priceBreakdown: { excellent: 0, good: 1, average: 0, poor: 0, terrible: 0 },
-      
-      // Динамика рейтинга
       ratingTrend: 'stable',
       ratingChange: 0,
       ratingHistory: [],
-      
-      // Последние оценки
-      latestRatings: [{
-        id: rating.id,
-        qualityRating: rating.qualityRating,
-        deliveryRating: rating.deliveryRating,
-        priceRating: rating.priceRating,
-        communicationRating: rating.communicationRating,
-        overallRating: rating.averageRating,
-        comment: rating.comment,
-        ratedBy: {
-          id: rating.ratedBy,
-          name: 'Пользователь',
-          role: 'manager'
+      latestRatings: [
+        {
+          id: rating.id,
+          qualityRating: rating.qualityRating,
+          deliveryRating: rating.deliveryRating,
+          priceRating: rating.priceRating,
+          communicationRating: rating.communicationRating,
+          overallRating: rating.averageRating,
+          comment: rating.comment,
+          ratedBy: { id: rating.ratedBy, name: 'Пользователь', role: 'manager' },
+          createdAt: rating.createdAt,
         },
-        createdAt: rating.createdAt,
-      }],
-      
-      // Сравнение с другими поставщиками
+      ],
       rankPosition: 1,
       totalSuppliersInCompany: 1,
       percentileRank: 80,
-      
-      // Рекомендации
       recommendations: this.generateImprovementSuggestions(rating),
       strengths: this.identifyStrongPoints(rating),
       areasForImprovement: this.identifyWeakPoints(rating),
-      
       lastRatedAt: rating.createdAt,
       nextReviewDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      
-      // Для обратной совместимости с мапперами:
       ratedBy: rating.ratedBy,
       qualityRating: rating.qualityRating,
       deliveryRating: rating.deliveryRating,
@@ -257,14 +227,12 @@ export class SuppliersMapperService {
       averageRating: rating.averageRating,
       comment: rating.comment,
       createdAt: rating.createdAt,
-      
       ratingBreakdown: {
         quality: rating.qualityRating,
         delivery: rating.deliveryRating,
         price: rating.priceRating,
         communication: rating.communicationRating,
       },
-      
       improvement: {
         suggestions: this.generateImprovementSuggestions(rating),
         strongPoints: this.identifyStrongPoints(rating),
@@ -273,22 +241,14 @@ export class SuppliersMapperService {
     };
   }
 
-  /**
-   * 🎯 Маппинг аналитики поставщика - ИСПРАВЛЕН
-   */
   mapToAnalyticsResponse(analytics: Partial<SupplierAnalytics>): SupplierAnalyticsResponseDto {
     return {
       supplierId: analytics.supplierId!,
       supplierName: analytics.supplierName || 'Неизвестный поставщик',
-      analyticsPeriod: analytics.period!, // ✅ ИСПРАВЛЕНО: period -> analyticsPeriod
-      
-      // Добавляем недостающие обязательные поля:
+      analyticsPeriod: analytics.period!,
       periodStart: new Date(),
       periodEnd: new Date(),
-      
       totalOrders: analytics.totalOrders || 0,
-      
-      // Финансовые метрики
       financial: {
         totalValue: analytics.totalValue || 0,
         averageOrderValue: analytics.averageOrderValue || 0,
@@ -299,8 +259,6 @@ export class SuppliersMapperService {
         totalDiscounts: 0,
         averageDiscountRate: analytics.discountRate || 0,
       },
-      
-      // Метрики качества
       quality: {
         defectRate: analytics.defectRate || 0,
         returnRate: analytics.returnRate || 0,
@@ -308,25 +266,17 @@ export class SuppliersMapperService {
         resolvedComplaintsRate: 100.0,
         averageComplaintResolutionTime: 2.1,
       },
-      
-      // Временные метрики
       onTimeDeliveryRate: analytics.onTimeDeliveryRate || 0,
       averageDeliveryTime: analytics.averageDeliveryTime || 0,
       minimumDeliveryTime: 1,
       maximumDeliveryTime: 7,
-      
-      // Рейтинги
       currentRating: analytics.currentRating?.overallRating || 0,
       periodStartRating: 0,
       ratingChange: 0,
       ratingTrend: analytics.ratingTrend || 'stable',
-      
-      // Топ товары и тренды
       topParts: analytics.topParts || [],
       uniquePartsCount: analytics.topParts?.length || 0,
       monthlyTrends: analytics.monthlyTrends || [],
-      
-      // Сравнение
       comparison: {
         volumeRank: 2,
         ratingRank: 1,
@@ -335,32 +285,23 @@ export class SuppliersMapperService {
         industryAverageRating: 3.8,
         industryAverageDeliveryTime: 4.2,
       },
-      
-      // Прогнозы
-      predictedNextPeriodValue: 2800000.00,
+      predictedNextPeriodValue: 2800000.0,
       recommendations: this.generateRecommendations(analytics),
       risks: [],
       opportunities: [],
-      
-      // Контактная активность
       contactsCount: 25,
       averageResponseTime: 4.2,
       responseRate: 95.8,
-      
       seasonalityAnalysis: {
         peakSeason: 'autumn',
         lowSeason: 'summer',
         seasonalityStrength: 0.3,
       },
-      
       generatedAt: new Date(),
       nextUpdateAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     };
   }
 
-  /**
-   * 🎯 Маппинг для списков и краткого отображения
-   */
   mapToDisplayItem(supplier: Supplier): SupplierDisplayItem {
     return {
       id: supplier.id,
@@ -380,9 +321,6 @@ export class SuppliersMapperService {
     };
   }
 
-  /**
-   * 🎯 Базовая информация (для других модулей)
-   */
   mapToBasicInfo(supplier: Supplier): QuickSupplierInfo {
     return {
       id: supplier.id,
@@ -396,9 +334,6 @@ export class SuppliersMapperService {
     };
   }
 
-  /**
-   * 🎯 Для мобильного приложения (упрощенный)
-   */
   mapToMobileView(supplier: Supplier): {
     id: string;
     name: string;
@@ -423,9 +358,6 @@ export class SuppliersMapperService {
     };
   }
 
-  /**
-   * 🎯 Для экспорта в Excel/CSV
-   */
   mapToExportRow(supplier: Supplier): {
     name: string;
     contactName: string;
@@ -454,37 +386,26 @@ export class SuppliersMapperService {
     };
   }
 
-  // ✅ ДОБАВЛЯЕМ недостающий метод:
   private getSupplierTypeDisplay(type: string): string {
-    const typeMap = {
-      'manufacturer': 'Производитель',
-      'distributor': 'Дистрибьютор', 
-      'wholesaler': 'Оптовик',
-      'retailer': 'Розничный продавец',
-      'service_provider': 'Поставщик услуг',
-      'other': 'Другое'
+    const typeMap: Record<string, string> = {
+      manufacturer: 'Производитель',
+      distributor: 'Дистрибьютор',
+      wholesaler: 'Оптовик',
+      retailer: 'Розничный продавец',
+      service_provider: 'Поставщик услуг',
+      other: 'Другое',
     };
     return typeMap[type] || 'Неизвестно';
   }
 
-  /**
-   * 📊 Расчет business metrics
-   */
   private calculateBusinessMetrics(
     statsData: any,
-    ratingData?: any
-  ): {
-    reliability: number;
-    costEffectiveness: number;
-    serviceQuality: number;
-    overallScore: number;
-  } {
+    ratingData?: any,
+  ): { reliability: number; costEffectiveness: number; serviceQuality: number; overallScore: number } {
     const reliability = statsData.onTimeDeliveryRate || 0;
     const costEffectiveness = ratingData?.priceAverage ? (ratingData.priceAverage / 5) * 100 : 0;
     const serviceQuality = ratingData?.qualityAverage ? (ratingData.qualityAverage / 5) * 100 : 0;
-    
     const overallScore = (reliability + costEffectiveness + serviceQuality) / 3;
-
     return {
       reliability: Math.round(reliability * 100) / 100,
       costEffectiveness: Math.round(costEffectiveness * 100) / 100,
@@ -493,54 +414,25 @@ export class SuppliersMapperService {
     };
   }
 
-  /**
-   * 📊 Определение предпочтительного способа связи
-   */
   private determinePreferredContact(supplier: Supplier): 'phone' | 'email' | 'whatsapp' {
-    if (supplier.phone && supplier.email) {
-      return 'phone';
-    } else if (supplier.phone) {
-      return 'phone';
-    } else if (supplier.email) {
-      return 'email';
-    } else {
-      return 'email';
-    }
+    if (supplier.phone && supplier.email) return 'phone';
+    if (supplier.phone) return 'phone';
+    if (supplier.email) return 'email';
+    return 'email';
   }
 
-  /**
-   * 🎯 Генерация тегов поставщика
-   */
   private generateSupplierTags(supplier: Supplier): string[] {
     const tags: string[] = [];
-    
-    if (supplier.isActive) {
-      tags.push('active');
-    } else {
-      tags.push('inactive');
-    }
-    
-    if (supplier.website) {
-      tags.push('has_website');
-    }
-    
-    if (supplier.email && supplier.phone) {
-      tags.push('full_contact');
-    }
-    
+    tags.push(supplier.isActive ? 'active' : 'inactive');
+    if (supplier.website) tags.push('has_website');
+    if (supplier.email && supplier.phone) tags.push('full_contact');
     return tags;
   }
 
-  /**
-   * 🎯 Определение предпочтительного бейджа
-   */
-  private determinePreferredBadge(supplier: Supplier): string | undefined {
+  private determinePreferredBadge(_supplier: Supplier): string | undefined {
     return undefined;
   }
 
-  /**
-   * ✅ ИСПРАВЛЯЕМ расчет typeBreakdown с реальным supplierType:
-   */
   private calculateTypeBreakdown(suppliers: Supplier[]): {
     manufacturer: number;
     distributor: number;
@@ -557,22 +449,17 @@ export class SuppliersMapperService {
       service_provider: 0,
       other: 0,
     };
-
-    suppliers.forEach(supplier => {
-      const type = supplier.supplierType || 'other';
-      if (breakdown.hasOwnProperty(type)) {
-        breakdown[type]++;
+    suppliers.forEach((supplier) => {
+      const type = (supplier.supplierType as any) || 'other';
+      if ((breakdown as any).hasOwnProperty(type)) {
+        (breakdown as any)[type]++;
       } else {
-        breakdown.other++;
+        (breakdown as any).other++;
       }
     });
-
     return breakdown;
   }
 
-  /**
-   * 📊 Расчет сводки по странице
-   */
   private calculatePageSummary(suppliers: Supplier[]): {
     activeSuppliers: number;
     inactiveSuppliers: number;
@@ -582,15 +469,10 @@ export class SuppliersMapperService {
   } {
     let activeSuppliers = 0;
     let inactiveSuppliers = 0;
-
-    suppliers.forEach(supplier => {
-      if (supplier.isActive) {
-        activeSuppliers++;
-      } else {
-        inactiveSuppliers++;
-      }
+    suppliers.forEach((supplier) => {
+      if (supplier.isActive) activeSuppliers++;
+      else inactiveSuppliers++;
     });
-
     return {
       activeSuppliers,
       inactiveSuppliers,
@@ -600,12 +482,8 @@ export class SuppliersMapperService {
     };
   }
 
-  /**
-   * 📊 Проверка активных фильтров
-   */
   private hasActiveFilters(filters?: SupplierFilter): boolean {
     if (!filters) return false;
-    
     return !!(
       filters.search ||
       filters.isActive !== undefined ||
@@ -618,110 +496,38 @@ export class SuppliersMapperService {
     );
   }
 
-  /**
-   * ⭐ Генерация предложений по улучшению
-   */
   private generateImprovementSuggestions(rating: SupplierRating): string[] {
     const suggestions: string[] = [];
-    
-    if (rating.qualityRating < 4) {
-      suggestions.push('Улучшить контроль качества поставляемых товаров');
-    }
-    
-    if (rating.deliveryRating < 4) {
-      suggestions.push('Оптимизировать сроки доставки');
-    }
-    
-    if (rating.priceRating < 4) {
-      suggestions.push('Пересмотреть ценовую политику');
-    }
-    
-    if (rating.communicationRating && rating.communicationRating < 4) {
-      suggestions.push('Улучшить коммуникацию с клиентами');
-    }
-    
+    if (rating.qualityRating < 4) suggestions.push('Улучшить контроль качества поставляемых товаров');
+    if (rating.deliveryRating < 4) suggestions.push('Оптимизировать сроки доставки');
+    if (rating.priceRating < 4) suggestions.push('Пересмотреть ценовую политику');
+    if (rating.communicationRating && rating.communicationRating < 4) suggestions.push('Улучшить коммуникацию с клиентами');
     return suggestions;
   }
 
-  /**
-   * ⭐ Определение сильных сторон
-   */
   private identifyStrongPoints(rating: SupplierRating): string[] {
     const strongPoints: string[] = [];
-    
-    if (rating.qualityRating >= 4.5) {
-      strongPoints.push('Высокое качество товаров');
-    }
-    
-    if (rating.deliveryRating >= 4.5) {
-      strongPoints.push('Быстрая доставка');
-    }
-    
-    if (rating.priceRating >= 4.5) {
-      strongPoints.push('Конкурентные цены');
-    }
-    
-    if (rating.communicationRating && rating.communicationRating >= 4.5) {
-      strongPoints.push('Отличная коммуникация');
-    }
-    
+    if (rating.qualityRating >= 4.5) strongPoints.push('Высокое качество товаров');
+    if (rating.deliveryRating >= 4.5) strongPoints.push('Быстрая доставка');
+    if (rating.priceRating >= 4.5) strongPoints.push('Конкурентные цены');
+    if (rating.communicationRating && rating.communicationRating >= 4.5) strongPoints.push('Отличная коммуникация');
     return strongPoints;
   }
 
-  /**
-   * ⭐ Определение слабых сторон
-   */
   private identifyWeakPoints(rating: SupplierRating): string[] {
     const weakPoints: string[] = [];
-    
-    if (rating.qualityRating < 3) {
-      weakPoints.push('Проблемы с качеством');
-    }
-    
-    if (rating.deliveryRating < 3) {
-      weakPoints.push('Задержки доставки');
-    }
-    
-    if (rating.priceRating < 3) {
-      weakPoints.push('Высокие цены');
-    }
-    
-    if (rating.communicationRating && rating.communicationRating < 3) {
-      weakPoints.push('Проблемы с коммуникацией');
-    }
-    
+    if (rating.qualityRating < 3) weakPoints.push('Проблемы с качеством');
+    if (rating.deliveryRating < 3) weakPoints.push('Задержки доставки');
+    if (rating.priceRating < 3) weakPoints.push('Высокие цены');
+    if (rating.communicationRating && rating.communicationRating < 3) weakPoints.push('Проблемы с коммуникацией');
     return weakPoints;
   }
 
-  /**
-   * 📊 Расчет показателей эффективности
-   */
-  private calculateEfficiencyScore(analytics: Partial<SupplierAnalytics>): number {
-    return 75;
-  }
-
-  private calculateReliabilityScore(analytics: Partial<SupplierAnalytics>): number {
-    return 85;
-  }
-
-  private calculateCostEffectivenessScore(analytics: Partial<SupplierAnalytics>): number {
-    return 80;
-  }
-
-  private calculateOverallPerformanceScore(analytics: Partial<SupplierAnalytics>): number {
-    return 80;
-  }
-
-  /**
-   * 📋 Генерация рекомендаций
-   */
   private generateRecommendations(analytics: Partial<SupplierAnalytics>): string[] {
     const recommendations: string[] = [];
-    
     if (analytics.totalOrders && analytics.totalOrders > 10) {
       recommendations.push('Рассмотреть возможность заключения долгосрочного контракта');
     }
-    
     return recommendations;
   }
 }

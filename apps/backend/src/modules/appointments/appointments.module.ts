@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/appointments/appointments.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 

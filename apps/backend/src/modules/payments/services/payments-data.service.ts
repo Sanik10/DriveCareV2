@@ -1,16 +1,16 @@
-// src/modules/payments/services/payments-data.service.ts (ПОЛНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ)
+// src/modules/payments/services/payments-data.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, LessThan, MoreThanOrEqual } from 'typeorm';
+import { EntityManager, In, LessThan, MoreThanOrEqual, Repository } from 'typeorm';
 import { Payment } from '../../../database/entities';
-import { 
-  CreatePaymentData, 
-  UpdatePaymentData, 
-  PaymentFilter, 
-  PaymentStatistics,
+import {
   CompanyBalance,
-  PaymentStatus, // ✅ ИСПРАВЛЕНО
-  PaymentCurrency
+  CreatePaymentData,
+  PaymentCurrency,
+  PaymentFilter,
+  PaymentStatistics,
+  PaymentStatus,
+  UpdatePaymentData,
 } from '../types/payments.types';
 import { IPaymentsDataService } from '../interfaces/payments.interface';
 import { PAYMENTS_CONSTANTS } from '../constants/payments.constants';
@@ -22,34 +22,44 @@ export class PaymentsDataService implements IPaymentsDataService {
     private readonly paymentsRepository: Repository<Payment>,
   ) {}
 
-  /**
-   * 💰 Создание нового платежа
-   */
+  // ========== BASIC CRUD ==========
+
   async create(data: CreatePaymentData): Promise<Payment> {
     const payment = this.paymentsRepository.create({
       companyId: data.companyId,
       invoiceId: data.invoiceId,
       paymentMethodId: data.paymentMethodId,
       amount: data.amount,
-      currency: data.currency || PAYMENTS_CONSTANTS.DEFAULTS.CURRENCY, // ✅ ДОБАВЛЕНО
+      currency: data.currency || PAYMENTS_CONSTANTS.DEFAULTS.CURRENCY,
       paymentDate: data.paymentDate || new Date(),
-      transactionId: data.transactionId,
+      transactionId: data.transactionId || null,
       status: data.status || PAYMENTS_CONSTANTS.DEFAULTS.STATUS,
-      notes: data.notes,
-      exchangeRate: data.exchangeRate, // ✅ ДОБАВЛЕНО
-      originalAmount: data.originalAmount, // ✅ ДОБАВЛЕНО
-      originalCurrency: data.originalCurrency, // ✅ ДОБАВЛЕНО
-      gatewayTransactionId: data.gatewayTransactionId, // ✅ ДОБАВЛЕНО
-      gatewayFee: data.gatewayFee, // ✅ ДОБАВЛЕНО
-      metadata: data.metadata, // ✅ ДОБАВЛЕНО
+      notes: data.notes || null,
+
+      // FX
+      exchangeRate: data.exchangeRate ?? null,
+      originalAmount: data.originalAmount ?? null,
+      originalCurrency: data.originalCurrency ?? null,
+
+      // Gateway
+      gatewayTransactionId: data.gatewayTransactionId ?? null,
+      gatewayFee: data.gatewayFee ?? null,
+
+      // Compliance
+      vatRate: data.vatRate ?? null,
+      vatAmount: data.vatAmount ?? null,
+
+      pdpConsentVersion: data.pdpConsentVersion ?? null,
+      pdpConsentDate: data.pdpConsentDate ?? null,
+      dataRetentionUntil: data.dataRetentionUntil ?? null,
+
+      // Безопасные метаданные
+      safeMetadata: data.safeMetadata ?? null,
     });
 
     return this.paymentsRepository.save(payment);
   }
 
-  /**
-   * 🔍 Получение всех платежей
-   */
   async findAll(): Promise<Payment[]> {
     return this.paymentsRepository.find({
       relations: ['invoice', 'paymentMethod'],
@@ -57,9 +67,6 @@ export class PaymentsDataService implements IPaymentsDataService {
     });
   }
 
-  /**
-   * 🔍 Поиск платежа по ID
-   */
   async findById(id: string): Promise<Payment | null> {
     return this.paymentsRepository.findOne({
       where: { id },
@@ -67,9 +74,6 @@ export class PaymentsDataService implements IPaymentsDataService {
     });
   }
 
-  /**
-   * 🔍 Поиск платежа по ID для определенной компании
-   */
   async findByIdForCompany(id: string, companyId: string): Promise<Payment | null> {
     return this.paymentsRepository.findOne({
       where: { id, companyId },
@@ -77,9 +81,6 @@ export class PaymentsDataService implements IPaymentsDataService {
     });
   }
 
-  /**
-   * 🔍 Поиск с фильтрами и пагинацией
-   */
   async findWithFilters(filter: PaymentFilter): Promise<[Payment[], number]> {
     const {
       companyId,
@@ -94,106 +95,166 @@ export class PaymentsDataService implements IPaymentsDataService {
       page = 1,
       limit = PAYMENTS_CONSTANTS.DEFAULTS.PAGE_SIZE,
       sortField = 'paymentDate',
-      sortOrder = 'desc'
+      sortOrder = 'desc',
     } = filter;
 
-    const query = this.paymentsRepository.createQueryBuilder('payment')
+    const query = this.paymentsRepository
+      .createQueryBuilder('payment')
       .leftJoinAndSelect('payment.invoice', 'invoice')
       .leftJoinAndSelect('payment.paymentMethod', 'paymentMethod')
       .leftJoinAndSelect('payment.company', 'company');
 
-    // 🔒 КРИТИЧНО: Фильтрация по companyId
-    if (companyId) {
-      query.andWhere('payment.companyId = :companyId', { companyId });
-    }
+    if (!companyId) throw new Error('Company ID is required for payment queries');
+    query.andWhere('payment.companyId = :companyId', { companyId });
 
-    // Фильтр по счету
-    if (invoiceId) {
-      query.andWhere('payment.invoiceId = :invoiceId', { invoiceId });
-    }
+    if (invoiceId) query.andWhere('payment.invoiceId = :invoiceId', { invoiceId });
+    if (paymentMethodId) query.andWhere('payment.paymentMethodId = :paymentMethodId', { paymentMethodId });
+    if (status) query.andWhere('payment.status = :status', { status });
 
-    // Фильтр по способу оплаты
-    if (paymentMethodId) {
-      query.andWhere('payment.paymentMethodId = :paymentMethodId', { paymentMethodId });
-    }
+    if (amountFrom !== undefined) query.andWhere('payment.amount >= :amountFrom', { amountFrom });
+    if (amountTo !== undefined) query.andWhere('payment.amount <= :amountTo', { amountTo });
 
-    // Фильтр по статусу
-    if (status) {
-      query.andWhere('payment.status = :status', { status });
-    }
+    if (dateFrom) query.andWhere('payment.paymentDate >= :dateFrom', { dateFrom });
+    if (dateTo) query.andWhere('payment.paymentDate <= :dateTo', { dateTo });
 
-    // Фильтр по сумме
-    if (amountFrom !== undefined) {
-      query.andWhere('payment.amount >= :amountFrom', { amountFrom });
-    }
-    if (amountTo !== undefined) {
-      query.andWhere('payment.amount <= :amountTo', { amountTo });
-    }
-
-    // Фильтр по дате
-    if (dateFrom) {
-      query.andWhere('payment.paymentDate >= :dateFrom', { dateFrom });
-    }
-    if (dateTo) {
-      query.andWhere('payment.paymentDate <= :dateTo', { dateTo });
-    }
-
-    // Поиск по транзакции или примечаниям
     if (search) {
       query.andWhere(
         '(payment.transactionId ILIKE :search OR payment.notes ILIKE :search OR payment.gatewayTransactionId ILIKE :search)',
-        { search: `%${search}%` }
+        { search: `%${search}%` },
       );
     }
 
-    // Сортировка
     const sortColumn = this.mapSortField(sortField);
     query.orderBy(sortColumn, sortOrder.toUpperCase() as 'ASC' | 'DESC');
 
-    // Пагинация
     const offset = (page - 1) * limit;
     query.skip(offset).take(limit);
 
     return query.getManyAndCount();
   }
 
-  /**
-   * ✏️ Обновление платежа
-   */
   async update(id: string, data: UpdatePaymentData): Promise<Payment> {
     const updateData: Partial<Payment> = {};
-    
+
     if (data.status !== undefined) updateData.status = data.status;
     if (data.transactionId !== undefined) updateData.transactionId = data.transactionId;
     if (data.notes !== undefined) updateData.notes = data.notes;
-    if (data.gatewayTransactionId !== undefined) updateData.gatewayTransactionId = data.gatewayTransactionId; // ✅ ДОБАВЛЕНО
-    if (data.gatewayFee !== undefined) updateData.gatewayFee = data.gatewayFee; // ✅ ДОБАВЛЕНО
-    if (data.metadata !== undefined) updateData.metadata = data.metadata; // ✅ ДОБАВЛЕНО
+
+    if (data.gatewayTransactionId !== undefined) updateData.gatewayTransactionId = data.gatewayTransactionId;
+    if (data.gatewayFee !== undefined) updateData.gatewayFee = data.gatewayFee;
+
+    if (data.safeMetadata !== undefined) updateData.safeMetadata = data.safeMetadata;
+
+    // Fiscal
+    if (data.fiscalReceiptNumber !== undefined) updateData.fiscalReceiptNumber = data.fiscalReceiptNumber;
+    if (data.fiscalReceiptDate !== undefined) updateData.fiscalReceiptDate = data.fiscalReceiptDate;
+    if (data.kktSerialNumber !== undefined) updateData.kktSerialNumber = data.kktSerialNumber;
+    if (data.fiscalDocumentNumber !== undefined) updateData.fiscalDocumentNumber = data.fiscalDocumentNumber;
+    if (data.fiscalDocumentAttribute !== undefined) updateData.fiscalDocumentAttribute = data.fiscalDocumentAttribute;
+
+    if (data.vatRate !== undefined) updateData.vatRate = data.vatRate;
+    if (data.vatAmount !== undefined) updateData.vatAmount = data.vatAmount;
+
+    if (data.fiscalRefundReceiptNumber !== undefined) updateData.fiscalRefundReceiptNumber = data.fiscalRefundReceiptNumber;
+    if (data.fiscalRefundDate !== undefined) updateData.fiscalRefundDate = data.fiscalRefundDate;
 
     await this.paymentsRepository.update(id, updateData);
-    
+
     const updatedPayment = await this.findById(id);
     if (!updatedPayment) {
       throw new Error(`Payment with id ${id} not found after update`);
     }
-    
+
     return updatedPayment;
   }
 
-  /**
-   * 🗑️ Удаление платежа
-   */
   async delete(id: string): Promise<void> {
     await this.paymentsRepository.delete(id);
   }
 
-  /**
-   * 📊 Получение статистики платежей компании (ПОЛНОСТЬЮ ИСПРАВЛЕНО)
-   */
+  // ========== TRANSACTIONAL HELPERS ==========
+
+  async createWithTransaction(data: CreatePaymentData, manager: EntityManager): Promise<Payment> {
+    const repo = manager.getRepository(Payment);
+    const payment = repo.create({
+      companyId: data.companyId,
+      invoiceId: data.invoiceId,
+      paymentMethodId: data.paymentMethodId,
+      amount: data.amount,
+      currency: data.currency || PAYMENTS_CONSTANTS.DEFAULTS.CURRENCY,
+      paymentDate: data.paymentDate || new Date(),
+      transactionId: data.transactionId || null,
+      status: data.status || PAYMENTS_CONSTANTS.DEFAULTS.STATUS,
+      notes: data.notes || null,
+
+      exchangeRate: data.exchangeRate ?? null,
+      originalAmount: data.originalAmount ?? null,
+      originalCurrency: data.originalCurrency ?? null,
+
+      gatewayTransactionId: data.gatewayTransactionId ?? null,
+      gatewayFee: data.gatewayFee ?? null,
+
+      vatRate: data.vatRate ?? null,
+      vatAmount: data.vatAmount ?? null,
+
+      pdpConsentVersion: data.pdpConsentVersion ?? null,
+      pdpConsentDate: data.pdpConsentDate ?? null,
+      dataRetentionUntil: data.dataRetentionUntil ?? null,
+
+      safeMetadata: data.safeMetadata ?? null,
+    });
+
+    return repo.save(payment);
+  }
+
+  async findByIdWithTransaction(id: string, manager: EntityManager): Promise<Payment | null> {
+    return manager.getRepository(Payment).findOne({
+      where: { id },
+      relations: ['invoice', 'paymentMethod', 'company'],
+    });
+  }
+
+  async updateWithTransaction(id: string, data: UpdatePaymentData, manager: EntityManager): Promise<Payment> {
+    const repo = manager.getRepository(Payment);
+    const updateData: Partial<Payment> = {};
+
+    if (data.status !== undefined) updateData.status = data.status;
+    if (data.transactionId !== undefined) updateData.transactionId = data.transactionId;
+    if (data.notes !== undefined) updateData.notes = data.notes;
+
+    if (data.gatewayTransactionId !== undefined) updateData.gatewayTransactionId = data.gatewayTransactionId;
+    if (data.gatewayFee !== undefined) updateData.gatewayFee = data.gatewayFee;
+
+    if (data.safeMetadata !== undefined) updateData.safeMetadata = data.safeMetadata;
+
+    if (data.fiscalReceiptNumber !== undefined) updateData.fiscalReceiptNumber = data.fiscalReceiptNumber;
+    if (data.fiscalReceiptDate !== undefined) updateData.fiscalReceiptDate = data.fiscalReceiptDate;
+    if (data.kktSerialNumber !== undefined) updateData.kktSerialNumber = data.kktSerialNumber;
+    if (data.fiscalDocumentNumber !== undefined) updateData.fiscalDocumentNumber = data.fiscalDocumentNumber;
+    if (data.fiscalDocumentAttribute !== undefined) updateData.fiscalDocumentAttribute = data.fiscalDocumentAttribute;
+
+    if (data.vatRate !== undefined) updateData.vatRate = data.vatRate;
+    if (data.vatAmount !== undefined) updateData.vatAmount = data.vatAmount;
+
+    if (data.fiscalRefundReceiptNumber !== undefined) updateData.fiscalRefundReceiptNumber = data.fiscalRefundReceiptNumber;
+    if (data.fiscalRefundDate !== undefined) updateData.fiscalRefundDate = data.fiscalRefundDate;
+
+    await repo.update(id, updateData);
+
+    const updatedPayment = await repo.findOne({
+      where: { id },
+      relations: ['invoice', 'paymentMethod', 'company'],
+    });
+
+    if (!updatedPayment) throw new Error(`Payment with id ${id} not found after update`);
+    return updatedPayment;
+  }
+
+  // ========== ANALYTICS ==========
+
   async getPaymentsStatistics(companyId: string): Promise<PaymentStatistics> {
     const total = await this.paymentsRepository.count({ where: { companyId } });
 
-    // ✅ ИСПРАВЛЯЕМ СТАТИСТИКУ ПО СТАТУСАМ
     const statusStats = await this.paymentsRepository
       .createQueryBuilder('payment')
       .select('payment.status', 'status')
@@ -203,11 +264,10 @@ export class PaymentsDataService implements IPaymentsDataService {
       .getRawMany();
 
     const byStatus = statusStats.reduce((acc, stat) => {
-      acc[stat.status as PaymentStatus] = parseInt(stat.count);
+      acc[stat.status as PaymentStatus] = parseInt(stat.count, 10);
       return acc;
     }, {} as Record<PaymentStatus, number>);
 
-    // ✅ ИСПРАВЛЯЕМ ЗАПРОС ПО ВАЛЮТАМ
     const currencyStats = await this.paymentsRepository
       .createQueryBuilder('payment')
       .select('payment.currency', 'currency')
@@ -217,11 +277,10 @@ export class PaymentsDataService implements IPaymentsDataService {
       .getRawMany();
 
     const byCurrency = currencyStats.reduce((acc, stat) => {
-      acc[stat.currency || PAYMENTS_CONSTANTS.DEFAULTS.CURRENCY] = parseInt(stat.count);
+      acc[stat.currency || PAYMENTS_CONSTANTS.DEFAULTS.CURRENCY] = parseInt(stat.count, 10);
       return acc;
-    }, {});
+    }, {} as Record<string, number>);
 
-    // ✅ ИСПРАВЛЯЕМ СТАТИСТИКУ ПО СПОСОБАМ ОПЛАТЫ
     const paymentMethodStats = await this.paymentsRepository
       .createQueryBuilder('payment')
       .leftJoin('payment.paymentMethod', 'pm')
@@ -232,11 +291,10 @@ export class PaymentsDataService implements IPaymentsDataService {
       .getRawMany();
 
     const byPaymentMethod = paymentMethodStats.reduce((acc, stat) => {
-      acc[stat.methodName || 'Unknown'] = parseInt(stat.count);
+      acc[stat.methodName || 'Unknown'] = parseInt(stat.count, 10);
       return acc;
-    }, {});
+    }, {} as Record<string, number>);
 
-    // ✅ ИСПРАВЛЯЕМ РАСЧЕТ СУММ - ОКОНЧАТЕЛЬНОЕ ИСПРАВЛЕНИЕ
     const amountStats = await this.paymentsRepository
       .createQueryBuilder('payment')
       .select('payment.currency', 'currency')
@@ -246,30 +304,21 @@ export class PaymentsDataService implements IPaymentsDataService {
       .groupBy('payment.currency')
       .getRawMany();
 
-    // ✅ ПРАВИЛЬНАЯ ТИПИЗАЦИЯ totalAmountByCurrency
     const totalAmountByCurrency: Record<string, number> = amountStats.reduce((acc, stat) => {
       const amount = parseFloat(stat.totalAmount) || 0;
       acc[stat.currency || PAYMENTS_CONSTANTS.DEFAULTS.CURRENCY] = amount;
       return acc;
     }, {} as Record<string, number>);
 
-    // ✅ ИСПРАВЛЯЕМ ПРОБЛЕМУ С unknown типом
     const amounts = Object.values(totalAmountByCurrency);
-    const totalAmount: number = amounts.reduce((sum: number, amount: unknown) => {
-      const numAmount = typeof amount === 'number' ? amount : 0;
-      return sum + numAmount;
-    }, 0);
+    const totalAmount: number = amounts.reduce((sum, amount) => sum + (typeof amount === 'number' ? amount : 0), 0);
 
-    // ✅ ИСПРАВЛЯЕМ СТАТИСТИКУ ЗА МЕСЯЦ
     const currentMonth = new Date();
     currentMonth.setDate(1);
     currentMonth.setHours(0, 0, 0, 0);
 
     const thisMonth = await this.paymentsRepository.count({
-      where: {
-        companyId,
-        paymentDate: MoreThanOrEqual(currentMonth)
-      }
+      where: { companyId, paymentDate: MoreThanOrEqual(currentMonth) },
     });
 
     const thisMonthAmountResult = await this.paymentsRepository
@@ -282,11 +331,12 @@ export class PaymentsDataService implements IPaymentsDataService {
 
     const thisMonthAmount = parseFloat(thisMonthAmountResult?.amount) || 0;
     const avgPaymentAmount: number = total > 0 ? totalAmount / total : 0;
-    
+
     const successfulCount = byStatus[PaymentStatus.PROCESSED] || 0;
     const successRate = total > 0 ? (successfulCount / total) * 100 : 0;
-    
-    const refundedCount = (byStatus[PaymentStatus.REFUNDED] || 0) + (byStatus[PaymentStatus.PARTIALLY_REFUNDED] || 0);
+
+    const refundedCount =
+      (byStatus[PaymentStatus.REFUNDED] || 0) + (byStatus[PaymentStatus.PARTIALLY_REFUNDED] || 0);
     const refundRate = total > 0 ? (refundedCount / total) * 100 : 0;
 
     return {
@@ -305,19 +355,15 @@ export class PaymentsDataService implements IPaymentsDataService {
     };
   }
 
-  /**
-   * 💰 Получение баланса компании (ПОЛНОСТЬЮ ИСПРАВЛЕНО)
-   */
   async getCompanyBalance(companyId: string): Promise<CompanyBalance> {
     const now = new Date();
 
-    // ✅ ИСПРАВЛЯЕМ ВСЕ ЗАПРОСЫ (убираем COALESCE с параметрами)
     const receivedStats = await this.paymentsRepository
       .createQueryBuilder('payment')
       .select('payment.currency', 'currency')
       .addSelect('SUM(CAST(payment.amount AS DECIMAL))', 'totalReceived')
       .where('payment.companyId = :companyId', { companyId })
-      .andWhere('payment.status = :status', { status: PaymentStatus.PROCESSED }) // ✅ ИСПРАВЛЕНО
+      .andWhere('payment.status = :status', { status: PaymentStatus.PROCESSED })
       .groupBy('payment.currency')
       .getRawMany();
 
@@ -326,8 +372,8 @@ export class PaymentsDataService implements IPaymentsDataService {
       .select('payment.currency', 'currency')
       .addSelect('SUM(CAST(payment.amount AS DECIMAL))', 'totalRefunded')
       .where('payment.companyId = :companyId', { companyId })
-      .andWhere('payment.status IN (:...statuses)', { 
-        statuses: [PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED] // ✅ ИСПРАВЛЕНО
+      .andWhere('payment.status IN (:...statuses)', {
+        statuses: [PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED],
       })
       .groupBy('payment.currency')
       .getRawMany();
@@ -337,8 +383,8 @@ export class PaymentsDataService implements IPaymentsDataService {
       .select('payment.currency', 'currency')
       .addSelect('SUM(CAST(payment.amount AS DECIMAL))', 'totalPending')
       .where('payment.companyId = :companyId', { companyId })
-      .andWhere('payment.status IN (:...statuses)', { 
-        statuses: [PaymentStatus.PENDING, PaymentStatus.PROCESSING] // ✅ ИСПРАВЛЕНО
+      .andWhere('payment.status IN (:...statuses)', {
+        statuses: [PaymentStatus.PENDING, PaymentStatus.PROCESSING],
       })
       .groupBy('payment.currency')
       .getRawMany();
@@ -348,17 +394,15 @@ export class PaymentsDataService implements IPaymentsDataService {
       .select('payment.currency', 'currency')
       .addSelect('SUM(CAST(payment.amount AS DECIMAL))', 'totalDisputed')
       .where('payment.companyId = :companyId', { companyId })
-      .andWhere('payment.status IN (:...statuses)', { 
-        statuses: [PaymentStatus.DISPUTED, PaymentStatus.CHARGEBACK] // ✅ ИСПРАВЛЕНО
+      .andWhere('payment.status IN (:...statuses)', {
+        statuses: [PaymentStatus.DISPUTED, PaymentStatus.CHARGEBACK],
       })
       .groupBy('payment.currency')
       .getRawMany();
 
-    // ✅ ПРАВИЛЬНО ИНИЦИАЛИЗИРУЕМ balanceByCurrency
     const balanceByCurrency: Record<PaymentCurrency, any> = {} as any;
-    
-    // Инициализируем все валюты нулями
-    Object.values(PaymentCurrency).forEach(currency => {
+
+    Object.values(PaymentCurrency).forEach((currency) => {
       balanceByCurrency[currency] = {
         received: 0,
         refunded: 0,
@@ -367,20 +411,19 @@ export class PaymentsDataService implements IPaymentsDataService {
       };
     });
 
-    // Заполняем данными
     const allCurrencies = new Set([
-      ...receivedStats.map(s => s.currency),
-      ...refundedStats.map(s => s.currency),
-      ...pendingStats.map(s => s.currency),
-      ...disputedStats.map(s => s.currency),
+      ...receivedStats.map((s) => s.currency),
+      ...refundedStats.map((s) => s.currency),
+      ...pendingStats.map((s) => s.currency),
+      ...disputedStats.map((s) => s.currency),
     ]);
 
-    allCurrencies.forEach(currency => {
+    allCurrencies.forEach((currency) => {
       if (!currency) return;
-      
-      const received = parseFloat(receivedStats.find(s => s.currency === currency)?.totalReceived) || 0;
-      const refunded = parseFloat(refundedStats.find(s => s.currency === currency)?.totalRefunded) || 0;
-      const pending = parseFloat(pendingStats.find(s => s.currency === currency)?.totalPending) || 0;
+
+      const received = parseFloat(receivedStats.find((s) => s.currency === currency)?.totalReceived) || 0;
+      const refunded = parseFloat(refundedStats.find((s) => s.currency === currency)?.totalRefunded) || 0;
+      const pending = parseFloat(pendingStats.find((s) => s.currency === currency)?.totalPending) || 0;
 
       if (Object.values(PaymentCurrency).includes(currency as PaymentCurrency)) {
         balanceByCurrency[currency as PaymentCurrency] = {
@@ -404,21 +447,15 @@ export class PaymentsDataService implements IPaymentsDataService {
       netBalance: totalReceived - totalRefunded,
       pendingAmount,
       disputedAmount,
-      balanceByCurrency, // ✅ ИСПРАВЛЕНО
+      balanceByCurrency,
       lastUpdated: now,
     };
   }
 
-  /**
-   * 📊 Получение количества платежей компании
-   */
   async getPaymentsCountForCompany(companyId: string): Promise<number> {
     return this.paymentsRepository.count({ where: { companyId } });
   }
 
-  /**
-   * 🔍 Поиск просроченных платежей (ИСПРАВЛЕНО)
-   */
   async findOverduePayments(companyId: string): Promise<Payment[]> {
     const now = new Date();
     const timeoutMinutes = PAYMENTS_CONSTANTS.DEFAULTS.PAYMENT_TIMEOUT_MINUTES;
@@ -427,28 +464,21 @@ export class PaymentsDataService implements IPaymentsDataService {
     return this.paymentsRepository.find({
       where: {
         companyId,
-        status: PaymentStatus.PENDING, // ✅ ИСПРАВЛЕНО
-        createdAt: LessThan(expiredDate), // ✅ ИСПРАВЛЕНО
-      },
+        status: PaymentStatus.PENDING,
+        createdAt: LessThan(expiredDate),
+      } as any,
       relations: ['invoice', 'paymentMethod'],
       order: { createdAt: 'ASC' },
     });
   }
 
-  /**
-   * 🔧 Массовое обновление статусов (ИСПРАВЛЕНО)
-   */
-  async bulkUpdateStatus(paymentIds: string[], status: PaymentStatus): Promise<number> { // ✅ ИСПРАВЛЕНО
-    const result = await this.paymentsRepository.update(
-      { id: In(paymentIds) }, // ✅ ИСПРАВЛЕНО
-      { status }
-    );
+  async bulkUpdateStatus(paymentIds: string[], status: PaymentStatus): Promise<number> {
+    const result = await this.paymentsRepository.update({ id: In(paymentIds) }, { status });
     return result.affected || 0;
   }
 
-  /**
-   * 🔧 Маппинг полей для сортировки
-   */
+  // ========== PRIVATE ==========
+
   private mapSortField(sortField: string): string {
     const fieldMap: Record<string, string> = {
       paymentDate: 'payment.paymentDate',

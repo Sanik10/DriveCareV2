@@ -1,4 +1,4 @@
-// src/database/entities/index.ts
+// path: apps/backend/src/database/entities/index.ts
 // Base entities
 export { User } from './user.entity';
 export { Role } from './role.entity';
@@ -25,8 +25,6 @@ export { OrderService } from './order-service.entity';
 export { OrderPart } from './order-part.entity';
 export { Appointment, AppointmentStatus, AppointmentPriority } from './appointment.entity';
 export { WorkSchedule } from './work-schedule.entity';
-
-// 🔥 ДОБАВЛЯЕМ ЭТУ СТРОКУ:
 export { ScheduleException, ExceptionType, ExceptionStatus } from './schedule-exception.entity';
 
 // Service entities
@@ -40,6 +38,7 @@ export { Inventory } from './inventory.entity';
 export { InventoryAlert } from './inventory-alert.entity';
 export { StockMovement } from './stock-movement.entity';
 export { Supplier } from './supplier.entity';
+export { PartReservation } from './part-reservation.entity';
 
 // Payment entities
 export { Payment } from './payment.entity';

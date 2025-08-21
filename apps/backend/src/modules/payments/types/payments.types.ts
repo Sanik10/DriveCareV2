@@ -1,10 +1,9 @@
-// src/modules/payments/types/payments.types.ts (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+// src/modules/payments/types/payments.types.ts
 import { AuthRole } from '../../auth/types/auth.types';
 
-// ✅ ЕДИНЫЙ ENUM СТАТУСОВ (убираем дублирование)
 export enum PaymentStatus {
   PENDING = 'pending',
-  PROCESSING = 'processing', 
+  PROCESSING = 'processing',
   PROCESSED = 'processed',
   FAILED = 'failed',
   CANCELED = 'canceled',
@@ -15,12 +14,9 @@ export enum PaymentStatus {
   EXPIRED = 'expired',
 }
 
-// ✅ УБИРАЕМ ExtendedPaymentStatus - используем только PaymentStatus
-
-// ✅ ЕДИНЫЙ ENUM ВАЛЮТ
 export enum PaymentCurrency {
   RUB = 'RUB',
-  USD = 'USD', 
+  USD = 'USD',
   EUR = 'EUR',
   GBP = 'GBP',
   CNY = 'CNY',
@@ -30,7 +26,6 @@ export enum PaymentCurrency {
   UAH = 'UAH',
 }
 
-// ✅ ТИПЫ ПЛАТЕЖНЫХ МЕТОДОВ
 export enum PaymentMethodType {
   CASH = 'cash',
   CARD = 'card',
@@ -43,136 +38,133 @@ export enum PaymentMethodType {
   WIRE_TRANSFER = 'wire_transfer',
 }
 
-// ✅ ОБНОВЛЯЕМ ВСЕ ИНТЕРФЕЙСЫ (PaymentStatus вместо ExtendedPaymentStatus)
-export interface PaymentFilter {
-  companyId?: string;
-  invoiceId?: string;
-  paymentMethodId?: string;
-  status?: PaymentStatus; // ✅ ИСПРАВЛЕНО
-  currency?: PaymentCurrency;
-  amountFrom?: number;
-  amountTo?: number;
-  dateFrom?: Date;
-  dateTo?: Date;
-  transactionId?: string;
-  search?: string;
-  page?: number;
-  limit?: number;
-  sortField?: string;
-  sortOrder?: 'asc' | 'desc';
-}
+export type UserWithCompany = {
+  id: string;
+  companyId: string;
+  role: AuthRole;
+  email?: string;
+  firstName?: string;   // ← добавлено
+  lastName?: string;    // ← добавлено
+};
 
-export interface CreatePaymentData {
+export type CreatePaymentData = {
   companyId: string;
   invoiceId: string;
   paymentMethodId: string;
+
   amount: number;
   currency?: PaymentCurrency;
   paymentDate?: Date;
-  transactionId?: string;
-  status?: PaymentStatus; // ✅ ИСПРАВЛЕНО
+
+  transactionId?: string | null;
+  status?: PaymentStatus;
+  notes?: string | null;
+
+  // FX
+  exchangeRate?: number | null;
+  originalAmount?: number | null;
+  originalCurrency?: PaymentCurrency | null;
+
+  // Gateway
+  gatewayTransactionId?: string | null;
+  gatewayFee?: number | null;
+  gatewayResponse?: Record<string, any> | null;
+
+  // клиентские метаданные (вход)
+  metadata?: Record<string, any> | undefined;
+
+  // безопасные метаданные (в БД)
+  safeMetadata?: Record<string, any> | null;
+
+  // 54-ФЗ (если включено)
+  vatRate?: number | null;
+  vatAmount?: number | null;
+
+  // 152-ФЗ
+  pdpConsentVersion?: string | null;
+  pdpConsentDate?: Date | null;
+  dataRetentionUntil?: Date | null;
+};
+
+export type UpdatePaymentData = {
+  status?: PaymentStatus;
+  transactionId?: string | null;
+  notes?: string | null;
+
+  gatewayTransactionId?: string | null;
+  gatewayFee?: number | null;
+
+  safeMetadata?: Record<string, any> | null;
+
+  // Фискальные поля (после чека)
+  fiscalReceiptNumber?: string | null;
+  fiscalReceiptDate?: Date | null;
+  kktSerialNumber?: string | null;
+  fiscalDocumentNumber?: string | null;
+  fiscalDocumentAttribute?: string | null;
+
+  // НДС
+  vatRate?: number | null;
+  vatAmount?: number | null;
+
+  // Данные фискального возврата
+  fiscalRefundReceiptNumber?: string | null;
+  fiscalRefundDate?: Date | null;
+};
+
+export type RefundData = {
+  amount: number;
+  reason: string;
   notes?: string;
-  exchangeRate?: number;
-  originalAmount?: number;
-  originalCurrency?: PaymentCurrency;
-  gatewayTransactionId?: string;
-  gatewayResponse?: Record<string, any>;
-  gatewayFee?: number;
-  metadata?: Record<string, any>;
-}
+  refundMethodId?: string;
+};
 
-export interface UpdatePaymentData {
-  status?: PaymentStatus; // ✅ ИСПРАВЛЕНО
-  transactionId?: string;
-  notes?: string;
-  gatewayTransactionId?: string;
-  gatewayResponse?: Record<string, any>;
-  gatewayFee?: number;
-  metadata?: Record<string, any>;
-}
+export type PaymentFilter = {
+  companyId?: string;
+  invoiceId?: string;
+  paymentMethodId?: string;
+  status?: PaymentStatus;
 
-export interface UserWithCompany {
-  id: string;
-  email: string;
-  role: AuthRole;
-  companyId: string;
-  firstName?: string;
-  lastName?: string;
-}
+  amountFrom?: number;
+  amountTo?: number;
 
-export interface PaymentStatistics {
+  dateFrom?: Date;
+  dateTo?: Date;
+
+  search?: string;
+
+  page?: number;
+  limit?: number;
+
+  sortField?: string;
+  sortOrder?: 'asc' | 'desc';
+};
+
+export type PaymentStatistics = {
   total: number;
-  byStatus: Record<PaymentStatus, number>; // ✅ ИСПРАВЛЕНО
-  byCurrency: Record<PaymentCurrency, number>;
+  byStatus: Record<string, number>;
+  byCurrency: Record<string, number>;
   byPaymentMethod: Record<string, number>;
+
   totalAmount: number;
-  totalAmountByCurrency: Record<PaymentCurrency, number>;
+  totalAmountByCurrency: Record<string, number>;
+
   thisMonth: number;
   thisMonthAmount: number;
   avgPaymentAmount: number;
   avgPaymentTime: number;
+
   successRate: number;
   refundRate: number;
-}
+};
 
-export interface CompanyBalance {
+export type CompanyBalance = {
   companyId: string;
   totalReceived: number;
   totalRefunded: number;
   netBalance: number;
   pendingAmount: number;
   disputedAmount: number;
-  balanceByCurrency: Record<PaymentCurrency, {
-    received: number;
-    refunded: number;
-    net: number;
-    pending: number;
-  }>;
+  balanceByCurrency: Record<PaymentCurrency, { received: number; refunded: number; net: number; pending: number }>;
   lastUpdated: Date;
-}
-
-export interface RefundData {
-  paymentId: string;
-  amount: number;
-  reason: string;
-  notes?: string;
-  refundMethodId?: string;
-}
-
-export interface PaymentReport {
-  period: { from: Date; to: Date };
-  summary: {
-    totalPayments: number;
-    totalAmount: number;
-    successfulPayments: number;
-    failedPayments: number;
-    refunds: number;
-    refundAmount: number;
-    disputes: number;
-    disputeAmount: number;
-  };
-  byStatus: Array<{
-    status: PaymentStatus; // ✅ ИСПРАВЛЕНО
-    count: number;
-    amount: number;
-    percentage: number;
-  }>;
-  byCurrency: Array<{
-    currency: PaymentCurrency;
-    count: number;
-    amount: number;
-    percentage: number;
-  }>;
-  byPaymentMethod: Array<{
-    methodId: string;
-    methodName: string;
-    count: number;
-    amount: number;
-    percentage: number;
-    avgAmount: number;
-  }>;
-  trends: {
-    dailyVolume: Array<{ date: Date; amount: number; count: number }>;
-    hourlyDistribution: Array<{ hour: number; count: number }>;
-  };
-}
+};

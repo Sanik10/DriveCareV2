@@ -1,14 +1,5 @@
-// src/database/entities/order-part.entity.ts
-import { 
-  Entity, 
-  Column, 
-  PrimaryGeneratedColumn, 
-  CreateDateColumn, 
-  UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
-  Index
-} from 'typeorm';
+// path: src/database/entities/order-part.entity.ts
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { Order } from './order.entity';
 import { Part } from './part.entity';
 
@@ -40,14 +31,13 @@ export class OrderPart {
   @Column({ type: 'boolean', default: false })
   isCustomerProvided: boolean;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
-  // 🔗 TypeORM Relationships
-  @ManyToOne(() => Order, order => order.orderParts)
+  @ManyToOne(() => Order, (order) => order.orderParts)
   @JoinColumn({ name: 'orderId' })
   order: Order;
 

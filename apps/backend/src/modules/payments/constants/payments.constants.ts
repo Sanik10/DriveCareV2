@@ -1,4 +1,4 @@
-// src/modules/payments/constants/payments.constants.ts (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+// src/modules/payments/constants/payments.constants.ts
 import { PaymentStatus, PaymentCurrency, PaymentMethodType } from '../types/payments.types';
 import { AuditAction } from '../../../common/audit/audit.service';
 import { AuthRole } from '../../auth/types/auth.types';
@@ -8,7 +8,7 @@ export const PAYMENTS_CONSTANTS = {
     PAGE_SIZE: 20,
     MAX_ITEMS: 100,
     CURRENCY: PaymentCurrency.RUB,
-    STATUS: PaymentStatus.PENDING, // ✅ ИСПРАВЛЕНО
+    STATUS: PaymentStatus.PENDING,
     PAYMENT_TIMEOUT_MINUTES: 30,
     MAX_REFUND_DAYS: 365,
     MIN_PAYMENT_AMOUNT: 0.01,
@@ -33,7 +33,6 @@ export const PAYMENTS_CONSTANTS = {
     },
   },
 
-  // ✅ ИСПРАВЛЯЕМ STATUS_TRANSITIONS (используем PaymentStatus)
   STATUS_TRANSITIONS: {
     [PaymentStatus.PENDING]: [
       PaymentStatus.PROCESSING,
@@ -52,30 +51,19 @@ export const PAYMENTS_CONSTANTS = {
       PaymentStatus.DISPUTED,
       PaymentStatus.CHARGEBACK,
     ],
-    [PaymentStatus.FAILED]: [
-      PaymentStatus.PENDING,
-      PaymentStatus.CANCELED,
-    ],
+    [PaymentStatus.FAILED]: [PaymentStatus.PENDING, PaymentStatus.CANCELED],
     [PaymentStatus.CANCELED]: [],
-    [PaymentStatus.REFUNDED]: [
-      PaymentStatus.DISPUTED,
-    ],
-    [PaymentStatus.PARTIALLY_REFUNDED]: [
-      PaymentStatus.REFUNDED,
-      PaymentStatus.DISPUTED,
-    ],
+    [PaymentStatus.REFUNDED]: [PaymentStatus.DISPUTED],
+    [PaymentStatus.PARTIALLY_REFUNDED]: [PaymentStatus.REFUNDED, PaymentStatus.DISPUTED],
     [PaymentStatus.DISPUTED]: [
       PaymentStatus.PROCESSED,
       PaymentStatus.REFUNDED,
       PaymentStatus.CHARGEBACK,
     ],
     [PaymentStatus.CHARGEBACK]: [],
-    [PaymentStatus.EXPIRED]: [
-      PaymentStatus.PENDING,
-    ],
+    [PaymentStatus.EXPIRED]: [PaymentStatus.PENDING],
   } as Record<PaymentStatus, PaymentStatus[]>,
 
-  // ✅ ИСПРАВЛЯЕМ STATUS_COLORS
   STATUS_COLORS: {
     [PaymentStatus.PENDING]: '#f59e0b',
     [PaymentStatus.PROCESSING]: '#3b82f6',
@@ -89,7 +77,6 @@ export const PAYMENTS_CONSTANTS = {
     [PaymentStatus.EXPIRED]: '#9ca3af',
   },
 
-  // ✅ ИСПРАВЛЯЕМ STATUS_DISPLAY
   STATUS_DISPLAY: {
     [PaymentStatus.PENDING]: 'Ожидает обработки',
     [PaymentStatus.PROCESSING]: 'Обрабатывается',
@@ -127,32 +114,20 @@ export const PAYMENTS_CONSTANTS = {
     [PaymentMethodType.WIRE_TRANSFER]: { icon: '🌐', name: 'SWIFT перевод', processingTime: 172800 },
   },
 
-  // ✅ ИСПРАВЛЯЕМ РОЛИ (добавляем правильную типизацию)
   ROLES: {
-    CAN_RECORD_PAYMENT: ['superadmin', 'owner', 'admin', 'manager'] as AuthRole[],
-    CAN_PROCESS_PAYMENT: ['superadmin', 'owner', 'admin', 'manager'] as AuthRole[],
-    CAN_REFUND_PAYMENT: ['superadmin', 'owner', 'admin'] as AuthRole[],
-    CAN_VIEW_PAYMENT_HISTORY: ['superadmin', 'owner', 'admin', 'manager'] as AuthRole[],
-    CAN_VIEW_FINANCIAL_REPORTS: ['superadmin', 'owner', 'admin'] as AuthRole[],
-    CAN_MANAGE_PAYMENT_METHODS: ['superadmin', 'owner', 'admin'] as AuthRole[],
-    CAN_DISPUTE_PAYMENT: ['superadmin', 'owner', 'admin'] as AuthRole[],
-    CAN_VIEW_COMPANY_BALANCE: ['superadmin', 'owner', 'admin', 'manager'] as AuthRole[],
+    CAN_RECORD_PAYMENT: ['superadmin', 'company_owner', 'company_admin', 'manager'] as AuthRole[],
+    CAN_PROCESS_PAYMENT: ['superadmin', 'company_owner', 'company_admin', 'manager'] as AuthRole[],
+    CAN_REFUND_PAYMENT: ['superadmin', 'company_owner', 'company_admin'] as AuthRole[],
+    CAN_VIEW_PAYMENT_HISTORY: ['superadmin', 'company_owner', 'company_admin', 'manager'] as AuthRole[],
+    CAN_VIEW_FINANCIAL_REPORTS: ['superadmin', 'company_owner', 'company_admin'] as AuthRole[],
+    CAN_MANAGE_PAYMENT_METHODS: ['superadmin', 'company_owner', 'company_admin'] as AuthRole[],
+    CAN_DISPUTE_PAYMENT: ['superadmin', 'company_owner', 'company_admin'] as AuthRole[],
+    CAN_VIEW_COMPANY_BALANCE: ['superadmin', 'company_owner', 'company_admin', 'manager'] as AuthRole[],
   },
 
-  AUDIT_ACTIONS: {
-    PAYMENT_RECORDED: AuditAction.INVOICE_CREATED,
-    PAYMENT_PROCESSED: AuditAction.INVOICE_UPDATED,
-    PAYMENT_FAILED: AuditAction.INVOICE_STATUS_CHANGED,
-    PAYMENT_CANCELED: AuditAction.INVOICE_CANCELED,
-    PAYMENT_REFUNDED: AuditAction.INVOICE_PAYMENT_RECEIVED,
-    PAYMENT_DISPUTED: AuditAction.INVOICE_OVERDUE_DETECTED,
-    PAYMENT_STATUS_CHANGED: AuditAction.INVOICE_STATUS_CHANGED,
-    PAYMENT_VIEWED: AuditAction.INVOICE_VIEWED,
-    BALANCE_CALCULATED: AuditAction.INVOICE_VIEWED,
-    FINANCIAL_REPORT_GENERATED: AuditAction.INVOICE_VIEWED,
-  },
-
+  // Новые флаги
   BUSINESS_RULES: {
+    ENABLE_FISCALIZATION: false, // Отключает фискализацию по всему модулю
     AUTO_PROCESS_CASH_PAYMENTS: true,
     AUTO_UPDATE_INVOICE_STATUS: true,
     REQUIRE_APPROVAL_FOR_LARGE_REFUNDS: true,
@@ -175,15 +150,25 @@ export const PAYMENTS_CONSTANTS = {
     ANONYMIZE_EXPIRED_PAYMENTS: true,
   },
 
-  LIMITS: {
-    MAX_PAYMENTS_PER_HOUR: 100,
-    MAX_REFUNDS_PER_DAY: 20,
-    MAX_CONCURRENT_PROCESSING: 5,
-    MAX_PAYMENT_AMOUNT_WITHOUT_VERIFICATION: 50000,
+  AUDIT_ACTIONS: {
+    PAYMENT_RECORDED: AuditAction.PAYMENT_CREATED,
+    PAYMENT_PROCESSED: AuditAction.PAYMENT_PROCESSED,
+    PAYMENT_FAILED: AuditAction.PAYMENT_FAILED,
+    PAYMENT_CANCELED: AuditAction.PAYMENT_CANCELED,
+    PAYMENT_REFUNDED: AuditAction.PAYMENT_REFUNDED,
+    PAYMENT_PARTIALLY_REFUNDED: AuditAction.PAYMENT_PARTIALLY_REFUNDED,
+    PAYMENT_DISPUTED: AuditAction.PAYMENT_DISPUTED,
+    PAYMENT_STATUS_CHANGED: AuditAction.PAYMENT_STATUS_CHANGED,
+    PAYMENT_VIEWED: AuditAction.PAYMENT_VIEWED,
+    PAYMENT_UPDATED: AuditAction.PAYMENT_UPDATED,
+    PAYMENT_DELETED: AuditAction.PAYMENT_DELETED,
+    PAYMENT_EXPIRED: AuditAction.PAYMENT_EXPIRED,
+    BALANCE_CALCULATED: AuditAction.PAYMENT_BALANCE_CALCULATED,
+    FINANCIAL_REPORT_GENERATED: AuditAction.PAYMENT_STATISTICS_GENERATED,
+    OVERDUE_PAYMENTS_PROCESSED: AuditAction.PAYMENT_OVERDUE_PROCESSED,
   },
 } as const;
 
-// ✅ ИСПРАВЛЯЕМ ТИПЫ ДЛЯ СТАТИСТИКИ
 export type PaymentStatusKeys = keyof typeof PAYMENTS_CONSTANTS.STATUS_DISPLAY;
 export type PaymentCurrencyKeys = keyof typeof PAYMENTS_CONSTANTS.CURRENCY_INFO;
 export type PaymentMethodTypeKeys = keyof typeof PAYMENTS_CONSTANTS.PAYMENT_METHOD_INFO;

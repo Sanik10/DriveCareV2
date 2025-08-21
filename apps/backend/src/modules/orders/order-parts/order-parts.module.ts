@@ -1,4 +1,4 @@
-// src/modules/orders/order-parts/order-parts.module.ts
+// path: src/modules/orders/order-parts/order-parts.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { OrderPartsController } from './order-parts.controller';
@@ -7,25 +7,28 @@ import { OrderPartsDataService } from './services/order-parts-data.service';
 import { OrderPartsBusinessService } from './services/order-parts-business.service';
 import { OrderPartsValidationService } from './services/order-parts-validation.service';
 import { OrderPartsMapperService } from './services/order-parts-mapper.service';
-import { 
-  OrderPart, 
-  Order, 
-  Part, 
+import {
+  OrderPart,
+  Order,
+  Part,
   PartCategory,
   Inventory,
-  Company // 🔒 Для проверки принадлежности
+  Company,
+  Subscription,
 } from '../../../database/entities';
 import { AuditService } from '../../../common/audit/audit.service';
+import { SubscriptionLimitsService } from '../../subscriptions/services/subscription-limits.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      OrderPart,     // 🎯 Основная entity субмодуля
-      Order,         // 🔗 Родительская entity для связей
-      Part,          // 🔗 Для получения информации о запчастях
-      PartCategory,  // 🔗 Для категорий запчастей
-      Inventory,     // 🔗 Для проверки остатков на складе
-      Company,       // 🔒 Для проверки принадлежности
+      OrderPart,
+      Order,
+      Part,
+      PartCategory,
+      Inventory,
+      Company,
+      Subscription, // 🔥 для SubscriptionLimitsService
     ]),
   ],
   controllers: [OrderPartsController],
@@ -35,12 +38,9 @@ import { AuditService } from '../../../common/audit/audit.service';
     OrderPartsBusinessService,
     OrderPartsValidationService,
     OrderPartsMapperService,
-    AuditService, // 🔥 Для логирования действий
+    AuditService,
+    SubscriptionLimitsService, // 🔥 проверка лимитов подписки
   ],
-  exports: [
-    OrderPartsService,
-    OrderPartsDataService,
-    OrderPartsMapperService, // 🔥 Экспортируем для использования в других модулях
-  ],
+  exports: [OrderPartsService, OrderPartsDataService, OrderPartsMapperService],
 })
 export class OrderPartsModule {}

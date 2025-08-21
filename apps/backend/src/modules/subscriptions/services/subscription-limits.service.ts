@@ -1,11 +1,11 @@
+// path: apps/backend/src/modules/subscriptions/services/subscription-limits.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Subscription, Tariff } from '../../../database/entities';
+import { Subscription } from '../../../database/entities';
 import { AuditService } from '../../../common/audit/audit.service';
 import { SubscriptionStatus, TariffLimits, LimitCheckResult } from '../types/subscriptions.types';
 import { ISubscriptionLimitsService } from '../interfaces/subscriptions.interface';
-import { SUBSCRIPTIONS_CONSTANTS } from '../constants/subscriptions.constants';
 
 @Injectable()
 export class SubscriptionLimitsService implements ISubscriptionLimitsService {
@@ -17,37 +17,22 @@ export class SubscriptionLimitsService implements ISubscriptionLimitsService {
     private readonly auditService: AuditService,
   ) {}
 
-  /**
-   * 🔥 КЛЮЧЕВОЙ МЕТОД: Проверка лимита пользователей
-   */
   async checkUserLimit(companyId: string, currentCount: number, increment: number = 1): Promise<LimitCheckResult> {
     return this.checkLimit(companyId, 'maxUsers', 'users', currentCount, increment);
   }
 
-  /**
-   * 🔥 КЛЮЧЕВОЙ МЕТОД: Проверка лимита клиентов
-   */
   async checkCustomerLimit(companyId: string, currentCount: number, increment: number = 1): Promise<LimitCheckResult> {
     return this.checkLimit(companyId, 'maxCustomers', 'customers', currentCount, increment);
   }
 
-  /**
-   * 🔥 КЛЮЧЕВОЙ МЕТОД: Проверка лимита транспортных средств
-   */
   async checkVehicleLimit(companyId: string, currentCount: number, increment: number = 1): Promise<LimitCheckResult> {
     return this.checkLimit(companyId, 'maxVehicles', 'vehicles', currentCount, increment);
   }
 
-  /**
-   * 🔥 КЛЮЧЕВОЙ МЕТОД: Проверка лимита заказов
-   */
   async checkOrderLimit(companyId: string, currentCount: number, increment: number = 1): Promise<LimitCheckResult> {
     return this.checkLimit(companyId, 'maxOrders', 'orders', currentCount, increment);
   }
 
-  /**
-   * Получение лимитов тарифа для компании
-   */
   async getTariffLimits(companyId: string): Promise<TariffLimits | null> {
     this.logger.debug(`Получение лимитов тарифа для компании: ${companyId}`);
 
@@ -65,38 +50,31 @@ export class SubscriptionLimitsService implements ISubscriptionLimitsService {
     };
   }
 
-  /**
-   * 🔥 УНИВЕРСАЛЬНАЯ проверка любого лимита
-   */
   async validateLimit(
-    companyId: string, 
-    limitType: keyof TariffLimits, 
-    currentCount: number, 
-    increment: number = 1
+    companyId: string,
+    limitType: keyof TariffLimits,
+    currentCount: number,
+    increment: number = 1,
   ): Promise<boolean> {
     const result = await this.checkLimit(companyId, limitType, limitType, currentCount, increment);
     return result.allowed;
   }
 
-  /**
-   * 🔧 ПРИВАТНЫЙ метод: Универсальная проверка лимита
-   */
   private async checkLimit(
     companyId: string,
     limitField: keyof TariffLimits,
     limitTypeName: string,
     currentCount: number,
-    increment: number = 1
+    increment: number = 1,
   ): Promise<LimitCheckResult> {
     this.logger.debug(`Проверка лимита ${limitTypeName} для компании ${companyId}: текущее=${currentCount}, добавляем=${increment}`);
 
     try {
       const subscription = await this.getActiveSubscription(companyId);
-      
+
       if (!subscription || !subscription.tariff) {
         this.logger.warn(`Активная подписка не найдена для компании: ${companyId}`);
-        
-        // Логируем неудачную проверку лимита
+
         await this.auditService.logLimitCheckFailed({
           companyId,
           metadata: {
@@ -116,11 +94,11 @@ export class SubscriptionLimitsService implements ISubscriptionLimitsService {
       }
 
       const limit = subscription.tariff[limitField];
-      
-      // Безлимитный тариф (null, undefined, -1)
+
+      // Безлимитный тариф (null/undefined/-1)
       if (limit === null || limit === undefined || limit === -1) {
         this.logger.debug(`Безлимитный тариф для ${limitTypeName} в компании ${companyId}`);
-        
+
         return {
           allowed: true,
           currentCount,
@@ -134,8 +112,7 @@ export class SubscriptionLimitsService implements ISubscriptionLimitsService {
 
       if (!allowed) {
         this.logger.warn(`Превышен лимит ${limitTypeName} для компании ${companyId}: ${newCount} > ${limit}`);
-        
-        // Логируем превышение лимита
+
         await this.auditService.logLimitExceeded({
           companyId,
           metadata: {
@@ -157,23 +134,23 @@ export class SubscriptionLimitsService implements ISubscriptionLimitsService {
         limit,
         limitType: limitTypeName,
       };
+    } catch (error: any) {
+      this.logger.error(
+        `Ошибка при проверке лимита ${limitTypeName} для компании ${companyId}: ${error?.message || error}`,
+        error?.stack,
+      );
 
-    } catch (error) {
-      this.logger.error(`Ошибка при проверке лимита ${limitTypeName} для компании ${companyId}:`, error);
-      
-      // Логируем ошибку проверки лимита
       await this.auditService.logLimitCheckFailed({
         companyId,
         metadata: {
           limitType: limitTypeName,
           reason: 'Check error',
-          error: error.message,
+          error: error?.message || String(error),
           currentCount,
           increment,
         },
       });
 
-      // В случае ошибки возвращаем запрет (fail-safe)
       return {
         allowed: false,
         currentCount,
@@ -183,22 +160,17 @@ export class SubscriptionLimitsService implements ISubscriptionLimitsService {
     }
   }
 
-  /**
-   * 🔧 ПРИВАТНЫЙ метод: Получение активной подписки с тарифом
-   */
   private async getActiveSubscription(companyId: string): Promise<Subscription | null> {
     return this.subscriptionsRepository.findOne({
-      where: { 
+      where: {
         companyId,
-        status: SubscriptionStatus.ACTIVE
+        status: SubscriptionStatus.ACTIVE,
       },
       relations: ['tariff'],
+      order: { endDate: 'DESC', createdAt: 'DESC' },
     });
   }
 
-  /**
-   * 📊 Получение информации о всех лимитах компании
-   */
   async getCompanyLimitsInfo(companyId: string): Promise<{
     hasActiveSubscription: boolean;
     tariffName?: string;
@@ -206,7 +178,7 @@ export class SubscriptionLimitsService implements ISubscriptionLimitsService {
     isUnlimited: boolean;
   }> {
     const subscription = await this.getActiveSubscription(companyId);
-    
+
     if (!subscription || !subscription.tariff) {
       return {
         hasActiveSubscription: false,
@@ -222,8 +194,8 @@ export class SubscriptionLimitsService implements ISubscriptionLimitsService {
       maxOrders: subscription.tariff.maxOrders,
     };
 
-    const isUnlimited = Object.values(limits).every(limit => 
-      limit === null || limit === undefined || limit === -1
+    const isUnlimited = Object.values(limits).every(
+      (limit) => limit === null || limit === undefined || limit === -1,
     );
 
     return {
@@ -234,31 +206,78 @@ export class SubscriptionLimitsService implements ISubscriptionLimitsService {
     };
   }
 
-  /**
-   * 🔄 Массовая проверка нескольких лимитов
-   */
   async checkMultipleLimits(companyId: string, checks: Array<{
     type: keyof TariffLimits;
     currentCount: number;
     increment?: number;
   }>): Promise<Array<LimitCheckResult & { type: keyof TariffLimits }>> {
-    const results = [];
-    
+    const results: Array<LimitCheckResult & { type: keyof TariffLimits }> = [];
+    const subscription = await this.getActiveSubscription(companyId);
+
     for (const check of checks) {
-      const result = await this.checkLimit(
-        companyId, 
-        check.type, 
-        check.type, 
-        check.currentCount, 
-        check.increment || 1
-      );
-      
+      const increment = check.increment ?? 1;
+      const currentCount = check.currentCount;
+
+      if (!subscription || !subscription.tariff) {
+        await this.auditService.logLimitCheckFailed({
+          companyId,
+          metadata: {
+            limitType: check.type,
+            reason: 'No active subscription',
+            currentCount,
+            increment,
+          },
+        });
+
+        results.push({
+          allowed: false,
+          currentCount,
+          limit: null,
+          limitType: String(check.type),
+          type: check.type,
+        });
+        continue;
+      }
+
+      const limit = subscription.tariff[check.type];
+
+      if (limit === null || limit === undefined || limit === -1) {
+        results.push({
+          allowed: true,
+          currentCount,
+          limit: null,
+          limitType: String(check.type),
+          type: check.type,
+        });
+        continue;
+      }
+
+      const newCount = currentCount + increment;
+      const allowed = newCount <= limit;
+
+      if (!allowed) {
+        await this.auditService.logLimitExceeded({
+          companyId,
+          metadata: {
+            limitType: check.type,
+            currentCount,
+            increment,
+            newCount,
+            limit,
+            tariffName: subscription.tariff.name,
+          },
+        });
+      }
+
       results.push({
-        ...result,
+        allowed,
+        currentCount,
+        limit,
+        limitType: String(check.type),
         type: check.type,
       });
     }
-    
+
     return results;
   }
 }

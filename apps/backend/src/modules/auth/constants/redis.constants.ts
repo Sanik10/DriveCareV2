@@ -6,3 +6,5 @@ export const REDIS_CONSTANTS = {
     MAX_RETRIES: 3,
   }
 } as const;
+
+export const REDIS_CLIENT = 'REDIS_CLIENT';

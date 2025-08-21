@@ -6,11 +6,14 @@ import {
   Patch,
   Param,
   Query,
-  UseGuards,
+  UseInterceptors,
   HttpCode,
   HttpStatus,
   DefaultValuePipe,
   ParseIntPipe,
+  ParseUUIDPipe,
+  ParseEnumPipe,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -25,6 +28,8 @@ import {
   ApiConflictResponse,
   ApiBadRequestResponse,
   ApiTooManyRequestsResponse,
+  ApiBearerAuth,
+  ApiHeader,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { SubscriptionsService } from './subscriptions.service';
@@ -35,18 +40,37 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { SubscriptionStatus } from './types/subscriptions.types';
 import { SUBSCRIPTIONS_CONSTANTS } from './constants/subscriptions.constants';
 import { AuthWithOwnership, CompanySubscriptions, SubscriptionResource } from '../../common';
+import { AuditLoggingInterceptor } from '../../common/interceptors/audit-logging.interceptor';
+import { SecurityHeadersInterceptor } from '../../common/interceptors/security-headers.interceptor';
+import { EnhancedValidationPipe } from '../../common/pipes/enhanced-validation.pipe';
+import { RequestWithUser } from '../auth/interfaces/request-with-user.interface';
 
 @ApiTags('📋 Подписки компаний')
+@ApiBearerAuth()
+@UseInterceptors(AuditLoggingInterceptor, SecurityHeadersInterceptor)
 @Controller('subscriptions')
 export class SubscriptionsController {
   constructor(private readonly subscriptionsService: SubscriptionsService) {}
 
   @Post()
-  @AuthWithOwnership() // 🔥 ИСПРАВЛЕНО - используем композитный guard
-  @Roles('superadmin', 'admin')
-  @ApiOperation({ 
+  @AuthWithOwnership()
+  @Roles('superadmin', 'platform_admin', 'company_owner', 'company_admin')
+  @ApiOperation({
     summary: 'Создание новой подписки',
-    description: 'Создание новой подписки для компании. Автоматически деактивирует предыдущие активные подписки. Доступно администраторам и суперадмину.'
+    description:
+      'Создание новой подписки для компании. Новая подписка создаётся в статусе PENDING. Автоматически деактивирует предыдущие активные подписки.',
+  })
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description: 'Ключ идемпотентности для безопасных повторов запроса (1–128 символов)',
+    schema: { type: 'string', minLength: 1, maxLength: 128 },
+  })
+  @ApiHeader({
+    name: 'X-Idempotency-Key',
+    required: false,
+    description: 'Альтернативное имя заголовка идемпотентности',
+    schema: { type: 'string', minLength: 1, maxLength: 128 },
   })
   @ApiBody({
     type: CreateSubscriptionDto,
@@ -56,297 +80,183 @@ export class SubscriptionsController {
         summary: 'Стандартная подписка',
         description: 'Создание годовой подписки на тариф "Стандарт"',
         value: {
-          companyId: '123e4567-e89b-12d3-a456-426614174000',
           tariffId: '456e7890-e89b-12d3-a456-426614174001',
           startDate: '2025-01-01T00:00:00.000Z',
           endDate: '2025-12-31T23:59:59.999Z',
-          status: 'active',
           paymentMethod: 'bank_transfer',
-          autoRenew: false
-        }
+          autoRenew: false,
+        },
       },
       monthly: {
         summary: 'Месячная подписка',
         description: 'Создание месячной подписки с автопродлением',
         value: {
-          companyId: '123e4567-e89b-12d3-a456-426614174000',
           tariffId: '789e0123-e89b-12d3-a456-426614174002',
           endDate: '2025-02-01T00:00:00.000Z',
-          autoRenew: true
-        }
-      }
-    }
+          autoRenew: true,
+          paymentMethod: 'card',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: HttpStatus.CREATED,
     description: '✅ Подписка успешно создана',
     type: SubscriptionResponseDto,
   })
-  @ApiConflictResponse({
-    description: '❌ У компании уже есть активная подписка',
-    example: { 
-      statusCode: 409, 
-      message: 'У компании уже есть активная подписка (ID: xxx)',
-      error: 'Conflict'
-    }
-  })
-  @ApiBadRequestResponse({
-    description: '❌ Некорректные данные',
-    example: {
-      statusCode: 400,
-      message: ['Дата окончания должна быть позже даты начала'],
-      error: 'Bad Request'
-    }
-  })
-  @ApiNotFoundResponse({
-    description: '❌ Компания или тариф не найдены',
-    example: {
-      statusCode: 404,
-      message: 'Компания с ID xxx не найдена',
-      error: 'Not Found'
-    }
-  })
+  @ApiConflictResponse({ description: '❌ Конфликт активной подписки' })
+  @ApiBadRequestResponse({ description: '❌ Некорректные данные' })
+  @ApiNotFoundResponse({ description: '❌ Компания или тариф не найдены' })
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
   @ApiForbiddenResponse({ description: '❌ Недостаточно прав доступа' })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 10 в минуту)' })
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
-  async create(@Body() createSubscriptionDto: CreateSubscriptionDto): Promise<SubscriptionResponseDto> {
-    return this.subscriptionsService.create(createSubscriptionDto);
+  @ApiTooManyRequestsResponse({
+    description: `⚠️ Слишком много запросов (лимит: ${SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.CREATE.limit} в минуту)`,
+  })
+  @Throttle({ default: { limit: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.CREATE.limit, ttl: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.CREATE.ttlSec * 1000 } })
+  async create(
+    @Body(EnhancedValidationPipe) createSubscriptionDto: CreateSubscriptionDto,
+    @Req() req: RequestWithUser,
+  ): Promise<SubscriptionResponseDto> {
+    const dto = { ...createSubscriptionDto, companyId: req.user.companyId! };
+    const idempotencyKey =
+      (req.headers['idempotency-key'] as string) ||
+      (req.headers['x-idempotency-key'] as string) ||
+      undefined;
+
+    return this.subscriptionsService.create(dto, idempotencyKey);
   }
 
   @Get('company/:companyId')
-  @AuthWithOwnership() // 🔥 ИСПРАВЛЕНО - используем композитный guard
-  @CompanySubscriptions() // 🔥 КРИТИЧНО! Проверяем доступ к подпискам компании
-  @ApiOperation({ 
+  @AuthWithOwnership()
+  @CompanySubscriptions()
+  @ApiOperation({
     summary: 'Получение подписок компании',
-    description: 'Получение списка подписок конкретной компании с пагинацией и фильтрацией по статусу.'
+    description: 'Получение списка подписок конкретной компании с пагинацией и фильтрацией по статусу.',
   })
-  @ApiParam({
-    name: 'companyId',
-    type: String,
-    description: 'ID компании',
-    example: '123e4567-e89b-12d3-a456-426614174000'
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    description: 'Номер страницы',
-    example: 1
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Количество элементов на странице',
-    example: 10
-  })
-  @ApiQuery({
-    name: 'status',
-    required: false,
-    enum: SubscriptionStatus,
-    description: 'Фильтр по статусу подписки',
-    example: SubscriptionStatus.ACTIVE
-  })
+  @ApiParam({ name: 'companyId', type: String, description: 'ID компании', example: '123e4567-e89b-12d3-a456-426614174000' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Номер страницы', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Количество элементов на странице', example: 10 })
+  @ApiQuery({ name: 'status', required: false, enum: SubscriptionStatus, description: 'Фильтр по статусу подписки', example: SubscriptionStatus.ACTIVE })
   @ApiResponse({
     status: HttpStatus.OK,
     description: '✅ Список подписок успешно получен',
-    example: {
-      items: [],
-      total: 5,
-      page: 1,
-      limit: 10,
-      totalPages: 1
-    }
+    example: { items: [], total: 5, page: 1, limit: 10, totalPages: 1 },
   })
   @ApiNotFoundResponse({ description: '❌ Компания не найдена' })
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 50 в минуту)' })
-  @Throttle({ default: { limit: 50, ttl: 60000 } })
+  @ApiTooManyRequestsResponse({
+    description: `⚠️ Слишком много запросов (лимит: ${SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.LIST.limit} в минуту)`,
+  })
+  @Throttle({ default: { limit: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.LIST.limit, ttl: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.LIST.ttlSec * 1000 } })
   async findByCompany(
-    @Param('companyId') companyId: string,
+    @Param('companyId', ParseUUIDPipe) companyId: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(SUBSCRIPTIONS_CONSTANTS.DEFAULTS.PAGE_SIZE), ParseIntPipe) limit: number,
-    @Query('status') status?: SubscriptionStatus,
+    @Query('status', new ParseEnumPipe(SubscriptionStatus, { optional: true })) status?: SubscriptionStatus,
   ) {
-    const safeLimit = Math.min(limit, SUBSCRIPTIONS_CONSTANTS.DEFAULTS.MAX_ITEMS);
-    return this.subscriptionsService.findByCompany(companyId, page, safeLimit, status);
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(Math.max(1, limit), SUBSCRIPTIONS_CONSTANTS.DEFAULTS.MAX_ITEMS);
+    return this.subscriptionsService.findByCompany(companyId, safePage, safeLimit, status);
   }
 
   @Get('company/:companyId/active')
-  @AuthWithOwnership() // 🔥 ИСПРАВЛЕНО - используем композитный guard
-  @CompanySubscriptions() // 🔥 КРИТИЧНО! Проверяем доступ к подпискам компании
-  @ApiOperation({ 
+  @AuthWithOwnership()
+  @CompanySubscriptions()
+  @ApiOperation({
     summary: 'Получение активной подписки компании',
-    description: 'Получение текущей активной подписки компании с информацией о тарифе и лимитах.'
+    description: 'Получение текущей активной подписки компании с информацией о тарифе и лимитах.',
   })
-  @ApiParam({
-    name: 'companyId',
-    type: String,
-    description: 'ID компании',
-    example: '123e4567-e89b-12d3-a456-426614174000'
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Активная подписка найдена',
-    type: SubscriptionResponseDto,
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '📭 У компании нет активной подписки',
-    example: null
-  })
+  @ApiParam({ name: 'companyId', type: String, description: 'ID компании', example: '123e4567-e89b-12d3-a456-426614174000' })
+  @ApiResponse({ status: HttpStatus.OK, description: '✅ Активная подписка найдена', type: SubscriptionResponseDto })
+  @ApiResponse({ status: HttpStatus.OK, description: '📭 У компании нет активной подписки', example: null })
   @ApiNotFoundResponse({ description: '❌ Компания не найдена' })
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 100 в минуту)' })
-  @Throttle({ default: { limit: 100, ttl: 60000 } })
-  async findActiveByCompany(@Param('companyId') companyId: string): Promise<SubscriptionResponseDto | null> {
+  @ApiTooManyRequestsResponse({
+    description: `⚠️ Слишком много запросов (лимит: ${SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.GET_ACTIVE.limit} в минуту)`,
+  })
+  @Throttle({ default: { limit: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.GET_ACTIVE.limit, ttl: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.GET_ACTIVE.ttlSec * 1000 } })
+  async findActiveByCompany(@Param('companyId', ParseUUIDPipe) companyId: string): Promise<SubscriptionResponseDto | null> {
     return this.subscriptionsService.findActiveByCompany(companyId);
   }
 
   @Get(':id')
-  @AuthWithOwnership() // 🔥 ИСПРАВЛЕНО - используем композитный guard
-  @SubscriptionResource() // 🔥 ДОБАВЛЕНО - проверяем принадлежность подписки
-  @ApiOperation({ 
-    summary: 'Получение подписки по ID',
-    description: 'Получение детальной информации о подписке по её идентификатору.'
-  })
-  @ApiParam({
-    name: 'id',
-    type: String,
-    description: 'ID подписки',
-    example: '789e0123-e89b-12d3-a456-426614174002'
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Подписка найдена',
-    type: SubscriptionResponseDto,
-  })
-  @ApiNotFoundResponse({
-    description: '❌ Подписка не найдена',
-    example: {
-      statusCode: 404,
-      message: 'Подписка с ID xxx не найдена',
-      error: 'Not Found'
-    }
-  })
+  @AuthWithOwnership()
+  @SubscriptionResource()
+  @Roles('superadmin', 'platform_admin', 'company_owner', 'company_admin', 'cashier', 'auditor')
+  @ApiOperation({ summary: 'Получение подписки по ID', description: 'Получение детальной информации о подписке по её идентификатору.' })
+  @ApiParam({ name: 'id', type: String, description: 'ID подписки', example: '789e0123-e89b-12d3-a456-426614174002' })
+  @ApiResponse({ status: HttpStatus.OK, description: '✅ Подписка найдена', type: SubscriptionResponseDto })
+  @ApiNotFoundResponse({ description: '❌ Подписка не найдена' })
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 50 в минуту)' })
-  @Throttle({ default: { limit: 50, ttl: 60000 } })
-  async findOne(@Param('id') id: string): Promise<SubscriptionResponseDto> {
+  @ApiTooManyRequestsResponse({
+    description: `⚠️ Слишком много запросов (лимит: ${SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.LIST.limit} в минуту)`,
+  })
+  @Throttle({ default: { limit: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.LIST.limit, ttl: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.LIST.ttlSec * 1000 } })
+  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<SubscriptionResponseDto> {
     return this.subscriptionsService.findOne(id);
   }
 
   @Patch(':id')
-  @AuthWithOwnership() // 🔥 ИСПРАВЛЕНО - используем композитный guard
-  @SubscriptionResource() // 🔥 ДОБАВЛЕНО - проверяем принадлежность подписки
-  @Roles('superadmin', 'admin')
-  @ApiOperation({ 
-    summary: 'Обновление подписки',
-    description: 'Обновление параметров подписки: тариф, дата окончания, статус, способ оплаты.'
-  })
-  @ApiParam({
-    name: 'id',
-    type: String,
-    description: 'ID подписки',
-    example: '789e0123-e89b-12d3-a456-426614174002'
-  })
-  @ApiBody({
-    type: UpdateSubscriptionDto,
-    description: 'Данные для обновления подписки',
-    examples: {
-      extend: {
-        summary: 'Продление подписки',
-        description: 'Продление подписки на год',
-        value: {
-          endDate: '2026-12-31T23:59:59.999Z'
-        }
-      },
-      changeTariff: {
-        summary: 'Смена тарифа',
-        description: 'Переход на другой тариф',
-        value: {
-          tariffId: '999e8888-e89b-12d3-a456-426614174003'
-        }
-      },
-      suspend: {
-        summary: 'Приостановка подписки',
-        description: 'Временная приостановка подписки',
-        value: {
-          status: 'suspended',
-          autoRenew: false
-        }
-      }
-    }
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Подписка успешно обновлена',
-    type: SubscriptionResponseDto,
-  })
+  @AuthWithOwnership()
+  @SubscriptionResource()
+  @Roles('superadmin', 'platform_admin', 'company_owner')
+  @ApiOperation({ summary: 'Обновление подписки', description: 'Обновление параметров подписки: тариф, дата окончания, статус, способ оплаты.' })
+  @ApiParam({ name: 'id', type: String, description: 'ID подписки', example: '789e0123-e89b-12d3-a456-426614174002' })
+  @ApiBody({ type: UpdateSubscriptionDto, description: 'Данные для обновления подписки' })
+  @ApiResponse({ status: HttpStatus.OK, description: '✅ Подписка успешно обновлена', type: SubscriptionResponseDto })
   @ApiNotFoundResponse({ description: '❌ Подписка не найдена' })
   @ApiBadRequestResponse({ description: '❌ Некорректные данные или невозможный переход статуса' })
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
   @ApiForbiddenResponse({ description: '❌ Недостаточно прав доступа' })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 20 в минуту)' })
-  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @ApiTooManyRequestsResponse({
+    description: `⚠️ Слишком много запросов (лимит: ${SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.UPDATE.limit} в минуту)`,
+  })
+  @Throttle({ default: { limit: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.UPDATE.limit, ttl: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.UPDATE.ttlSec * 1000 } })
   async update(
-    @Param('id') id: string,
-    @Body() updateSubscriptionDto: UpdateSubscriptionDto,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(EnhancedValidationPipe) updateSubscriptionDto: UpdateSubscriptionDto,
   ): Promise<SubscriptionResponseDto> {
     return this.subscriptionsService.update(id, updateSubscriptionDto);
   }
 
   @Patch(':id/cancel')
-  @AuthWithOwnership() // 🔥 ИСПРАВЛЕНО - используем композитный guard
-  @SubscriptionResource() // 🔥 КРИТИЧНО! Проверяем принадлежность подписки
-  @Roles('superadmin', 'admin', 'owner')
-  @ApiOperation({ 
+  @AuthWithOwnership()
+  @SubscriptionResource()
+  @Roles('superadmin', 'platform_admin', 'company_owner')
+  @ApiOperation({
     summary: 'Отмена подписки',
-    description: 'Отмена подписки компании. Устанавливает статус "canceled" и отключает автопродление.'
+    description: 'Отмена подписки компании. Устанавливает статус "canceled" и отключает автопродление.',
   })
-  @ApiParam({
-    name: 'id',
-    type: String,
-    description: 'ID подписки',
-    example: '789e0123-e89b-12d3-a456-426614174002'
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Подписка успешно отменена',
-    type: SubscriptionResponseDto,
-  })
+  @ApiParam({ name: 'id', type: String, description: 'ID подписки', example: '789e0123-e89b-12d3-a456-426614174002' })
+  @ApiResponse({ status: HttpStatus.OK, description: '✅ Подписка успешно отменена', type: SubscriptionResponseDto })
   @ApiNotFoundResponse({ description: '❌ Подписка не найдена' })
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
   @ApiForbiddenResponse({ description: '❌ Недостаточно прав доступа' })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 10 в минуту)' })
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
-  async cancel(@Param('id') id: string): Promise<SubscriptionResponseDto> {
+  @ApiTooManyRequestsResponse({
+    description: `⚠️ Слишком много запросов (лимит: ${SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.CANCEL.limit} в минуту)`,
+  })
+  @Throttle({ default: { limit: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.CANCEL.limit, ttl: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.CANCEL.ttlSec * 1000 } })
+  async cancel(@Param('id', ParseUUIDPipe) id: string): Promise<SubscriptionResponseDto> {
     return this.subscriptionsService.cancel(id);
   }
 
   @Post('check-expired')
-  @AuthWithOwnership() // 🔥 ИСПРАВЛЕНО - используем композитный guard
-  @Roles('superadmin', 'admin')
+  @AuthWithOwnership()
+  @Roles('superadmin', 'platform_admin', 'system_operator')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: '⏰ CRON: Проверка истекших подписок',
-    description: 'Служебный endpoint для проверки и обработки истекших подписок. Используется планировщиком задач.'
+    description: 'Служебный endpoint для проверки и обработки истекших подписок. Используется планировщиком задач.',
   })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Проверка завершена',
-    example: { processedCount: 5, message: 'Обработано истекших подписок: 5' }
-  })
+  @ApiResponse({ status: HttpStatus.OK, description: '✅ Проверка завершена', example: { processedCount: 5, message: 'Обработано истекших подписок: 5' } })
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
   @ApiForbiddenResponse({ description: '❌ Доступно только администраторам' })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 5 в минуту)' })
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @ApiTooManyRequestsResponse({
+    description: `⚠️ Слишком много запросов (лимит: ${SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.CRON.limit} в минуту)`,
+  })
+  @Throttle({ default: { limit: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.CRON.limit, ttl: SUBSCRIPTIONS_CONSTANTS.RATE_LIMITS.CRON.ttlSec * 1000 } })
   async checkExpiredSubscriptions(): Promise<{ processedCount: number; message: string }> {
     const processedCount = await this.subscriptionsService.checkExpiredSubscriptions();
-    return {
-      processedCount,
-      message: `Обработано истекших подписок: ${processedCount}`
-    };
+    return { processedCount, message: `Обработано истекших подписок: ${processedCount}` };
   }
 }

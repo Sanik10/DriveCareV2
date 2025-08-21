@@ -1,3 +1,4 @@
+// path: src/appointments/appointments.controller.ts
 import {
   Controller,
   Get,

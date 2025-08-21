@@ -1,7 +1,17 @@
-// src/database/entities/supplier.entity.ts
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+// path: apps/backend/src/database/entities/supplier.entity.ts
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 
 @Entity('suppliers')
+@Index('idx_suppliers_companyid', ['companyId'])
+@Index('idx_suppliers_isactive', ['isActive'])
+@Index('idx_suppliers_company_email_unique', ['companyId', 'email'], {
+  unique: true,
+  where: '"email" IS NOT NULL',
+})
+@Index('idx_suppliers_company_taxnumber_unique', ['companyId', 'taxNumber'], {
+  unique: true,
+  where: '"taxNumber" IS NOT NULL',
+})
 export class Supplier {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -24,7 +34,6 @@ export class Supplier {
   @Column({ type: 'text', nullable: true })
   address: string | null;
 
-  // 🔥 ДОБАВЛЯЕМ НЕДОСТАЮЩИЕ ПОЛЯ:
   @Column({ type: 'varchar', length: 100, nullable: true })
   city: string | null;
 
@@ -37,11 +46,10 @@ export class Supplier {
   @Column({ type: 'varchar', length: 255, nullable: true })
   website: string | null;
 
-  // 🔥 ДОБАВЛЯЕМ ENUM ПОЛЯ:
-  @Column({ 
-    type: 'enum', 
+  @Column({
+    type: 'enum',
     enum: ['manufacturer', 'distributor', 'wholesaler', 'retailer', 'service_provider', 'other'],
-    default: 'distributor'
+    default: 'distributor',
   })
   supplierType: 'manufacturer' | 'distributor' | 'wholesaler' | 'retailer' | 'service_provider' | 'other';
 
@@ -57,9 +65,9 @@ export class Supplier {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 }

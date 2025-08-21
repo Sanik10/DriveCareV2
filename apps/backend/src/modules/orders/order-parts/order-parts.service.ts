@@ -8,7 +8,6 @@ import { AddPartToOrderDto } from './dto/request/add-part-to-order.dto';
 import { UpdateOrderPartDto } from './dto/request/update-order-part.dto';
 import { OrderPartResponseDto } from './dto/response/order-part-response.dto';
 import { OrderPartsListResponseDto } from './dto/response/order-parts-list-response.dto';
-import { AddPartToOrderData } from './types/order-parts.types';
 import { RequestWithUser } from '../../auth/interfaces/request-with-user.interface';
 
 @Injectable()
@@ -16,155 +15,57 @@ export class OrderPartsService {
   private readonly logger = new Logger(OrderPartsService.name);
 
   constructor(
-    private readonly orderPartsDataService: OrderPartsDataService,
-    private readonly orderPartsBusinessService: OrderPartsBusinessService,
-    private readonly orderPartsValidationService: OrderPartsValidationService,
-    private readonly orderPartsMapperService: OrderPartsMapperService,
+    private readonly data: OrderPartsDataService,
+    private readonly business: OrderPartsBusinessService,
+    private readonly validation: OrderPartsValidationService,
+    private readonly mapper: OrderPartsMapperService,
   ) {}
 
-  /**
-   * 🔒 Добавление запчасти в заказ
-   */
-  async addPartToOrder(
-    orderId: string, 
-    addPartDto: AddPartToOrderDto, 
-    user: RequestWithUser['user']
-  ): Promise<OrderPartResponseDto> {
-    this.logger.log(`Adding part ${addPartDto.partId} to order ${orderId} by user ${user.id}`);
-
-    // Преобразование DTO в данные для бизнес-слоя
-    const addPartData: AddPartToOrderData = {
-      orderId,
-      partId: addPartDto.partId,
-      price: 0, // Будет рассчитано в BusinessService
-      quantity: addPartDto.quantity || 1,
-      discountPercent: addPartDto.discountPercent || 0,
-      totalAmount: 0, // Будет рассчитано в BusinessService
-      isCustomerProvided: addPartDto.isCustomerProvided || false,
-      customPrice: addPartDto.customPrice,
-    };
-
-    // Валидация данных и проверка прав
-    await this.orderPartsValidationService.validateAddPart(orderId, addPartDto, user);
-
-    // Добавление запчасти через бизнес-сервис
-    const orderPart = await this.orderPartsBusinessService.addPartToOrder(orderId, addPartData, user);
-
-    this.logger.log(`Part added to order: ${orderPart.id}`);
-
-    return this.orderPartsMapperService.mapToResponseDto(orderPart);
+  async addPartToOrder(orderId: string, addPartDto: AddPartToOrderDto, user: RequestWithUser['user']): Promise<OrderPartResponseDto> {
+    await this.validation.validateAddPart(orderId, addPartDto, user);
+    const part = await this.business.addPartToOrder(orderId, addPartDto as any, user);
+    return this.mapper.mapToResponseDto(part);
   }
 
-  /**
-   * 🔒 Получение списка запчастей заказа
-   */
   async getOrderParts(orderId: string): Promise<OrderPartsListResponseDto> {
-    this.logger.log(`Getting parts for order ${orderId}`);
-
-    // Получение запчастей заказа
-    const orderParts = await this.orderPartsDataService.findByOrderId(orderId);
+    const parts = await this.data.findByOrderId(orderId);
+    const stats = await this.data.getOrderPartsStats(orderId);
+    const categoryStats = await this.data.getPartsByCategory(orderId);
 
     return {
       orderId,
-      parts: this.orderPartsMapperService.mapArrayToResponseDto(orderParts),
-      totalParts: orderParts.length,
-      totalAmount: orderParts.reduce((sum, part) => sum + parseFloat(part.totalAmount.toString()), 0),
-      customerProvidedCount: orderParts.filter(p => p.isCustomerProvided).length,
-      ourPartsCount: orderParts.filter(p => !p.isCustomerProvided).length,
+      parts: this.mapper.mapArrayToResponseDto(parts),
+      totalParts: stats.total,
+      totalAmount: stats.totalAmount,
+      customerProvidedCount: stats.customerProvided,
+      ourPartsCount: stats.ourParts,
+      categoryStats,
+      needsInventoryCheck: stats.needsInventoryCheck,
     };
   }
 
-  /**
-   * 🔒 Обновление запчасти в заказе
-   */
-  async updateOrderPart(
-    orderId: string, 
-    partId: string, 
-    updateDto: UpdateOrderPartDto
-  ): Promise<OrderPartResponseDto> {
-    this.logger.log(`Updating order part ${partId} in order ${orderId}`);
-
-    // Валидация обновления
-    await this.orderPartsValidationService.validateUpdatePart(orderId, partId, updateDto);
-
-    // Обновление через бизнес-сервис
-    const updatedOrderPart = await this.orderPartsBusinessService.updateOrderPart(partId, updateDto);
-
-    this.logger.log(`Order part updated: ${partId}`);
-
-    return this.orderPartsMapperService.mapToResponseDto(updatedOrderPart);
+  async updateOrderPart(orderId: string, partId: string, updateDto: UpdateOrderPartDto): Promise<OrderPartResponseDto> {
+    const current = await this.validation.validateUpdatePart(orderId, partId, updateDto);
+    const updated = await this.business.updateOrderPart(current.id, updateDto as any);
+    return this.mapper.mapToResponseDto(updated);
   }
 
-  /**
-   * 🔒 Удаление запчасти из заказа
-   */
   async removePartFromOrder(orderId: string, partId: string): Promise<void> {
-    this.logger.log(`Removing part ${partId} from order ${orderId}`);
-
-    // Валидация удаления
-    await this.orderPartsValidationService.validateRemovePart(orderId, partId);
-
-    // Удаление через бизнес-сервис
-    await this.orderPartsBusinessService.removePartFromOrder(partId);
-
-    this.logger.log(`Part removed from order: ${partId}`);
+    const current = await this.validation.validateRemovePart(orderId, partId);
+    await this.business.removePartFromOrder(current.id);
   }
 
-  /**
-   * 🔄 Переключение типа запчасти
-   */
-  async toggleCustomerProvided(
-    orderId: string, 
-    partId: string, 
-    isCustomerProvided: boolean
-  ): Promise<OrderPartResponseDto> {
-    this.logger.log(`Toggling customer provided for part ${partId}: ${isCustomerProvided}`);
-
-    // Валидация
-    await this.orderPartsValidationService.validateToggleCustomerProvided(orderId, partId, isCustomerProvided);
-
-    // Переключение через бизнес-сервис
-    const updatedOrderPart = await this.orderPartsBusinessService.toggleCustomerProvided(
-      partId, 
-      isCustomerProvided
-    );
-
-    this.logger.log(`Customer provided toggled for part: ${partId}`);
-
-    return this.orderPartsMapperService.mapToResponseDto(updatedOrderPart);
+  async toggleCustomerProvided(orderId: string, partId: string, isCustomerProvided: boolean): Promise<OrderPartResponseDto> {
+    const current = await this.validation.validateToggleCustomerProvided(orderId, partId, isCustomerProvided);
+    const updated = await this.business.toggleCustomerProvided(current.id, isCustomerProvided);
+    return this.mapper.mapToResponseDto(updated);
   }
 
-  /**
-   * 📊 Проверка наличия запчасти
-   */
-  async checkPartAvailability(orderId: string, partId: string): Promise<{
-    partId: string;
-    available: number;
-    reserved: number;
-    canAddToOrder: boolean;
-    maxQuantity: number;
-  }> {
-    return this.orderPartsBusinessService.checkPartAvailability(orderId, partId);
-  }
-
-  /**
-   * 📊 Для других модулей - получение информации о запчастях заказа
-   */
-  async getOrderPartsInfo(orderId: string): Promise<{
-    totalParts: number;
-    customerProvidedParts: number;
-    ourParts: number;
-    totalAmount: number;
-    needsInventoryCheck: boolean;
-  }> {
-    const orderParts = await this.orderPartsDataService.findByOrderId(orderId);
-
-    return {
-      totalParts: orderParts.length,
-      customerProvidedParts: orderParts.filter(p => p.isCustomerProvided).length,
-      ourParts: orderParts.filter(p => !p.isCustomerProvided).length,
-      totalAmount: orderParts.reduce((sum, part) => sum + parseFloat(part.totalAmount.toString()), 0),
-      needsInventoryCheck: orderParts.some(p => !p.isCustomerProvided),
-    };
+  async checkPartAvailability(
+    orderId: string,
+    partId: string,
+    user: RequestWithUser['user'],
+  ): Promise<{ partId: string; available: number; reserved: number; canAddToOrder: boolean; maxQuantity: number }> {
+    return this.business.checkPartAvailability(orderId, partId, user);
   }
 }

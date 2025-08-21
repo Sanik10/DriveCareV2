@@ -8,11 +8,13 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  Unique, // ✅ ДОБАВЛЕНО
 } from 'typeorm';
 import { Company } from './company.entity';
 import { Permission } from './permission.entity';
 
 @Entity('roles')
+@Unique(['name', 'companyId']) // ✅ ИСПРАВЛЕНО: добавлен unique constraint
 export class Role {
   @PrimaryGeneratedColumn('uuid')
   id: string;

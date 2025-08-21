@@ -1,27 +1,26 @@
-// src/modules/payment-methods/constants/payment-methods.constants.ts
+// path: apps/backend/src/modules/payment-methods/constants/payment-methods.constants.ts
 export const PAYMENT_METHODS_CONSTANTS = {
   DEFAULT_PAGE_SIZE: 20,
   MAX_PAGE_SIZE: 100,
   MIN_PROCESSING_FEE: 0,
   MAX_PROCESSING_FEE: 10, // 10%
   MIN_AMOUNT_LIMIT: 0.01,
-  MAX_AMOUNT_LIMIT: 1000000,
+  MAX_AMOUNT_LIMIT: 1_000_000,
   MAX_NAME_LENGTH: 100,
   MAX_DESCRIPTION_LENGTH: 500,
   DEFAULT_SORT_BY: 'name',
   DEFAULT_SORT_ORDER: 'ASC' as const,
-  
-  // 🔥 Enterprise Features
+
   SUPPORTED_GATEWAYS: [
     'stripe',
-    'yookassa', 
+    'yookassa',
     'sberbank',
     'tinkoff',
     'cash',
     'bank_transfer',
-    'corporate_account'
+    'corporate_account',
   ] as const,
-  
+
   MAX_INSTALLMENT_MONTHS: 60,
   MIN_DOWN_PAYMENT_PERCENT: 10,
   MAX_DAILY_TRANSACTIONS: 1000,
@@ -38,5 +37,4 @@ export const PAYMENT_METHOD_VALIDATION_MESSAGES = {
   INSTALLMENT_CONFIG_INVALID: 'Некорректные настройки рассрочки',
 } as const;
 
-// 🔥 Enterprise Payment Types
-export type PaymentGateway = typeof PAYMENT_METHODS_CONSTANTS.SUPPORTED_GATEWAYS[number];
+export type PaymentGateway = (typeof PAYMENT_METHODS_CONSTANTS.SUPPORTED_GATEWAYS)[number];
