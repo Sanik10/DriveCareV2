@@ -8,7 +8,9 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
     "prepare": "husky",
-    "tracker:sync": "node scripts/validate-tracker.js"
+    "tracker:sync": "node scripts/validate-tracker.js",
+    "apply:clip": "node scripts/apply-from-clipboard.mjs --root .",
+    "apply:clip:dry": "node scripts/apply-from-clipboard.mjs --root . --dry-run --verbose"
   },
   "devDependencies": {
     "husky": "^9.1.7",
