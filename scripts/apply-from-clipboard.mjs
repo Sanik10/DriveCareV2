@@ -1,19 +1,27 @@
 #!/usr/bin/env node
 /* Apply AI changes from clipboard or stdin.
-   Supported formats:
-   A) Unified diff (contains "diff --git") → applies via `git apply`.
+   Formats:
+   A) Unified diff (raw or inside ```diff/```patch) → git apply
+      - Auto-extracts diff code blocks from the message
+      - Dry-run uses `git apply --check`
+      - Tries strategies: default, -p1, (and for apply) --3way, --3way -p1
+      - Path rewrite: a/src/... → a/apps/<base>/src/... (base=backend|frontend) or custom --map
+      - Sanitizes malformed diffs: adds missing context " " in hunks, strips BOM/ZW/NBSP, normalizes EOL
    B) Path-blocks:
       <!-- path: relative/path.ext[, action: delete|replace|append|move, from: old/path.ext] -->
       ```lang
       ...full file content...
       ```
-   - Default action is "replace".
-   - delete: removes file.
-   - append: appends content to file (creates if not exists).
-   - move: moves file from "from" to "path" (no content block needed, but allowed).
+   Default action for blocks: replace
+
    Usage:
      pbpaste | node scripts/apply-from-clipboard.mjs [--root .] [--dry-run] [--verbose]
-     node scripts/apply-from-clipboard.mjs --dry-run (reads from clipboard on macOS)
+     node scripts/apply-from-clipboard.mjs --dry-run
+   Extra flags:
+     --map=FROM:TO        Add path rewrite rule (e.g. --map=src:apps/backend/src)
+     --src-base=backend|frontend  Shortcut for mapping plain "src" (default: backend)
+     --save-input         Save raw input to ai.last.txt
+     --no-path-rewrite    Disable automatic path rewrite heuristics
 */
 import fs from 'fs';
 import path from 'path';
@@ -24,12 +32,28 @@ const flags = {
   root: '.',
   dryRun: false,
   verbose: false,
+  saveInput: false,
+  noPathRewrite: false,
+  srcBase: 'backend',
+  maps: [],
 };
 
 for (const a of args) {
   if (a === '--dry-run') flags.dryRun = true;
   else if (a === '--verbose') flags.verbose = true;
+  else if (a === '--save-input') flags.saveInput = true;
+  else if (a === '--no-path-rewrite') flags.noPathRewrite = true;
   else if (a.startsWith('--root=')) flags.root = a.slice('--root='.length);
+  else if (a.startsWith('--src-base=')) flags.srcBase = a.slice('--src-base='.length);
+  else if (a.startsWith('--map=')) {
+    const v = a.slice('--map='.length);
+    const idx = v.indexOf(':');
+    if (idx > 0) flags.maps.push({ from: v.slice(0, idx).replace(/^\/+/, ''), to: v.slice(idx + 1).replace(/^\/+/, '') });
+    else {
+      console.error('Invalid --map format. Expected --map=FROM:TO');
+      process.exit(1);
+    }
+  }
 }
 
 function log(...m) {
@@ -51,37 +75,183 @@ async function readInput() {
   return r.stdout;
 }
 
-function applyGitPatch(patchText) {
-  console.log('Detected unified diff. Applying via git apply...');
-  const tryApply = (extraArgs = []) =>
-    spawnSync('git', ['apply', '--index', '--reject', '--whitespace=fix', ...extraArgs], {
-      input: patchText,
-      encoding: 'utf8',
-      stdio: ['pipe', 'inherit', 'inherit'],
-    });
-
-  let res = tryApply([]);
-  if (res.status !== 0) {
-    console.warn('git apply failed, retry with -p1');
-    res = tryApply(['-p1']);
+// Extract diff/patch code blocks
+function extractCodeBlockDiffs(input) {
+  const re = /```(?:diff|patch)[^\n]*\n([\s\S]*?)```/gi;
+  const parts = [];
+  let m;
+  while ((m = re.exec(input)) !== null) parts.push(m[1]);
+  return parts;
+}
+function extractUnifiedDiffSegment(input) {
+  const idxGit = input.search(/(^|\n)diff --git\s/m);
+  const idxFrom = input.search(/(^|\n)From [0-9a-f]{7,}\s/m); // format-patch
+  if (idxGit !== -1 && (idxFrom === -1 || idxGit < idxFrom)) return input.slice(idxGit);
+  if (idxFrom !== -1) return input.slice(idxFrom);
+  return '';
+}
+function getPatchText(input) {
+  const blocks = extractCodeBlockDiffs(input);
+  if (blocks.length) {
+    log(`found ${blocks.length} diff/patch code block(s)`);
+    return blocks.join('\n\n');
   }
-  if (res.status !== 0) {
-    const tmp = path.join(process.cwd(), 'ai.patch');
-    fs.writeFileSync(tmp, patchText, 'utf8');
-    console.error(`git apply failed. Patch saved to ${tmp}. Try: git apply --index --reject ${tmp}`);
+  if (/(^|\n)diff --git\s/.test(input) || /(^|\n)From [0-9a-f]{7,}\s/.test(input)) {
+    const seg = extractUnifiedDiffSegment(input);
+    if (seg) {
+      log('using unified diff segment from raw text');
+      return seg;
+    }
+  }
+  return '';
+}
+
+// ---------- Sanitization of malformed diffs ----------
+function normalizeEOL(s) {
+  return s.replace(/\r\n/g, '\n');
+}
+function sanitizePatch(patch) {
+  let txt = normalizeEOL(patch)
+    // strip BOM at start-of-text and at start of lines
+    .replace(/^\uFEFF/, '')
+    .replace(/\n\uFEFF/g, '\n');
+  const lines = txt.split('\n');
+  let inHunk = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let l = lines[i];
+
+    // Remove leading zero-width and NBSP characters; they often break prefixes
+    l = l.replace(/^[\u200B\u200C\u200D\u00A0]+/, '');
+
+    if (/^@@ /.test(l)) {
+      inHunk = true;
+      lines[i] = l;
+      continue;
+    }
+    // Headers turn hunk mode off
+    if (/^(diff --git |index |--- |\+\+\+ |new file mode|deleted file mode|rename from |rename to |similarity index )/.test(l)) {
+      inHunk = false;
+      lines[i] = l;
+      continue;
+    }
+    if (inHunk) {
+      // Valid hunk lines: ' ', '+', '-', '\' (No newline at end of file)
+      if (!/^[ +\-\\]/.test(l)) {
+        // turn this into a context line
+        l = ' ' + l;
+      }
+      lines[i] = l;
+    } else {
+      lines[i] = l;
+    }
+  }
+  return lines.join('\n');
+}
+// ---------- end sanitization ----------
+
+function ensureDir(filePath) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+}
+function resolveSafe(rootDir, rel) {
+  const rootAbs = path.resolve(rootDir);
+  const out = path.resolve(rootAbs, rel);
+  if (out !== rootAbs && !out.startsWith(rootAbs + path.sep)) {
+    throw new Error(`Path escapes root: ${rel}`);
+  }
+  return out;
+}
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+function rewritePatchPaths(patch, pairs) {
+  let out = patch;
+  for (const p of pairs) {
+    const from = p.from.replace(/^\/+/, '').replace(/\/+$/, '');
+    const to = p.to.replace(/^\/+/, '').replace(/\/+$/, '');
+    const rules = [
+      { from: `a/${from}/`, to: `a/${to}/` },
+      { from: `b/${from}/`, to: `b/${to}/` },
+      { from: `--- a/${from}/`, to: `--- a/${to}/` },
+      { from: `+++ b/${from}/`, to: `+++ b/${to}/` },
+    ];
+    for (const r of rules) out = out.replace(new RegExp(escapeRe(r.from), 'g'), r.to);
+  }
+  return out;
+}
+function inferDefaultMappingsForSrc(patch) {
+  const pairs = [];
+  if (/(^|\n)(--- a\/src\/|\+\+\+ b\/src\/|diff --git a\/src\/|diff --git [^\n]* b\/src\/)/.test(patch)) {
+    const target = flags.srcBase === 'frontend' ? 'apps/frontend/src' : 'apps/backend/src';
+    pairs.push({ from: 'src', to: target });
+  }
+  return pairs;
+}
+
+function applyGitPatch(patchText, { tryRewrites = true } = {}) {
+  const modeLabel = flags.dryRun ? 'Checking patch (dry-run)...' : 'Applying patch...';
+  console.log(`Detected unified diff. ${modeLabel}`);
+
+  const baseArgs = flags.dryRun ? ['--check', '--whitespace=fix'] : ['--index', '--reject', '--whitespace=fix'];
+  const tryApply = (text, extraArgs = [], label = '') =>
+    spawnSync('git', ['apply', ...baseArgs, ...extraArgs], { input: text, encoding: 'utf8', stdio: ['pipe', 'inherit', 'inherit'] });
+
+  const strategies = flags.dryRun
+    ? [{ args: [], label: 'default' }, { args: ['-p1'], label: 'strip -p1' }]
+    : [
+        { args: [], label: 'default' },
+        { args: ['-p1'], label: 'strip -p1' },
+        { args: ['--3way'], label: '3-way' },
+        { args: ['--3way', '-p1'], label: '3-way -p1' },
+      ];
+
+  // First sanitize the incoming patch
+  let working = sanitizePatch(patchText);
+
+  for (const s of strategies) {
+    const res = tryApply(working, s.args, s.label);
+    if (res.status === 0) {
+      console.log(`Patch OK (${s.label}).`);
+      return true;
+    }
+    console.warn(`git apply failed (${s.label}), trying next...`);
+  }
+
+  if (tryRewrites && !flags.noPathRewrite) {
+    // User-defined map rules have priority
+    let mapped = rewritePatchPaths(working, flags.maps);
+    const inferred = inferDefaultMappingsForSrc(mapped);
+    if (inferred.length) mapped = rewritePatchPaths(mapped, inferred);
+
+    // sanitize again in case rewrites produced edge cases
+    mapped = sanitizePatch(mapped);
+
+    console.warn('Retrying with rewritten paths...');
+    for (const s of strategies) {
+      const res = tryApply(mapped, s.args, `rewrite + ${s.label}`);
+      if (res.status === 0) {
+        console.log(`Patch OK after rewrite (${s.label}).`);
+        return true;
+      }
+      console.warn(`git apply failed (rewrite + ${s.label}), trying next...`);
+    }
+    // Save both originals for manual inspection
+    const p1 = path.join(process.cwd(), 'ai.patch');
+    const p2 = path.join(process.cwd(), 'ai.rewritten.patch');
+    fs.writeFileSync(p1, patchText, 'utf8');
+    fs.writeFileSync(p2, mapped, 'utf8');
+    console.error(`All strategies failed. Saved to:\n  ${p1}\n  ${p2}\nTry: git apply ${flags.dryRun ? '--check ' : '--index --reject '} ${p2}`);
     process.exit(2);
   }
-  console.log('Patch applied.');
+
+  const tmp = path.join(process.cwd(), 'ai.patch');
+  fs.writeFileSync(tmp, patchText, 'utf8');
+  console.error(`git apply failed. Patch saved to ${tmp}. Try: git apply ${flags.dryRun ? '--check ' : '--index --reject '} ${tmp}`);
+  process.exit(2);
 }
 
 function parseBlocks(input) {
-  // Matches:
-  // <!-- path: file[, key: value, key2: value2] -->
-  // ```lang
-  // content
-  // ```
-  const re =
-    /<!--\s*path:\s*([^\s,>]+)(?:\s*,\s*([^>]*))?\s*-->\s*```(?:[a-zA-Z0-9#+.\-]*)\s*\n([\s\S]*?)```/g;
+  const re = /<!--\s*path:\s*([^\s,>]+)(?:\s*,\s*([^>]*))?\s*-->\s*```(?:[a-zA-Z0-9#+.\-]*)\s*\n([\s\S]*?)```/g;
   const blocks = [];
   let m;
   while ((m = re.exec(input)) !== null) {
@@ -92,9 +262,8 @@ function parseBlocks(input) {
     if (optsRaw) {
       for (const kv of optsRaw.split(',').map((s) => s.trim()).filter(Boolean)) {
         const idx = kv.indexOf(':');
-        if (idx === -1) {
-          options[kv.toLowerCase()] = true;
-        } else {
+        if (idx === -1) options[kv.toLowerCase()] = true;
+        else {
           const key = kv.slice(0, idx).trim().toLowerCase();
           const val = kv.slice(idx + 1).trim();
           options[key] = val;
@@ -106,33 +275,14 @@ function parseBlocks(input) {
   return blocks;
 }
 
-function normalizeEOL(s) {
-  return s.replace(/\r\n/g, '\n');
-}
-
-function ensureDir(filePath) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-}
-
-function resolveSafe(rootDir, rel) {
-  const rootAbs = path.resolve(rootDir);
-  const out = path.resolve(rootAbs, rel);
-  if (out !== rootAbs && !out.startsWith(rootAbs + path.sep)) {
-    throw new Error(`Path escapes root: ${rel}`);
-  }
-  return out;
-}
-
 function applyBlocks(blocks, rootDir) {
   const actions = [];
   for (const b of blocks) {
     const outPath = resolveSafe(rootDir, b.relPath);
     const action = ((b.options.action || b.options.mode) ?? 'replace').toString().toLowerCase();
-    if (action === 'delete') {
-      actions.push({ type: 'delete', outPath });
-    } else if (action === 'append') {
-      actions.push({ type: 'append', outPath, content: normalizeEOL(b.content) });
-    } else if (action === 'move') {
+    if (action === 'delete') actions.push({ type: 'delete', outPath });
+    else if (action === 'append') actions.push({ type: 'append', outPath, content: normalizeEOL(b.content) });
+    else if (action === 'move') {
       const fromRel = b.options.from;
       if (!fromRel) {
         console.error(`Move action requires "from: old/path". Block: ${b.relPath}`);
@@ -140,23 +290,15 @@ function applyBlocks(blocks, rootDir) {
       }
       const fromPath = resolveSafe(rootDir, fromRel);
       actions.push({ type: 'move', fromPath, outPath });
-      // Optional: if content present with move, also replace destination content after move
-      if (b.content && b.content.trim()) {
-        actions.push({ type: 'replace', outPath, content: normalizeEOL(b.content) });
-      }
-    } else {
-      actions.push({ type: 'replace', outPath, content: normalizeEOL(b.content) });
-    }
+      if (b.content && b.content.trim()) actions.push({ type: 'replace', outPath, content: normalizeEOL(b.content) });
+    } else actions.push({ type: 'replace', outPath, content: normalizeEOL(b.content) });
   }
 
   if (flags.dryRun) {
     console.log('Dry-run. Planned changes:');
     for (const a of actions) {
-      if (a.type === 'move') {
-        console.log('- move', path.relative(process.cwd(), a.fromPath), '→', path.relative(process.cwd(), a.outPath));
-      } else {
-        console.log('-', a.type, path.relative(process.cwd(), a.outPath));
-      }
+      if (a.type === 'move') console.log('- move', path.relative(process.cwd(), a.fromPath), '→', path.relative(process.cwd(), a.outPath));
+      else console.log('-', a.type, path.relative(process.cwd(), a.outPath));
     }
     return;
   }
@@ -168,9 +310,7 @@ function applyBlocks(blocks, rootDir) {
         fs.rmSync(a.outPath);
         log('deleted', a.outPath);
         changed++;
-      } else {
-        log('skip delete (not found)', a.outPath);
-      }
+      } else log('skip delete (not found)', a.outPath);
     } else if (a.type === 'append') {
       ensureDir(a.outPath);
       fs.appendFileSync(a.outPath, a.content);
@@ -201,17 +341,20 @@ function applyBlocks(blocks, rootDir) {
     console.error('No input. Copy message to clipboard or pipe it via stdin.');
     process.exit(1);
   }
+  if (flags.saveInput) fs.writeFileSync(path.join(process.cwd(), 'ai.last.txt'), input, 'utf8');
 
-  if (/(^|\n)diff --git\s/.test(input)) {
-    applyGitPatch(input);
+  const patch = getPatchText(input);
+  if (patch) {
+    applyGitPatch(patch, { tryRewrites: !flags.noPathRewrite });
     process.exit(0);
   }
 
   const blocks = parseBlocks(input);
-  if (!blocks.length) {
-    console.error('No blocks found. Expect either "diff --git" or <!-- path: ... --> + ```...``` blocks.');
-    process.exit(1);
+  if (blocks.length) {
+    applyBlocks(blocks, path.resolve(flags.root));
+    process.exit(0);
   }
 
-  applyBlocks(blocks, path.resolve(flags.root));
+  console.error('No diff/patch block or path-blocks found. Provide either ```diff ...``` or <!-- path: ... --> blocks.');
+  process.exit(1);
 })();
