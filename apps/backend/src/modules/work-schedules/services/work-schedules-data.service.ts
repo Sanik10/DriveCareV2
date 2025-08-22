@@ -1,8 +1,7 @@
-// path: apps/backend/src/modules/work-schedules/services/work-schedules-data.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { WorkSchedule, ScheduleException } from '../../../database/entities';
+import { WorkSchedule, ScheduleException, User } from '../../../database/entities';
 import { CreateScheduleDto } from '../dto/request/create-schedule.dto';
 import { UpdateScheduleDto } from '../dto/request/update-schedule.dto';
 import { CreateExceptionDto } from '../dto/request/create-exception.dto';
@@ -21,6 +20,8 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
   ) {}
 
   async create(data: CreateScheduleDto & { companyId: string }): Promise<WorkSchedule> {
+    const eff = data.efficiency ?? WORK_SCHEDULES_CONSTANTS.DEFAULT_EFFICIENCY;
+
     const scheduleData: Partial<WorkSchedule> = {
       companyId: data.companyId,
       userId: data.userId,
@@ -30,7 +31,7 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
       isDayOff: data.isDayOff || false,
       breakStartTime: data.breakStartTime ?? null,
       breakEndTime: data.breakEndTime ?? null,
-      efficiency: data.efficiency ?? WORK_SCHEDULES_CONSTANTS.DEFAULT_EFFICIENCY,
+      efficiency: typeof eff === 'number' ? eff.toFixed(2) : String(eff),
       skillMatrix: data.skillMatrix ?? [],
       shiftType: data.shiftType || 'flexible',
       maxConsecutiveDays: data.maxConsecutiveDays ?? 5,
@@ -92,6 +93,44 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
       query.andWhere('schedule.isActive = :isActive', { isActive });
     }
 
+    // Дополнительные фильтры
+    if (filter.shiftType) {
+      query.andWhere('schedule.shiftType = :shiftType', { shiftType: filter.shiftType });
+    }
+    if (filter.efficiencyMin !== undefined) {
+      query.andWhere('schedule.efficiency >= :effMin', { effMin: filter.efficiencyMin });
+    }
+    if (filter.efficiencyMax !== undefined) {
+      query.andWhere('schedule.efficiency <= :effMax', { effMax: filter.efficiencyMax });
+    }
+    if (filter.hasSkills && Array.isArray(filter.hasSkills) && filter.hasSkills.length > 0) {
+      // jsonb contains: column @> :skills::jsonb
+      query.andWhere('schedule.skillMatrix @> :skills', { skills: JSON.stringify(filter.hasSkills) });
+    }
+    if (filter.dateRange?.startDate && filter.dateRange?.endDate) {
+      // Мэппинг диапазона дат → множество дней недели
+      const start = new Date(filter.dateRange.startDate);
+      const end = new Date(filter.dateRange.endDate);
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
+        const days: number[] = [];
+        const seen = new Set<number>();
+        const cur = new Date(start);
+        let guard = 0;
+        while (cur <= end && guard < 400) {
+          const d = cur.getDay();
+          if (!seen.has(d)) {
+            seen.add(d);
+            days.push(d);
+          }
+          cur.setDate(cur.getDate() + 1);
+          guard++;
+        }
+        if (days.length > 0) {
+          query.andWhere('schedule.dayOfWeek IN (:...days)', { days });
+        }
+      }
+    }
+
     const sortColumn = this.mapSortField(sortBy);
     const order = (sortOrder || 'ASC').toString().toUpperCase();
     const normalizedOrder: 'ASC' | 'DESC' = order === 'DESC' ? 'DESC' : 'ASC';
@@ -114,7 +153,13 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
     if (data.isDayOff !== undefined) updateData.isDayOff = data.isDayOff;
     if (data.breakStartTime !== undefined) updateData.breakStartTime = data.breakStartTime ?? null;
     if (data.breakEndTime !== undefined) updateData.breakEndTime = data.breakEndTime ?? null;
-    if (data.efficiency !== undefined) updateData.efficiency = data.efficiency;
+    if (data.efficiency !== undefined) {
+      const eff = data.efficiency as any;
+      updateData.efficiency = eff?.toFixed ? (eff as number).toFixed(2) : String(eff);
+    }
+    if ((data as any).isActive !== undefined) {
+      (updateData as any).isActive = (data as any).isActive;
+    }
     if (data.shiftType !== undefined) updateData.shiftType = data.shiftType;
     if (data.maxConsecutiveDays !== undefined) updateData.maxConsecutiveDays = data.maxConsecutiveDays;
 
@@ -188,16 +233,22 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
     return this.scheduleExceptionRepository.save(entity);
   }
 
-  async findExceptions(filter: {
-    companyId: string;
-    userId?: string;
-    type?: ExceptionType;
-    status?: ExceptionStatus;
-    page?: number;
-    limit?: number;
-    dateFrom?: Date;
-    dateTo?: Date;
-  }): Promise<[ScheduleException[], number]> {
+  async findExceptions(
+    filter: {
+      companyId: string;
+      userId?: string;
+      type?: ExceptionType;
+      status?: ExceptionStatus;
+      page?: number;
+      limit?: number;
+      dateFrom?: Date;
+      dateTo?: Date;
+      dateRange?: { startDate: Date; endDate: Date };
+      isFullDay?: boolean;
+      sortBy?: 'startDate' | 'type' | 'status' | 'createdAt';
+      sortOrder?: 'ASC' | 'DESC';
+    },
+  ): Promise<[ScheduleException[], number]> {
     const query = this.scheduleExceptionRepository.createQueryBuilder('exception');
 
     query.andWhere('exception.companyId = :companyId', { companyId: filter.companyId });
@@ -214,15 +265,22 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
       query.andWhere('exception.status = :status', { status: filter.status });
     }
 
-    if (filter.dateFrom && filter.dateTo) {
+    // Поддержка dateRange, совместимо с dateFrom/dateTo
+    const dateFrom = filter.dateRange?.startDate || filter.dateFrom;
+    const dateTo = filter.dateRange?.endDate || filter.dateTo;
+    if (dateFrom && dateTo) {
       query.andWhere('(exception.startDate <= :dateTo AND exception.endDate >= :dateFrom)', {
-        dateFrom: filter.dateFrom,
-        dateTo: filter.dateTo,
+        dateFrom,
+        dateTo,
       });
-    } else if (filter.dateFrom) {
-      query.andWhere('exception.endDate >= :dateFrom', { dateFrom: filter.dateFrom });
-    } else if (filter.dateTo) {
-      query.andWhere('exception.startDate <= :dateTo', { dateTo: filter.dateTo });
+    } else if (dateFrom) {
+      query.andWhere('exception.endDate >= :dateFrom', { dateFrom });
+    } else if (dateTo) {
+      query.andWhere('exception.startDate <= :dateTo', { dateTo });
+    }
+
+    if (filter.isFullDay !== undefined) {
+      query.andWhere('exception.isFullDay = :isFullDay', { isFullDay: filter.isFullDay });
     }
 
     const page = Math.max(1, filter.page || 1);
@@ -230,7 +288,15 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
     const offset = (page - 1) * limit;
 
     query.skip(offset).take(limit);
-    query.orderBy('exception.startDate', 'DESC');
+    const sortBy = filter.sortBy || 'startDate';
+    const sortOrder = (filter.sortOrder || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const sortMap: Record<string, string> = {
+      startDate: 'exception.startDate',
+      type: 'exception.type',
+      status: 'exception.status',
+      createdAt: 'exception.createdAt',
+    };
+    query.orderBy(sortMap[sortBy] || 'exception.startDate', sortOrder as 'ASC' | 'DESC');
 
     return query.getManyAndCount();
   }
@@ -278,5 +344,16 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
       createdAt: 'schedule.createdAt',
     };
     return fieldMap[sortField] || 'schedule.dayOfWeek';
+  }
+
+  // ===== Users / Ownership =====
+  async userBelongsToCompany(userId: string, companyId: string): Promise<boolean> {
+    if (!userId || !companyId) return false;
+    const repo = this.workScheduleRepository.manager.getRepository(User);
+    const user = await repo.findOne({
+      select: ['id', 'company_id'],
+      where: { id: userId, company_id: companyId as any },
+    });
+    return !!user;
   }
 }

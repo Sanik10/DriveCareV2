@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles/services/vehicles-data.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -16,9 +17,8 @@ export class VehiclesDataService implements IVehiclesDataService {
   async create(data: CreateVehicleData): Promise<Vehicle> {
     const vehicle = this.vehiclesRepository.create({
       ...data,
-      mileage: data.mileage || VEHICLES_CONSTANTS.DEFAULTS.DEFAULT_MILEAGE,
+      mileage: data.mileage ?? VEHICLES_CONSTANTS.DEFAULTS.DEFAULT_MILEAGE,
     });
-
     return this.vehiclesRepository.save(vehicle);
   }
 
@@ -67,112 +67,106 @@ export class VehiclesDataService implements IVehiclesDataService {
       limit = VEHICLES_CONSTANTS.DEFAULTS.PAGE_SIZE,
       sortField = 'createdAt',
       sortOrder = 'desc',
-      includeDeleted = false
+      includeDeleted = false,
     } = filter;
 
-    const query = this.vehiclesRepository.createQueryBuilder('vehicle')
+    const qb = this.vehiclesRepository
+      .createQueryBuilder('vehicle')
       .leftJoinAndSelect('vehicle.customer', 'customer')
       .leftJoinAndSelect('vehicle.model', 'model')
       .leftJoinAndSelect('model.brand', 'brand')
       .leftJoinAndSelect('vehicle.vehicleType', 'vehicleType')
       .leftJoinAndSelect('vehicle.serviceHistory', 'serviceHistory', 'serviceHistory.isDeleted = false');
 
-    // 🔒 КРИТИЧНО: Фильтрация по компании
+    // Обязательная фильтрация по компании
     if (companyId) {
-      query.andWhere('vehicle.companyId = :companyId', { companyId });
+      qb.andWhere('vehicle.companyId = :companyId', { companyId });
     }
 
     if (!includeDeleted) {
-      query.andWhere('vehicle.isDeleted = false');
+      qb.andWhere('vehicle.isDeleted = false');
     }
 
-    if (search) {
-      query.andWhere(
+    const trimmedSearch = typeof search === 'string' ? search.trim() : '';
+    if (trimmedSearch && trimmedSearch.length >= VEHICLES_CONSTANTS.SEARCH.MIN_SEARCH_LENGTH) {
+      qb.andWhere(
         '(vehicle.vin ILIKE :search OR vehicle.licensePlate ILIKE :search OR vehicle.color ILIKE :search OR vehicle.notes ILIKE :search OR customer.firstName ILIKE :search OR customer.lastName ILIKE :search OR customer.companyName ILIKE :search OR model.name ILIKE :search OR brand.name ILIKE :search)',
-        { search: `%${search}%` }
+        { search: `%${trimmedSearch}%` },
       );
     }
 
     if (customerId) {
-      query.andWhere('vehicle.customerId = :customerId', { customerId });
+      qb.andWhere('vehicle.customerId = :customerId', { customerId });
     }
-
     if (modelId) {
-      query.andWhere('vehicle.modelId = :modelId', { modelId });
+      qb.andWhere('vehicle.modelId = :modelId', { modelId });
     }
-
     if (vehicleTypeId) {
-      query.andWhere('vehicle.vehicleTypeId = :vehicleTypeId', { vehicleTypeId });
+      qb.andWhere('vehicle.vehicleTypeId = :vehicleTypeId', { vehicleTypeId });
     }
-
     if (engineType) {
-      query.andWhere('vehicle.engineType = :engineType', { engineType });
+      qb.andWhere('vehicle.engineType = :engineType', { engineType });
     }
-
-    if (yearFrom) {
-      query.andWhere('vehicle.year >= :yearFrom', { yearFrom });
+    if (yearFrom !== undefined && yearFrom !== null) {
+      qb.andWhere('vehicle.year >= :yearFrom', { yearFrom });
     }
-
-    if (yearTo) {
-      query.andWhere('vehicle.year <= :yearTo', { yearTo });
+    if (yearTo !== undefined && yearTo !== null) {
+      qb.andWhere('vehicle.year <= :yearTo', { yearTo });
     }
-
-    if (mileageFrom !== undefined) {
-      query.andWhere('vehicle.mileage >= :mileageFrom', { mileageFrom });
+    if (mileageFrom !== undefined && mileageFrom !== null) {
+      qb.andWhere('vehicle.mileage >= :mileageFrom', { mileageFrom });
     }
-
-    if (mileageTo !== undefined) {
-      query.andWhere('vehicle.mileage <= :mileageTo', { mileageTo });
+    if (mileageTo !== undefined && mileageTo !== null) {
+      qb.andWhere('vehicle.mileage <= :mileageTo', { mileageTo });
     }
-
-    if (hasServiceHistory !== undefined) {
-      if (hasServiceHistory) {
-        query.andWhere('serviceHistory.id IS NOT NULL');
-      } else {
-        query.andWhere('serviceHistory.id IS NULL');
-      }
+    if (hasServiceHistory !== undefined && hasServiceHistory !== null) {
+      if (hasServiceHistory) qb.andWhere('serviceHistory.id IS NOT NULL');
+      else qb.andWhere('serviceHistory.id IS NULL');
     }
-
     if (lastServiceFrom) {
-      query.andWhere('vehicle.lastServiceDate >= :lastServiceFrom', { lastServiceFrom });
+      qb.andWhere('vehicle.lastServiceDate >= :lastServiceFrom', { lastServiceFrom });
     }
-
     if (lastServiceTo) {
-      query.andWhere('vehicle.lastServiceDate <= :lastServiceTo', { lastServiceTo });
+      qb.andWhere('vehicle.lastServiceDate <= :lastServiceTo', { lastServiceTo });
     }
 
-    const sortColumn = this.mapSortField(sortField);
-    query.orderBy(sortColumn, sortOrder.toUpperCase() as 'ASC' | 'DESC');
+    // Сортировка (только whitelist)
+    const sortColumn = this.mapSortField(sortField || 'createdAt');
+    const normalizedOrder: 'ASC' | 'DESC' = String(sortOrder || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    qb.orderBy(sortColumn, normalizedOrder);
 
-    const offset = (page - 1) * limit;
-    query.skip(offset).take(limit);
+    // Пагинация с безопасной нормализацией
+    const rawLimit = typeof limit === 'number' ? limit : VEHICLES_CONSTANTS.DEFAULTS.PAGE_SIZE;
+    const safeLimit = Math.min(Math.max(1, rawLimit), VEHICLES_CONSTANTS.DEFAULTS.MAX_ITEMS);
+    const safePage = Math.max(1, typeof page === 'number' ? page : 1);
+    const offset = (safePage - 1) * safeLimit;
 
-    return query.getManyAndCount();
+    qb.skip(offset).take(safeLimit);
+
+    return qb.getManyAndCount();
   }
 
   async update(id: string, data: UpdateVehicleData): Promise<Vehicle> {
     const updateData: Partial<Vehicle> = {};
-    
-    Object.keys(data).forEach(key => {
-      if (data[key] !== undefined) {
-        updateData[key] = data[key];
+    Object.keys(data).forEach((key) => {
+      if ((data as any)[key] !== undefined) {
+        (updateData as any)[key] = (data as any)[key];
       }
     });
 
     await this.vehiclesRepository.update(id, updateData);
-    
+
     const updatedVehicle = await this.findById(id);
     if (!updatedVehicle) {
       throw new Error(`Vehicle with id ${id} not found after update`);
     }
-    
     return updatedVehicle;
   }
 
   async softDelete(id: string): Promise<void> {
-    await this.vehiclesRepository.update(id, { 
-      isDeleted: true, 
-      deletedAt: new Date() 
+    await this.vehiclesRepository.update(id, {
+      isDeleted: true,
+      deletedAt: new Date(),
     });
   }
 
@@ -182,44 +176,32 @@ export class VehiclesDataService implements IVehiclesDataService {
 
   async setActive(id: string, isActive: boolean): Promise<Vehicle> {
     await this.vehiclesRepository.update(id, { isActive });
-    
     const updatedVehicle = await this.findById(id);
     if (!updatedVehicle) {
       throw new Error(`Vehicle with id ${id} not found after status update`);
     }
-    
     return updatedVehicle;
   }
 
   async updateMileage(id: string, mileage: number): Promise<Vehicle> {
     await this.vehiclesRepository.update(id, { mileage });
-    
     const updatedVehicle = await this.findById(id);
     if (!updatedVehicle) {
       throw new Error(`Vehicle with id ${id} not found after mileage update`);
     }
-    
     return updatedVehicle;
   }
 
   async updateServiceDates(id: string, lastServiceDate?: Date, nextServiceDate?: Date): Promise<Vehicle> {
     const updateData: Partial<Vehicle> = {};
-    
-    if (lastServiceDate !== undefined) {
-      updateData.lastServiceDate = lastServiceDate;
-    }
-    
-    if (nextServiceDate !== undefined) {
-      updateData.nextServiceDate = nextServiceDate;
-    }
+    if (lastServiceDate !== undefined) updateData.lastServiceDate = lastServiceDate;
+    if (nextServiceDate !== undefined) updateData.nextServiceDate = nextServiceDate;
 
     await this.vehiclesRepository.update(id, updateData);
-    
     const updatedVehicle = await this.findById(id);
     if (!updatedVehicle) {
       throw new Error(`Vehicle with id ${id} not found after service dates update`);
     }
-    
     return updatedVehicle;
   }
 
@@ -228,13 +210,13 @@ export class VehiclesDataService implements IVehiclesDataService {
       .createQueryBuilder('vehicle')
       .select([
         'COUNT(*) as "totalVehicles"',
-        'COUNT(*) FILTER (WHERE vehicle.engineType = \'petrol\') as "petrolCount"',
-        'COUNT(*) FILTER (WHERE vehicle.engineType = \'diesel\') as "dieselCount"',
-        'COUNT(*) FILTER (WHERE vehicle.engineType = \'electric\') as "electricCount"',
-        'COUNT(*) FILTER (WHERE vehicle.engineType = \'hybrid\') as "hybridCount"',
+        "COUNT(*) FILTER (WHERE vehicle.engineType = 'petrol') as \"petrolCount\"",
+        "COUNT(*) FILTER (WHERE vehicle.engineType = 'diesel') as \"dieselCount\"",
+        "COUNT(*) FILTER (WHERE vehicle.engineType = 'electric') as \"electricCount\"",
+        "COUNT(*) FILTER (WHERE vehicle.engineType = 'hybrid') as \"hybridCount\"",
         'COALESCE(AVG(vehicle.mileage), 0) as "averageMileage"',
         'COUNT(*) FILTER (WHERE vehicle.nextServiceDate <= CURRENT_DATE) as "needingService"',
-        'COALESCE(AVG(EXTRACT(YEAR FROM CURRENT_DATE) - vehicle.year), 0) as "averageAge"'
+        'COALESCE(AVG(EXTRACT(YEAR FROM CURRENT_DATE) - vehicle.year), 0) as "averageAge"',
       ])
       .where('vehicle.companyId = :companyId', { companyId })
       .andWhere('vehicle.isDeleted = false')
@@ -250,29 +232,22 @@ export class VehiclesDataService implements IVehiclesDataService {
       },
       averageMileage: parseFloat(stats.averageMileage) || 0,
       vehiclesNeedingService: parseInt(stats.needingService) || 0,
-      newThisMonth: 0, // TODO: Calculate
+      newThisMonth: 0,
       averageAge: parseFloat(stats.averageAge) || 0,
     };
   }
 
   async countByCompany(companyId: string): Promise<number> {
-    return this.vehiclesRepository.count({
-      where: { companyId, isDeleted: false },
-    });
+    return this.vehiclesRepository.count({ where: { companyId, isDeleted: false } });
   }
 
   async countByCustomer(customerId: string): Promise<number> {
-    return this.vehiclesRepository.count({
-      where: { customerId, isDeleted: false },
-    });
+    return this.vehiclesRepository.count({ where: { customerId, isDeleted: false } });
   }
 
   async findVehiclesNeedingService(companyId: string): Promise<Vehicle[]> {
     return this.vehiclesRepository.find({
-      where: { 
-        companyId, 
-        isDeleted: false,
-      },
+      where: { companyId, isDeleted: false },
       relations: ['customer', 'model', 'model.brand'],
       order: { nextServiceDate: 'ASC' },
     });
@@ -286,7 +261,6 @@ export class VehiclesDataService implements IVehiclesDataService {
       lastServiceDate: 'vehicle.lastServiceDate',
       createdAt: 'vehicle.createdAt',
     };
-
     return fieldMap[sortField] || 'vehicle.createdAt';
   }
 }

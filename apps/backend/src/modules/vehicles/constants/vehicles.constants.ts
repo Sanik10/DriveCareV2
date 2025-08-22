@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles/constants/vehicles.constants.ts
 export const VEHICLES_CONSTANTS = {
   DEFAULTS: {
     PAGE_SIZE: 20,
@@ -26,7 +27,7 @@ export const VEHICLES_CONSTANTS = {
 
   LOG_MESSAGES: {
     CREATED: 'Создан новый автомобиль',
-    UPDATED: 'Обновлен автомобиль', 
+    UPDATED: 'Обновлен автомобиль',
     DELETED: 'Удален автомобиль',
     STATUS_CHANGED: 'Изменен статус автомобиля',
     NOT_FOUND: 'Автомобиль не найден',
@@ -45,14 +46,14 @@ export const VEHICLES_CONSTANTS = {
 
 export const VEHICLE_ENGINE_TYPES = {
   PETROL: 'petrol',
-  DIESEL: 'diesel', 
+  DIESEL: 'diesel',
   ELECTRIC: 'electric',
   HYBRID: 'hybrid',
 } as const;
 
 export const VEHICLE_SEARCH_FIELDS = [
   'vin',
-  'licensePlate', 
+  'licensePlate',
   'color',
   'notes',
   'customer.firstName',

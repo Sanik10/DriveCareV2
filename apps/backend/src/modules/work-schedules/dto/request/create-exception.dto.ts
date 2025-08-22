@@ -1,5 +1,4 @@
-// path: apps/backend/src/modules/work-schedules/dto/request/create-exception.dto.ts
-import { IsString, IsUUID, IsOptional, IsBoolean, IsEnum, IsDateString, MaxLength } from 'class-validator';
+import { IsString, IsUUID, IsOptional, IsBoolean, IsEnum, IsDateString, MaxLength, ValidateIf, Matches } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ExceptionType } from '../../../../database/entities/schedule-exception.entity';
 import { Transform } from 'class-transformer';
@@ -48,16 +47,18 @@ export class CreateExceptionDto {
     description: 'Время начала (если не весь день, HH:MM)',
     example: '14:00',
   })
-  @IsOptional()
+  @ValidateIf((o) => o.isFullDay === false)
   @IsString()
+  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
   startTime?: string;
 
   @ApiPropertyOptional({
     description: 'Время окончания (если не весь день, HH:MM)',
     example: '16:00',
   })
-  @IsOptional()
+  @ValidateIf((o) => o.isFullDay === false)
   @IsString()
+  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
   endTime?: string;
 
   @ApiPropertyOptional({

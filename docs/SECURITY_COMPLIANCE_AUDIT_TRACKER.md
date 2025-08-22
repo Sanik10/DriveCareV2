@@ -1,4 +1,3 @@
-<!-- path: docs/SECURITY_COMPLIANCE_AUDIT_TRACKER.md -->
 # 📋 DRIVECARE V2 — SECURITY & COMPLIANCE AUDIT TRACKER (RESET)
 
 Дата создания: 06.08.2025  
@@ -130,12 +129,35 @@
 
 - **Appointments (ОБНОВЛЕНО, Tech Near‑Ready):**
   - Фасад: добавлены методы getTracking, findByCustomer, findByMechanic, addRating; валидация рейтинга (1..5) и разрешение только для COMPLETED.
-  - RBAC/Ownership: @AuthWithOwnership + @AppointmentResource на ресурсных эндпоинтах; superadmin‑rule — листинги требуют явный companyId.
+  - RBAC/Ownership: @AuthWithOwnership + @AppointmentResource на ресурсных эндпоинтах; superadmin‑rule — листинги требуют явный companyId (multi‑tenant безопасность).
   - Data‑layer: строгая фильтрация по companyId; безопасный findWithFilters (ILIKE/параметризация), whitelist сортировок, пагинация; findConflicts; агрегированная статистика.
   - Validation: проверка временных слотов/пересечений, рабочие часы/дни, проверка статусов (STATUS_TRANSITIONS), права на перенос/отмену.
   - DTO/XSS: sanitize‑html и лимиты на свободные тексты в Create/Update; строгие MaxLength/Min/Max; нормализация email/phone (E.164).
   - Mapper: role‑based маскирование ПДн (механики/диагносты), корректировка маски госномера (stripLicensePlate), вычисляемые поля и tracking DTO.
-  - Entity: enum‑поля статусов/приоритетов; индексы; CHECK‑ограничения (rating, durations, costs); timestamptz; retention/anonymization поля.
+  - Entity/DB: enum‑поля статусов/приоритетов; индексы; CHECK‑ограничения (rating, durations, costs); timestamptz; retention/anonymization поля.
+
+- **Work‑Schedules (ОБНОВЛЕНО, Tech Near‑Ready):**
+  - RBAC/Ownership:
+    - Единые роли: 'company_owner','company_admin','manager','mechanic','superadmin'; удалены legacy 'owner'/'admin'.
+    - @AuthWithOwnership + @WorkScheduleResource на ресурсных эндпоинтах; механикам — доступ только к своим записям.
+    - Superadmin‑правило: листинги требуют явный companyId; доступ к :id разрешён (companyId по сущности).
+  - DTO/Validation:
+    - Строгие HH:mm‑паттерны; проверка start<end; длительность смены 2..12 часов; перерыв 15..120 минут и внутри смены.
+    - Partial day исключения: при isFullDay=false обязательны startTime/endTime.
+    - @Type(() => Number) для числовых полей; лимиты/MaxLength; sanitize‑html на reason.
+  - Data‑layer:
+    - Обязательная фильтрация по companyId; whitelist сортировок; пагинация с верхним лимитом.
+    - Фильтры: shiftType, efficiencyMin/Max, hasSkills (jsonb @>), dateRange → dayOfWeek; isActive.
+    - Decimal efficiency хранится как string(3,2); нормализация на запись до .toFixed(2).
+    - userBelongsToCompany(userId, companyId) для проверок владения.
+  - Business/Mapper:
+    - Приведение efficiency к числу перед расчётами; исправлены места затенения переменных.
+    - Маскирование/минимизация; avatarUrl → undefined; безопасная нормализация jsonb массивов.
+  - Audit:
+    - Добавлены события WORK_SCHEDULE_* и SCHEDULE_EXCEPTION_*; маскирование/лимит метаданных.
+  - Entity/DB:
+    - Индексы: (companyId), (companyId,isActive), (companyId,dayOfWeek); unique(companyId,userId,dayOfWeek).
+    - CHECK: корректность диапазонов времени; efficiency ∈ [0.5;2.0]; перерыв внутри смены и 15..120 минут; длительность смен 2..12 часов.
 
 ---
 
@@ -158,13 +180,63 @@
 | 13 | inventory/suppliers | ✅ Tech‑Hardened (RBAC/superadmin‑rule, sanitize DTO, idempotency on bulk/rate, SQL filters, PII masking, audit, indices/timestamptz) | 🟡 152‑ФЗ light pending (орг‑процедуры/ретеншн) | 🟡 Высокий | 🟢 Near‑Ready (Tech) |
 | 14 | inventory/alerts | ✅ Tech‑Hardened (RBAC + @InventoryAlertResource, superadmin‑rule, sanitize DTO, whitelist сортировок/пагинации, idempotency, settings persistence, scheduler, email notifications, DB checks/indices) | 🟢 402‑ФЗ соблюдено; 152‑ФЗ N/A | 🟡 Высокий | 🟢 Near‑Ready (Tech) |
 | 15 | appointments | 🟢 Near‑Ready (Tech: RBAC/ownership, DTO XSS, tracking/stats) | 🟡 Pending | 🟢 Средний | 🟢 Near‑Ready (Tech) |
-| 16 | work-schedules | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
+| 16 | work-schedules | 🟢 Near‑Ready (Tech) | 🟡 Pending (light) | 🟢 Средний | 🟢 Near‑Ready (Tech) |
 | 17 | vehicles | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
 | 18 | vehicles-catalogue | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
 | 19 | services | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
 | 20 | services/categories | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
 | 21 | service-history | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
 | 22 | tariffs | 🟡 Review pending | 🟡 Pending | 🟢 Низкий | ⏳ Pending |
+
+---
+
+## 🧩 Work‑Schedules — детальное состояние (Tech Near‑Ready)
+
+### ✅ Реализовано (технически)
+- Guards/RBAC/ownership:
+  - Единые роли: 'company_owner','company_admin','manager','mechanic','superadmin'; legacy 'owner'/'admin' удалены.
+  - @AuthWithOwnership на всех эндпоинтах; @WorkScheduleResource — на ресурсных.
+  - Superadmin‑правило: листинги требуют явный companyId; доступ к :id — разрешён (companyId по сущности).
+  - Механики: листинг только своих расписаний; создание исключений — только на себя.
+- Контроллер/валидация:
+  - Везде @Throttle в формате { default: { limit, ttl } }.
+  - Partial day: при isFullDay=false обязательны startTime/endTime; HH:mm‑паттерны.
+  - Строгие проверки: start<end; длительность смены 2..12 ч; перерыв 15..120 мин и внутри рабочего времени.
+  - DTO: @Type(() => Number) для чисел; MaxLength; sanitize‑html для reason.
+- Data‑layer:
+  - Обязательная фильтрация по companyId; whitelist сортировок; безопасная пагинация (≤ MAX_PAGE_SIZE).
+  - Фильтры: shiftType; efficiencyMin/Max; hasSkills (jsonb @>); dateRange → dayOfWeek; isActive.
+  - Исключения: поддержка dateRange/isFullDay/sortBy; сортировки по startDate/type/status/createdAt.
+  - Decimal efficiency хранится как string(3,2) с нормализацией .toFixed(2).
+  - userBelongsToCompany(userId, companyId) — проверка владения пользователем.
+- Business/аналитика:
+  - Приведение efficiency к числу (toNumericEfficiency) перед вычислениями.
+  - Устранено затенение переменных при подсчёте часов; рекомендации по перерывам при сменах > 6 ч.
+  - Аналитика покрытия учитывает полно‑дневные исключения; общая utilization.
+- Mapper/минимизация:
+  - Возврат efficiency как number; avatarUrl → undefined; безопасная нормализация skillMatrix/preferredDaysOff.
+- Audit:
+  - Добавлены AuditAction: WORK_SCHEDULE_CREATED/UPDATED/DELETED/VIEWED/WORK_SCHEDULES_LISTED и SCHEDULE_EXCEPTION_CREATED/STATUS_CHANGED/DELETED.
+  - Маскирование/лимит метаданных; без утечки ПДн/свободных текстов.
+- Entity/DB:
+  - WorkSchedule: индексы (companyId), (companyId,isActive), (companyId,dayOfWeek); unique(companyId,userId,dayOfWeek).
+  - CHECK: корректность временных диапазонов; efficiency ∈ [0.5;2.0]; перерыв внутри смены (15..120 мин); длительность смены 2..12 ч; timestamptz даты.
+  - ScheduleException: индексы (companyId,userId), (companyId,status), (companyId,startDate,endDate); CHECK endDate ≥ startDate; при isFullDay=false обязательны startTime/endTime и endTime>startTime; reason — nullable.
+
+### 🟡 Юридическая база (light)
+- 152‑ФЗ: ПДн затрагиваются косвенно (userId, свободный текст reason).
+  - Реализовано: минимизация, санитизация reason; строгие роли/ownership; аудит с маскированием.
+  - Требуется: регламент хранения (RETENTION_YEARS) и анонимизация исключений по срокам (cron), no-store заголовки для детальных ответов.
+- 242‑ФЗ: хранение данных в РФ — на уровне инфры.
+- 402‑ФЗ/54‑ФЗ/161‑ФЗ/PCI: неприменимо.
+
+### 🧪 Короткий чеклист доводки Work‑Schedules
+- [ ] AuditService: вызвать логирование на create/update/delete/view/list и для исключений (create/status/delete) с маскированием reason.
+- [ ] Superadmin‑policy: требование companyId на листингах; ограничения для механиков.
+- [ ] no-store заголовки на эндпоинтах с ПДн/свободными текстами.
+- [ ] Ретеншн: поле dataRetentionUntil (для исключений) + CRON анонимизации (Redis‑lock).
+- [ ] DB‑миграции: индексы/unique/check в актуальном виде.
+- [ ] E2E: RBAC/ownership, partial day, перерывы/длительности, сортировки/пагинация, маскирование reason в аудите.
 
 ---
 
@@ -266,46 +338,241 @@
 ## 🧩 Inventory/Parts — детальное состояние (Tech‑Hardened, Completed)
 
 ### ✅ Реализовано (технически)
-- RBAC/Ownership/RBAC, sanitize DTO, whitelist сортировок/пагинации, bulk idempotency, audit, индексы/check‑ограничения, timestamptz; 402‑ФЗ запрет hard delete.
+- Guards/Ownership/RBAC:
+  - Введён @PartResource; CompanyOwnershipGuard валидирует владение запчастью по companyId.
+  - Все эндпоинты — под @AuthWithOwnership. Роли: чтение и обновления — 'company_owner','company_admin','inventory_manager'; деактивация — только 'company_owner','company_admin'.
+  - Superadmin: листинги/поиски/агрегаты — только при явном companyId; ресурсные :id — доступ разрешён.
+- Контроллер/валидация:
+  - Статические маршруты выше динамических; нормализация query‑параметров; сортировки только по whitelist; limit ≤ inventory.pagination.maxPageSize (typed‑конфиг).
+  - Bulk: поддержка X‑Idempotency‑Key (Redis NX + TTL); повтор — возврат сохранённого результата; параллельный запуск — 409.
+- Data‑layer:
+  - Фильтрация по companyId; безопасные IN/ILIKE; validateCategoryExists — OR(companyId, NULL) для глобальных категорий.
+- Mapper/минимизация:
+  - Скрытие costPrice/sellingPrice/производных (margin/profit) для ролей без CAN_VIEW_COSTS; superadmin не обходит без явного companyId.
+- DTO/XSS:
+  - Create/Update: sanitize‑html + Transform для name/brand/description; строгие MaxLength/паттерны; цены: MIN/MAX/decimal places + ratio selling≥cost.
+- Аудит:
+  - PART_CREATED/UPDATED/PRICE_CHANGED/STATUS_CHANGED/PARTS_BULK_UPDATED/PART_VIEWED/PARTS_SEARCHED — без any; ограничение размера метаданных.
+- DB/Entity:
+  - Частичный unique: (companyId, partNumber) WHERE partNumber IS NOT NULL;
+  - CHECK: costPrice ≥ 0, sellingPrice ≥ 0;
+  - Индексы: companyId, categoryId, createdAt; createdAt/updatedAt — timestamptz; imageUrl до 500 символов.
 
 ### 🟡 Юридическая база (light)
 - 402‑ФЗ: историчность (soft‑delete вместо hard delete), аудит изменений.
 - 152‑ФЗ: ПДн не обрабатываются (N/A). 242‑ФЗ — контролируется инфрой.
 
 ### 🧪 Короткий чеклист доводки Parts
-- [ ] ADR/README про требования companyId для superadmin на листингах.
-- [ ] Нагрузочная ревизия троттлинга при больших bulk.
-- [ ] Мониторинг по ошибкам идемпотентности и времени bulk.
+- [ ] Организационно: дополнить ADR/README по требованиям companyId для superadmin на листингах.
+- [ ] Нагрузочное: ревизия троттлинга при больших bulk‑операциях (в проде).
+- [ ] Мониторинг: дашборд по ошибкам идемпотентности (409) и времени bulk‑операций.
 
 ---
 
 ## 🧩 Inventory/Stock‑Movements — детальное состояние (Tech‑Hardened, Completed)
 
-[без изменений, см. предыдущую версию — раздел сохранён]
+### ✅ Реализовано (технически)
+- Guards/Ownership/RBAC:
+  - Введён профильный декоратор @StockMovementResource.
+  - CompanyOwnershipGuard: добавлен кейс 'stock-movement' с валидацией владения (companyId).
+  - Контроллеры: @AuthWithOwnership + канонические роли ('superadmin','company_owner','company_admin','inventory_manager'); legacy алиасы нормализуются в декораторе Roles.
+  - Superadmin‑правило: листинг/поиск/аналитика — только при явном ?companyId (иначе 400); ресурсные :id — разрешены (компания определяется по сущности).
+- Контроллер/маршруты/валидация:
+  - Статические маршруты ('analytics/*','part/:partId/history') подняты выше ':id' (исключает коллизии).
+  - Нормализация query: trim/ограничения длины; whitelist сортировок (createdAt,type,quantity,totalAmount,partName,documentNumber); limit ≤ INVENTORY_MAX_PAGE_SIZE/DEFAULTS.MAX_ITEMS.
+  - PATCH заменён на строгий UpdateMovementDto (sanitize‑html + Transform для строк; числовые лимиты).
+  - Везде throttling; для create/bulk/scan/reverse — поддержка X‑Idempotency‑Key.
+- DTO/XSS:
+  - Create/Bulk/Scan/Update — строгие MaxLength/Min/Max/decimal‑places; преобразование чисел через class‑transformer; sanitize‑html для свободных текстов.
+- Data‑layer/SQL:
+  - Во всех запросах фильтрация по companyId.
+  - Исправлены агрегаты getMovementSummary: независимые QueryBuilder без мутаций; корректные алиасы (partId/partName).
+  - Поиск по “штрих‑коду” реализован через Part.partNumber (case‑insensitive) с companyId.
+  - Параметризованные условия везде; ILIKE/ABS по whitelisted полям; In([...]) в batch‑операциях.
+  - Публичный hard delete не используется (402‑ФЗ).
+- Бизнес/транзакционность/идемпотентность:
+  - Идемпотентность для create/bulk/scan/reverse/integrations (from‑order/from‑delivery): Redis‑ключи idemp:<area>:<op>:..., TTL из INVENTORY_IDEMPOTENCY_TTL_MS (дефолт 6h), повтор → возврат результата; гонка — 409.
+  - Защита от гонок при обновлении остатков: лёгкая Redis‑блокировка на пару companyId+partId (lock:inventory:stock:update:*). Опция усиления — DB‑уровень (SELECT ... FOR UPDATE).
+- Mapper/минимизация:
+  - Сокрытие price/totalAmount для ролей без CAN_VIEW_COSTS; superadmin без companyId не обходит правила.
+  - Исключение ПДн поставщика (contactName) из стандартных ответов.
+- Аудит:
+  - Строгие AuditAction: STOCK_MOVEMENT_CREATED/UPDATED/REVERSED/BULK_STOCK_MOVEMENTS_CREATED/BARCODE_SCAN_MOVEMENT.
+  - Метаданные ограничены и маскируются (documentNumber/barcode → MASKED); без токенов/секретов/ПДн.
+- Entity/DB:
+  - StockMovement.createdAt → timestamptz.
+  - Денежные поля — decimal(10,2); количества — integer; индексы по companyId/partId/createdAt рекомендованы.
+- Совместимость/интеграции:
+  - Интеграции из Orders/Suppliers: операции приход/расход с корректной аудитацией/идемпотентностью.
+
+### 🟡 Юридическая база (light)
+- 402‑ФЗ: историчность соблюдена — reverse вместо удаления; публичного hard‑delete нет.
+- 152‑ФЗ: ПДн не обрабатываются; минимизация отображаемых данных и маскирование в аудите.
+- 242‑ФЗ: локализация данных — на уровне инфры (RU).
+
+### 🧪 Короткий чеклист доводки Stock‑Movements
+- [ ] DB‑checks: quantity integer; price/totalAmount ≥ 0; индексы companyId/partId/createdAt; expression‑индексы для ILIKE при нагрузке.
+- [ ] Транзакционность: при необходимости усилить Redis‑lock DB‑блокировкой.
+- [ ] E2E:
+  - Superadmin‑правило (листинг/аналитика) — 400 без ?companyId.
+  - Идемпотентность: повтор → 200 (cached); гонка → 409.
+  - Конкурентный расход — не приводит к отрицательным остаткам (ALLOW_NEGATIVE_STOCK=false).
+  - XSS‑санитизация notes/documentNumber.
+- [ ] Документация: ADR по идемпотентности/блокировкам; barcode=partNumber до ввода отдельного поля.
 
 ---
 
 ## 🧩 Inventory/Alerts — детальное состояние (Tech‑Hardened, Core Completed)
 
-[без изменений, см. предыдущую версию — раздел сохранён]
+### ✅ Реализовано (технически)
+- Guards/Ownership/RBAC:
+  - Введён @InventoryAlertResource; CompanyOwnershipGuard обновлён (кейс 'inventory-alert', validateAlertOwnership).
+  - @AuthWithOwnership на всех эндпоинтах; роли: чтение — 'superadmin','company_owner','company_admin','inventory_manager'; изменения — 'company_owner','company_admin'.
+  - Superadmin‑правило: листинг/аналитика/critical — только при явном ?companyId; ресурсные :id — допускаются.
+- Контроллер/маршруты/валидация:
+  - Статические маршруты (analytics/stats, critical/list, settings/*, batch/*) подняты выше ':id'.
+  - @Throttle в формате { default: { limit, ttl } }.
+  - Нормализация query: булевы/числа; trim/ограничение длины search; whitelist сортировок; limit ≤ INVENTORY_MAX_PAGE_SIZE.
+  - X‑Idempotency‑Key на write: POST test/notification и POST batch/dismiss.
+- DTO/XSS:
+  - UpdateAlertSettingsDto, TestNotificationDto — Transform + sanitize‑html; ArrayMaxSize для recipients; строгие Min/Max/enum.
+- Data‑layer/SQL:
+  - findWithFilters — companyId обязателен; безопасные условия; параметризованные запросы.
+  - getAlertStats — исправлены join/алиасы (leftJoin Inventory по partId+companyId); стабильные имена полей.
+  - Публичный hard delete отсутствует (402‑ФЗ).
+- Mapper/минимизация:
+  - Финансовые derived скрыты для ролей вне CAN_VIEW_COSTS; безопасные инсайты/статистика.
+- Аудит:
+  - INVENTORY_ALERT_CREATED / INVENTORY_ALERT_UPDATED / INVENTORY_ALERT_DISMISSED / INVENTORY_ALERTS_AUTO_DISMISSED / INVENTORY_ALERTS_CLEANUP / INVENTORY_ALERT_SETTINGS_UPDATED / INVENTORY_ALERT_TEST_NOTIFICATION.
+- Идемпотентность (Redis):
+  - Ключи: idemp:alerts:<op>:lock/result:<companyId>:<key>; TTL — INVENTORY_IDEMPOTENCY_TTL_MS; повтор → кэш, гонка → 409.
+- Config/ENV:
+  - INVENTORY_MAX_PAGE_SIZE, INVENTORY_ALERTS_ENABLED, INVENTORY_ALERTS_CRON, INVENTORY_IDEMPOTENCY_TTL_MS (typed inventoryConfig).
+- Entity/DB:
+  - InventoryAlert — timestamptz даты; индексы companyId/partId/createdAt; CHECK ≥ 0; согласованные имена колонок.
+
+### 🟡 Юридическая база (light)
+- 402‑ФЗ: историчность соблюдена — только dismiss/auto‑dismiss; публичного hard delete нет.
+- 152‑ФЗ: ПДн не обрабатываются; минимизация/маскирование в аудите.
+- 242‑ФЗ: локализация данных — на уровне инфры (RU).
+
+### 🧪 Короткий чеклист доводки Alerts
+- [ ] Scheduler: INVENTORY_ALERTS_CRON + Redis‑lock per company; авто‑dismiss по настройкам.
+- [ ] Notifications: интеграция с email/push провайдером; dedup; rate‑limit.
+- [ ] E2E: superadmin‑правило (листинг/аналитика/critical), идемпотентность test/batch, XSS в DTO.
+- [ ] Документация: ADR по идемпотентности alerts; регламент рассылок/SLA.
 
 ---
 
 ## 🧩 Inventory/Suppliers — детальное состояние (Tech Near‑Ready, Legal light pending)
 
-[без изменений, см. предыдущую версию — раздел сохранён]
+### ✅ Реализовано (технически)
+- Guards/Ownership/RBAC:
+  - Используется @SupplierResource; эндпоинты под @AuthWithOwnership + канонические роли ('superadmin','company_owner','company_admin','inventory_manager').
+  - Superadmin‑правило: листинг/аналитика — только при явном ?companyId; ресурсные :id — допускаются.
+- Контроллер/валидация:
+  - Статические маршруты выше ':id'; нормализация query; whitelist сортировок; limit ≤ INVENTORY_MAX_PAGE_SIZE/DEFAULTS.MAX_ITEMS.
+  - Throttling на read/write; X‑Idempotency‑Key: POST bulk и POST :id/rate (Redis NX + TTL, кэш результата, гонка — 409).
+- DTO/XSS:
+  - sanitize‑html + Transform на свободные тексты; строгие MaxLength; валидации email/phone (E.164), URL.
+- Data‑layer/SQL:
+  - Везде companyId‑фильтрация; параметризованные условия; безопасные ILIKE; отказ от хрупких snake_case алиасов в пользу property‑paths.
+- Mapper/минимизация:
+  - Role‑based маскирование контактных ПДн (email/phone/contactName); безопасные derived.
+- Аудит:
+  - SUPPLIER_CREATED / SUPPLIER_UPDATED / SUPPLIER_CONTACT_UPDATED / SUPPLIER_ADDRESS_UPDATED / SUPPLIER_DEACTIVATED / SUPPLIER_RATED / SUPPLIER_PRICE_COMPARISON / SUPPLIER_ANALYTICS_VIEWED / SUPPLIERS_BULK_OPERATION.
+  - Метаданные ограничены/маскированы; без секретов/ПДн в открытом виде.
+- Идемпотентность:
+  - Redis (NX + PX TTL=INVENTORY_IDEMPOTENCY_TTL_MS); повтор — кэш, гонка — 409.
+- Entity/DB:
+  - Индексы: companyId, isActive; partial unique (companyId,email)/(companyId,taxNumber) WHERE NOT NULL; createdAt/updatedAt — timestamptz.
+
+### 🟡 Юридическая база (light)
+- 152‑ФЗ: контактные ПДн контрагентов — минимизация/маскирование реализованы. Pending: обновить правовые документы (основания, сроки хранения, порядок обращений); опционально SUPPLIER_DATA_RETENTION_YEARS + cron анонимизации.
+- 402‑ФЗ: публичный hard delete отсутствует; применяется деактивация; ведётся аудит.
+- 242‑ФЗ: локализация данных — на уровне инфраструктуры (RU).
+
+### 🧪 Короткий чеклист доводки Suppliers
+- [ ] CompanyOwnershipGuard: кейс 'supplier' → SuppliersValidationService.validateSupplierOwnership.
+- [ ] E2E/интеграция: superadmin‑правило (листинг/аналитика без ?companyId → 400); идемпотентность rate/bulk; XSS‑санитизация DTO.
+- [ ] Документы/152‑ФЗ: обновить Policy/процедуры; регламенты хранения/анонимизации.
+- [ ] Аналитика: при отсутствии таблицы supplier_ratings — убрать зависимость или добавить миграцию.
 
 ---
 
 ## 👥 Customers — детальное состояние (Tech COMPLETED, Legal light pending)
 
-[без изменений, см. предыдущую версию — раздел сохранён]
+### ✅ Реализовано (технически)
+- Ownership/RBAC/throttling/audit — на всех эндпоинтах.
+- Entity: emailNormalized, phoneE164; индексы; timestamptz; soft-delete; anonymizedAt/anonymizedBy.
+- Consents: marketingConsent/Date; pdpConsentVersion/Date (валидация против PRIVACY_POLICY_VERSION).
+- Retention: dataRetentionUntil на create (CUSTOMER_DATA_RETENTION_YEARS).
+- Subject rights (152‑ФЗ):
+  - GET /customers/:id/export — экспорт ПДн (customer + vehicles + orders summary), JSON‑attachment, no-store headers.
+  - POST /customers/:id/consent/revoke — отзыв согласия (pdn_processing/marketing), аудит основания.
+  - DELETE /customers/:id/anonymize — анонимизация ПДн клиента и связанных авто (ссылочная целостность сохраняется).
+- Анонимизация/ретеншн:
+  - CustomerAnonymizationService — транзакционно; placeholder email; маскирование; деактивация записи.
+  - CustomerRetentionScheduler — ежедневный cron 03:00; Redis‑lock (customers:anonymize:running, TTL 15 мин).
+- Mapper: class-transformer ('pii'/'redacted'); маскирование email/phone; скрытие свободных текстов для нерелевантных ролей.
+- DTO: Transform‑санитизация HTML; лимиты длины; нормализация email.
+- Data-layer: companyId фильтрация; whitelist сортировок; пагинация; поиск; relations: vehicles.
+- Audit: CUSTOMER_DATA_EXPORTED / CUSTOMER_CONSENT_REVOKED / CUSTOMER_ANONYMIZED; HMAC‑цепь; без утечки сырых ПДн.
+- Config:
+  - customersConfig + typed доступ (retentionYears, sanitizeTextsEnabled, pagination.maxPageSize).
+  - validation.schema: CUSTOMER_RETENTION_CRON, CUSTOMER_DATA_RETENTION_YEARS, SANITIZE_CUSTOMER_TEXTS, MAX_CUSTOMERS_PAGE_SIZE.
+  - ScheduleModule.forRoot() подключён.
+
+### 🟡 Юридическая база (Pending light)
+- 152‑ФЗ: базовый набор реализован. Требуется: обновление Политики ПДн, регламентов хранения/анонимизации, SLA по обращениям; публичные процедуры (формы/контакты).
+- 242‑ФЗ: соблюдается на уровне инфраструктуры; контролировать сторонние сервисы.
+
+### 🧪 Короткий чеклист доводки Customers
+- [x] GET /customers/:id/export
+- [x] POST /customers/:id/consent/revoke
+- [x] DELETE /customers/:id/anonymize
+- [x] Cron‑анонимизация по сроку хранения
+- [ ] E2E: PII‑маскирование по ролям; ownership; идемпотентность анонимизации; no-store для экспорта
+- [ ] Документация/правовые регламенты (152‑ФЗ)
 
 ---
 
 ## 🧾 Orders — детальное состояние (Tech‑Hardened, Legal Pending)
 
-[без изменений, см. предыдущую версию — раздел сохранён]
+### ✅ Реализовано (технически)
+- Guards/Isolation: @AuthWithOwnership, @OrderResource; фильтрация по companyId.
+- RBAC: роли расширены; Roles на list/status/assign.
+- STATUS_TRANSITIONS: единый источник в ORDERS_CONSTANTS (жёсткая типизация).
+- Mass‑assignment защита: ALLOWED_UPDATE_FIELDS; финансы — только через пересчёт.
+- Валидации:
+  - Создание: принадлежность customer/vehicle/assignedTo; лимиты через SubscriptionLimitsService.checkOrderLimit.
+  - Механик: проверка роли/принадлежности; ограничение активных услуг ≤ 5.
+  - Тексты: sanitizeHtml для description/customerComplaints/diagnosticResults/notes.
+- Сабмодули:
+  - Order‑Services: статусы; автозаполнение start/end; XSS‑санитизация; аудит; назначение механика.
+  - Order‑Parts: резерв/освобождение склада; лимиты; аудит.
+- Mapper/PII: маскирование ПДн; скрытие себестоимости.
+- Audit: полное покрытие; userId в событиях; маскирование чувствительных параметров; HMAC‑цепь.
+- Время/деньги: timestamptz; decimal(10–15,2).
+- Throttling: на CRUD/листинги/статус/назначения.
+
+### 🔧 Ограничения и текущая конфигурация
+- maxOrders: null/undefined/−1 → безлимит; при отсутствии активной подписки — запрет создания.
+- Нет лимитов на кол-во позиций в тарифе — внутренние лимиты: MAX_PARTS_PER_ORDER=100; MAX_SERVICES_PER_ORDER=50.
+- SuperAdmin мульти‑компанийная аналитика — off (нужен явный companyId).
+- Автопересчёт totals — вручную (/orders/:id/recalculate).
+- Ограничения отмены при оплатах — включатся после финализации связей с Payments/Invoices.
+
+### 🟡 Юридическая база (Pending)
+- 152‑ФЗ: актуализировать retention/локализацию (ORDER_DATA_RETENTION_YEARS), регламент хранения.
+- 402‑ФЗ/54‑ФЗ: запрет отмены при оплатах; фискальные события через Payments/ККТ.
+
+### 🧪 Короткий чеклист доводки
+- [ ] Env/Config: ORDER_DATA_RETENTION_YEARS, SANITIZE_NOTES_ENABLED.
+- [ ] DB Check‑constraints: price ≥ 0; quantity ≥ 1; discountPercent ∈ [0;100].
+- [ ] E2E: статусы/услуги, назначение механика, склады, пересчёт totals, RBAC.
+- [ ] Payments/Invoices: запрет отмены при оплаченных платежах/счетах; опциональный авто‑инвойс.
+- [ ] Автопересчёт totals по событийной модели.
 
 ---
 
@@ -317,6 +584,7 @@
   - suppliers — PII‑маскирование контактных данных, XSS, RBAC, whitelist сортировок/пагинации.
   - inventory‑alerts — E2E (superadmin‑правило, идемпотентность test/batch, XSS в DTO), мониторинг.
 - Appointments — финализация: интеграция AuditService, DB EXCLUDE для пересечений, перфоманс smart‑schedule/check‑availability, E2E по RBAC/PII/статусам, ретеншн‑cron.
+- Work‑Schedules — финализация: аудит‑вызовы (если не везде), no-store заголовки, ретеншн для исключений (dataRetentionUntil + cron), E2E/индексы/check‑constraints.
 - Customers — финализация E2E и документации (152‑ФЗ), мониторинг ретеншн‑cron.
 
 ---

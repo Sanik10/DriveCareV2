@@ -1,7 +1,9 @@
-// path: apps/backend/src/modules/work-schedules/dto/request/create-schedule.dto.ts
 import { IsString, IsUUID, IsNumber, IsOptional, IsBoolean, IsArray, Min, Max, Matches, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { WORK_SCHEDULES_CONSTANTS, WORK_SCHEDULES_VALIDATION_MESSAGES, SHIFT_TYPES } from '../../constants/work-schedules.constants';
+import { Type } from 'class-transformer';
+
+export type ShiftType = typeof SHIFT_TYPES[keyof typeof SHIFT_TYPES];
 
 export class CreateScheduleDto {
   @ApiProperty({
@@ -17,6 +19,7 @@ export class CreateScheduleDto {
     minimum: 0,
     maximum: 6,
   })
+  @Type(() => Number)
   @IsNumber({}, { message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_DAY_OF_WEEK })
   @Min(0, { message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_DAY_OF_WEEK })
   @Max(6, { message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_DAY_OF_WEEK })
@@ -73,6 +76,7 @@ export class CreateScheduleDto {
     minimum: WORK_SCHEDULES_CONSTANTS.MIN_EFFICIENCY,
     maximum: WORK_SCHEDULES_CONSTANTS.MAX_EFFICIENCY,
   })
+  @Type(() => Number)
   @IsOptional()
   @IsNumber({}, { message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_EFFICIENCY })
   @Min(WORK_SCHEDULES_CONSTANTS.MIN_EFFICIENCY, { message: WORK_SCHEDULES_VALIDATION_MESSAGES.INVALID_EFFICIENCY })
@@ -96,7 +100,7 @@ export class CreateScheduleDto {
   })
   @IsOptional()
   @IsEnum(SHIFT_TYPES, { message: 'Некорректный тип смены' })
-  shiftType?: string;
+  shiftType?: ShiftType;
 
   @ApiPropertyOptional({
     description: 'Максимальное количество рабочих дней подряд',
@@ -104,6 +108,7 @@ export class CreateScheduleDto {
     minimum: 1,
     maximum: WORK_SCHEDULES_CONSTANTS.MAX_CONSECUTIVE_DAYS,
   })
+  @Type(() => Number)
   @IsOptional()
   @IsNumber()
   @Min(1)

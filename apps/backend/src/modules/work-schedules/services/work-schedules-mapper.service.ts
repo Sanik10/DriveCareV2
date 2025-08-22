@@ -1,4 +1,3 @@
-// path: apps/backend/src/modules/work-schedules/services/work-schedules-mapper.service.ts
 import { Injectable } from '@nestjs/common';
 import { WorkSchedule, ScheduleException } from '../../../database/entities';
 import { ScheduleResponseDto } from '../dto/response/schedule-response.dto';
@@ -11,6 +10,7 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
   mapScheduleToResponseDto(schedule: WorkSchedule): ScheduleResponseDto {
     const skillMatrix = this.safeNormalizeArray<string>(schedule.skillMatrix, []);
     const preferredDaysOff = this.safeNormalizeArray<number>(schedule.preferredDaysOff, []);
+    const efficiency = this.toNumericEfficiency(schedule.efficiency);
 
     return {
       id: schedule.id,
@@ -18,12 +18,12 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
       userId: schedule.userId,
       dayOfWeek: schedule.dayOfWeek,
       dayName: DAY_NAMES[schedule.dayOfWeek] || 'Неизвестно',
-      startTime: schedule.startTime,
-      endTime: schedule.endTime,
+      startTime: schedule.startTime as string,
+      endTime: schedule.endTime as string,
       isDayOff: schedule.isDayOff,
-      breakStartTime: schedule.breakStartTime,
-      breakEndTime: schedule.breakEndTime,
-      efficiency: schedule.efficiency as unknown as number,
+      breakStartTime: schedule.breakStartTime as string | undefined,
+      breakEndTime: schedule.breakEndTime as string | undefined,
+      efficiency,
       skillMatrix,
       shiftType: schedule.shiftType,
       maxConsecutiveDays: schedule.maxConsecutiveDays,
@@ -72,7 +72,7 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
         firstName: userInfo.firstName || '',
         lastName: userInfo.lastName || '',
         specialization: userInfo.specialization || '',
-        avatarUrl: userInfo.avatarUrl || null,
+        avatarUrl: userInfo.avatarUrl || undefined,
       };
     }
     return baseDto;
@@ -115,8 +115,8 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
       return { totalHours: 0, effectiveHours: 0, breakHours: 0 };
     }
 
-    const startMinutes = this.timeToMinutes(schedule.startTime);
-    const endMinutes = this.timeToMinutes(schedule.endTime);
+    const startMinutes = this.timeToMinutes(schedule.startTime!);
+    const endMinutes = this.timeToMinutes(schedule.endTime!);
     const totalMinutes = Math.max(0, endMinutes - startMinutes);
     const totalHours = totalMinutes / 60;
 
@@ -154,4 +154,10 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
       return fallback;
     }
   }
+
+  private toNumericEfficiency(eff: string | number | null | undefined): number {
+    if (typeof eff === 'number') return eff;
+    const n = Number(eff);
+    return Number.isFinite(n) && !Number.isNaN(n) ? n : 1;
+    }
 }

@@ -1,3 +1,4 @@
+// path: apps/backend/src/vehicles/vehicles.controller.ts
 import {
   Controller,
   Get,
@@ -13,6 +14,7 @@ import {
   ParseIntPipe,
   ParseBoolPipe,
   Req,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -46,10 +48,10 @@ export class VehiclesController {
 
   @Post()
   @AuthWithOwnership()
-  @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @Roles('company_owner', 'company_admin', 'manager')
+  @ApiOperation({
     summary: 'Создание нового автомобиля',
-    description: 'Создание автомобиля для клиента компании. Доступно владельцам, админам и менеджерам.'
+    description: 'Создание автомобиля для клиента компании. Доступно владельцам, админам и менеджерам.',
   })
   @ApiBody({ type: CreateVehicleDto })
   @ApiResponse({ status: HttpStatus.CREATED, type: VehicleResponseDto })
@@ -58,19 +60,18 @@ export class VehiclesController {
   @ApiUnauthorizedResponse({ description: 'Требуется авторизация' })
   @ApiForbiddenResponse({ description: 'Недостаточно прав доступа' })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  async create(
-    @Body() createVehicleDto: CreateVehicleDto,
-    @Req() req: RequestWithUser,
-  ): Promise<VehicleResponseDto> {
+  async create(@Body() createVehicleDto: CreateVehicleDto, @Req() req: RequestWithUser): Promise<VehicleResponseDto> {
     return this.vehiclesService.createForUser(createVehicleDto, req.user);
   }
 
   @Get()
   @AuthWithOwnership()
-  @ApiOperation({ 
+  @Roles('company_owner', 'company_admin', 'manager', 'mechanic', 'superadmin')
+  @ApiOperation({
     summary: 'Получение списка автомобилей',
-    description: 'Получение списка автомобилей с фильтрацией и пагинацией. Каждый видит только автомобили своей компании.'
+    description: 'Получение списка автомобилей с фильтрацией и пагинацией. Каждый видит только автомобили своей компании.',
   })
+  @ApiQuery({ name: 'companyId', required: false, description: 'ID компании (обязательно для superadmin)' })
   @ApiQuery({ name: 'search', required: false, description: 'Поиск по VIN, номеру, цвету, модели' })
   @ApiQuery({ name: 'customerId', required: false, description: 'ID клиента для фильтрации' })
   @ApiQuery({ name: 'modelId', required: false, description: 'ID модели для фильтрации' })
@@ -88,34 +89,58 @@ export class VehiclesController {
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   async findAll(
     @Req() req: RequestWithUser,
+    @Query('companyId') companyId?: string,
     @Query('search') search?: string,
     @Query('customerId') customerId?: string,
     @Query('modelId') modelId?: string,
     @Query('vehicleTypeId') vehicleTypeId?: string,
     @Query('engineType') engineType?: string,
-    @Query('yearFrom', new DefaultValuePipe(null)) yearFrom?: number,
-    @Query('yearTo', new DefaultValuePipe(null)) yearTo?: number,
-    @Query('mileageFrom', new DefaultValuePipe(null)) mileageFrom?: number,
-    @Query('mileageTo', new DefaultValuePipe(null)) mileageTo?: number,
-    @Query('hasServiceHistory', new DefaultValuePipe(null)) hasServiceHistory?: boolean,
+    @Query('yearFrom', new DefaultValuePipe(null)) yearFrom?: any,
+    @Query('yearTo', new DefaultValuePipe(null)) yearTo?: any,
+    @Query('mileageFrom', new DefaultValuePipe(null)) mileageFrom?: any,
+    @Query('mileageTo', new DefaultValuePipe(null)) mileageTo?: any,
+    @Query('hasServiceHistory', new DefaultValuePipe(null)) hasServiceHistory?: any,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query('limit', new DefaultValuePipe(VEHICLES_CONSTANTS.DEFAULTS.PAGE_SIZE), ParseIntPipe) limit: number = VEHICLES_CONSTANTS.DEFAULTS.PAGE_SIZE,
+    @Query('limit', new DefaultValuePipe(VEHICLES_CONSTANTS.DEFAULTS.PAGE_SIZE), ParseIntPipe)
+    limit: number = VEHICLES_CONSTANTS.DEFAULTS.PAGE_SIZE,
     @Query('sortField', new DefaultValuePipe('createdAt')) sortField: string = 'createdAt',
     @Query('sortOrder', new DefaultValuePipe('desc')) sortOrder: 'asc' | 'desc' = 'desc',
   ): Promise<PaginatedVehiclesResponseDto> {
+    // Superadmin-policy: требуем явный companyId для листингов
+    if (req.user.role === 'superadmin' && !companyId) {
+      throw new BadRequestException('companyId is required for superadmin listings');
+    }
+
+    // Нормализация входных параметров
+    const toNum = (v: any): number | undefined => {
+      if (v === null || v === undefined || v === '') return undefined;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const toBool = (v: any): boolean | undefined => {
+      if (v === null || v === undefined || v === '') return undefined;
+      if (typeof v === 'boolean') return v;
+      const s = String(v).toLowerCase();
+      if (['true', '1', 'yes', 'y'].includes(s)) return true;
+      if (['false', '0', 'no', 'n'].includes(s)) return false;
+      return undefined;
+    };
+    const normalizedLimit = Math.min(Math.max(1, limit), VEHICLES_CONSTANTS.DEFAULTS.MAX_ITEMS);
+
     const filter: VehicleFilter = {
+      companyId: req.user.role === 'superadmin' ? companyId : req.user.companyId!,
       search,
       customerId,
       modelId,
       vehicleTypeId,
       engineType: engineType as any,
-      yearFrom,
-      yearTo,
-      mileageFrom,
-      mileageTo,
-      hasServiceHistory,
+      yearFrom: toNum(yearFrom),
+      yearTo: toNum(yearTo),
+      mileageFrom: toNum(mileageFrom),
+      mileageTo: toNum(mileageTo),
+      hasServiceHistory: toBool(hasServiceHistory),
       page,
-      limit: Math.min(limit, VEHICLES_CONSTANTS.DEFAULTS.MAX_ITEMS),
+      limit: normalizedLimit,
       sortField: sortField as any,
       sortOrder,
     };
@@ -125,9 +150,9 @@ export class VehiclesController {
 
   @Get('customer/:customerId')
   @AuthWithOwnership()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Получение автомобилей клиента',
-    description: 'Получение всех автомобилей конкретного клиента с проверкой принадлежности к компании.'
+    description: 'Получение всех автомобилей конкретного клиента с проверкой принадлежности к компании.',
   })
   @ApiParam({ name: 'customerId', description: 'ID клиента' })
   @ApiResponse({ status: HttpStatus.OK, type: [VehicleResponseDto] })
@@ -135,19 +160,16 @@ export class VehiclesController {
   @ApiUnauthorizedResponse({ description: 'Требуется авторизация' })
   @ApiForbiddenResponse({ description: 'Нет доступа к клиенту' })
   @Throttle({ default: { limit: 50, ttl: 60000 } })
-  async findByCustomer(
-    @Param('customerId') customerId: string,
-    @Req() req: RequestWithUser,
-  ): Promise<VehicleResponseDto[]> {
+  async findByCustomer(@Param('customerId') customerId: string, @Req() req: RequestWithUser): Promise<VehicleResponseDto[]> {
     return this.vehiclesService.getVehiclesByCustomer(customerId, req.user);
   }
 
   @Get('stats/dashboard')
   @AuthWithOwnership()
-  @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @Roles('company_owner', 'company_admin', 'manager', 'superadmin')
+  @ApiOperation({
     summary: 'Статистика по автопарку',
-    description: 'Получение статистики по автомобилям для дашборда.'
+    description: 'Получение статистики по автомобилям для дашборда.',
   })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async getStats(@Req() req: RequestWithUser): Promise<any> {
@@ -157,9 +179,10 @@ export class VehiclesController {
   @Get(':id')
   @AuthWithOwnership()
   @VehicleResource()
-  @ApiOperation({ 
+  @Roles('company_owner', 'company_admin', 'manager', 'mechanic', 'superadmin')
+  @ApiOperation({
     summary: 'Получение автомобиля по ID',
-    description: 'Получение детальной информации об автомобиле с проверкой принадлежности к компании.'
+    description: 'Получение детальной информации об автомобиле с проверкой принадлежности к компании.',
   })
   @ApiParam({ name: 'id', description: 'ID автомобиля' })
   @ApiResponse({ status: HttpStatus.OK, type: VehicleResponseDto })
@@ -174,10 +197,10 @@ export class VehiclesController {
   @Patch(':id')
   @AuthWithOwnership()
   @VehicleResource()
-  @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @Roles('company_owner', 'company_admin', 'manager')
+  @ApiOperation({
     summary: 'Обновление данных автомобиля',
-    description: 'Обновление информации об автомобиле с проверкой принадлежности к компании.'
+    description: 'Обновление информации об автомобиле с проверкой принадлежности к компании.',
   })
   @ApiParam({ name: 'id', description: 'ID автомобиля' })
   @ApiBody({ type: UpdateVehicleDto })
@@ -188,48 +211,39 @@ export class VehiclesController {
   @ApiUnauthorizedResponse({ description: 'Требуется авторизация' })
   @ApiForbiddenResponse({ description: 'Недостаточно прав или нет доступа к автомобилю' })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  async update(
-    @Param('id') id: string,
-    @Body() updateVehicleDto: UpdateVehicleDto,
-  ): Promise<VehicleResponseDto> {
+  async update(@Param('id') id: string, @Body() updateVehicleDto: UpdateVehicleDto): Promise<VehicleResponseDto> {
     return this.vehiclesService.update(id, updateVehicleDto);
   }
 
   @Patch(':id/mileage')
   @AuthWithOwnership()
   @VehicleResource()
-  @Roles('owner', 'admin', 'manager', 'mechanic')
-  @ApiOperation({ 
+  @Roles('company_owner', 'company_admin', 'manager', 'mechanic')
+  @ApiOperation({
     summary: 'Обновление пробега автомобиля',
-    description: 'Обновление текущего пробега с автоматическим расчетом дат ТО.'
+    description: 'Обновление текущего пробега с автоматическим расчетом дат ТО.',
   })
   @ApiParam({ name: 'id', description: 'ID автомобиля' })
   @ApiQuery({ name: 'mileage', type: Number, description: 'Новый пробег в км' })
   @ApiResponse({ status: HttpStatus.OK, type: VehicleResponseDto })
   @Throttle({ default: { limit: 30, ttl: 60000 } })
-  async updateMileage(
-    @Param('id') id: string,
-    @Query('mileage', ParseIntPipe) mileage: number,
-  ): Promise<VehicleResponseDto> {
+  async updateMileage(@Param('id') id: string, @Query('mileage', ParseIntPipe) mileage: number): Promise<VehicleResponseDto> {
     return this.vehiclesService.updateMileage(id, mileage);
   }
 
   @Patch(':id/status')
   @AuthWithOwnership()
   @VehicleResource()
-  @Roles('owner', 'admin')
-  @ApiOperation({ 
+  @Roles('company_owner', 'company_admin')
+  @ApiOperation({
     summary: 'Изменение статуса активности автомобиля',
-    description: 'Активация или деактивация автомобиля.'
+    description: 'Активация или деактивация автомобиля.',
   })
   @ApiParam({ name: 'id', description: 'ID автомобиля' })
   @ApiQuery({ name: 'isActive', type: Boolean, description: 'Новый статус' })
   @ApiResponse({ status: HttpStatus.OK, type: VehicleResponseDto })
   @Throttle({ default: { limit: 15, ttl: 60000 } })
-  async setActive(
-    @Param('id') id: string,
-    @Query('isActive', ParseBoolPipe) isActive: boolean,
-  ): Promise<VehicleResponseDto> {
+  async setActive(@Param('id') id: string, @Query('isActive', ParseBoolPipe) isActive: boolean): Promise<VehicleResponseDto> {
     return this.vehiclesService.setActive(id, isActive);
   }
 
@@ -237,10 +251,10 @@ export class VehiclesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @AuthWithOwnership()
   @VehicleResource()
-  @Roles('owner', 'admin')
-  @ApiOperation({ 
+  @Roles('company_owner', 'company_admin')
+  @ApiOperation({
     summary: 'Деактивация автомобиля',
-    description: 'Мягкое удаление автомобиля (деактивация). Доступно владельцам и админам.'
+    description: 'Мягкое удаление автомобиля (деактивация). Доступно владельцам и админам.',
   })
   @ApiParam({ name: 'id', description: 'ID автомобиля' })
   @ApiResponse({ status: HttpStatus.NO_CONTENT })
@@ -257,9 +271,9 @@ export class VehiclesController {
   @AuthWithOwnership()
   @VehicleResource()
   @Roles('superadmin')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Полное удаление автомобиля (только суперадмин)',
-    description: 'ОПАСНАЯ ОПЕРАЦИЯ! Полное удаление автомобиля из базы данных.'
+    description: 'ОПАСНАЯ ОПЕРАЦИЯ! Полное удаление автомобиля из базы данных.',
   })
   @ApiParam({ name: 'id', description: 'ID автомобиля' })
   @ApiResponse({ status: HttpStatus.NO_CONTENT })

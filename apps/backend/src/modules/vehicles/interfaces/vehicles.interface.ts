@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles/interfaces/vehicles.interface.ts
 import { Vehicle } from '../../../database/entities/vehicle.entity';
 import { 
   CreateVehicleData, 

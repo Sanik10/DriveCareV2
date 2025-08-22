@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles/dto/response/vehicle-response.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EngineType } from '../../../../database/entities/vehicle.entity';
 

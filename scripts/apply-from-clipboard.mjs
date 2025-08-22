@@ -4,9 +4,15 @@
    A) Unified diff (raw or inside ```diff/```patch) → git apply
       - Auto-extracts diff code blocks from the message
       - Dry-run uses `git apply --check`
-      - Tries strategies: default, -p1, (and for apply) --3way, --3way -p1
+      - Tries strategies:
+          default, unidiff-zero,
+          -p1, -p1 + unidiff-zero,
+          -p2, -p2 + unidiff-zero,
+          (and for apply) --3way, --3way + unidiff-zero, --3way -p1 (+unidiff-zero), --3way -p2 (+unidiff-zero)
+      - Always uses --recount to recalc broken hunk counts
       - Path rewrite: a/src/... → a/apps/<base>/src/... (base=backend|frontend) or custom --map
       - Sanitizes malformed diffs: adds missing context " " in hunks, strips BOM/ZW/NBSP, normalizes EOL
+      - Strips non-diff trailers in raw text (промпт/описания в конце не попадут в git apply)
    B) Path-blocks:
       <!-- path: relative/path.ext[, action: delete|replace|append|move, from: old/path.ext] -->
       ```lang
@@ -75,6 +81,29 @@ async function readInput() {
   return r.stdout;
 }
 
+// ---------- Helpers ----------
+function normalizeEOL(s) {
+  return s.replace(/\r\n/g, '\n');
+}
+function ensureTrailingLF(s) {
+  return s.endsWith('\n') ? s : s + '\n';
+}
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+function ensureDir(filePath) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+}
+function resolveSafe(rootDir, rel) {
+  const rootAbs = path.resolve(rootDir);
+  const out = path.resolve(rootAbs, rel);
+  if (out !== rootAbs && !out.startsWith(rootAbs + path.sep)) {
+    throw new Error(`Path escapes root: ${rel}`);
+  }
+  return out;
+}
+// ---------- End helpers ----------
+
 // Extract diff/patch code blocks
 function extractCodeBlockDiffs(input) {
   const re = /```(?:diff|patch)[^\n]*\n([\s\S]*?)```/gi;
@@ -83,23 +112,96 @@ function extractCodeBlockDiffs(input) {
   while ((m = re.exec(input)) !== null) parts.push(m[1]);
   return parts;
 }
+
+// Extract all raw unified diff segments from free text (strip trailers)
+function extractUnifiedDiffSegments(input) {
+  const txt = normalizeEOL(input);
+  const lines = txt.split('\n');
+  const starts = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (/^diff --git /.test(lines[i])) starts.push(i);
+  }
+  if (!starts.length) return [];
+
+  const segments = [];
+  const allowedHeaderPrefixes = [
+    'diff --git ',
+    'index ',
+    '--- ',
+    '+++ ',
+    'new file mode',
+    'deleted file mode',
+    'rename from ',
+    'rename to ',
+    'similarity index ',
+    'dissimilarity index ',
+    'old mode ',
+    'new mode ',
+    'Binary files ',
+    'GIT binary patch',
+  ];
+
+  for (let s = 0; s < starts.length; s++) {
+    const start = starts[s];
+    const end = s + 1 < starts.length ? starts[s + 1] : lines.length;
+    const seg = lines.slice(start, end);
+
+    let inHunk = false;
+    let lastValid = -1;
+
+    for (let i = 0; i < seg.length; i++) {
+      const l = seg[i];
+
+      if (/^@@ /.test(l)) {
+        inHunk = true;
+        lastValid = i;
+        continue;
+      }
+
+      if (inHunk) {
+        if (/^[ +\-\\]/.test(l) || /^@@ /.test(l)) {
+          lastValid = i;
+          continue;
+        }
+        if (allowedHeaderPrefixes.some((p) => l.startsWith(p))) {
+          inHunk = false;
+          lastValid = i;
+          continue;
+        }
+        continue;
+      } else {
+        if (allowedHeaderPrefixes.some((p) => l.startsWith(p))) {
+          lastValid = i;
+          continue;
+        }
+      }
+    }
+
+    if (lastValid >= 0) {
+      const trimmed = seg.slice(0, lastValid + 1);
+      segments.push(ensureTrailingLF(trimmed.join('\n')));
+    }
+  }
+
+  return segments;
+}
+
 function extractUnifiedDiffSegment(input) {
-  const idxGit = input.search(/(^|\n)diff --git\s/m);
-  const idxFrom = input.search(/(^|\n)From [0-9a-f]{7,}\s/m); // format-patch
-  if (idxGit !== -1 && (idxFrom === -1 || idxGit < idxFrom)) return input.slice(idxGit);
-  if (idxFrom !== -1) return input.slice(idxFrom);
+  const segs = extractUnifiedDiffSegments(input);
+  if (segs.length) return ensureTrailingLF(segs.join('\n'));
   return '';
 }
+
 function getPatchText(input) {
   const blocks = extractCodeBlockDiffs(input);
   if (blocks.length) {
     log(`found ${blocks.length} diff/patch code block(s)`);
-    return blocks.join('\n\n');
+    return ensureTrailingLF(blocks.join('\n\n'));
   }
-  if (/(^|\n)diff --git\s/.test(input) || /(^|\n)From [0-9a-f]{7,}\s/.test(input)) {
+  if (/(^|\n)diff --git\s/.test(input) || /(^|\n)From [0-9a-f]{7,}\s/m.test(input)) {
     const seg = extractUnifiedDiffSegment(input);
     if (seg) {
-      log('using unified diff segment from raw text');
+      log('using unified diff segment(s) from raw text');
       return seg;
     }
   }
@@ -107,12 +209,8 @@ function getPatchText(input) {
 }
 
 // ---------- Sanitization of malformed diffs ----------
-function normalizeEOL(s) {
-  return s.replace(/\r\n/g, '\n');
-}
 function sanitizePatch(patch) {
   let txt = normalizeEOL(patch)
-    // strip BOM at start-of-text and at start of lines
     .replace(/^\uFEFF/, '')
     .replace(/\n\uFEFF/g, '\n');
   const lines = txt.split('\n');
@@ -130,7 +228,7 @@ function sanitizePatch(patch) {
       continue;
     }
     // Headers turn hunk mode off
-    if (/^(diff --git |index |--- |\+\+\+ |new file mode|deleted file mode|rename from |rename to |similarity index )/.test(l)) {
+    if (/^(diff --git |index |--- |\+\+\+ |new file mode|deleted file mode|rename from |rename to |similarity index |dissimilarity index |old mode |new mode |Binary files |GIT binary patch)/.test(l)) {
       inHunk = false;
       lines[i] = l;
       continue;
@@ -138,7 +236,6 @@ function sanitizePatch(patch) {
     if (inHunk) {
       // Valid hunk lines: ' ', '+', '-', '\' (No newline at end of file)
       if (!/^[ +\-\\]/.test(l)) {
-        // turn this into a context line
         l = ' ' + l;
       }
       lines[i] = l;
@@ -146,24 +243,10 @@ function sanitizePatch(patch) {
       lines[i] = l;
     }
   }
-  return lines.join('\n');
+  return ensureTrailingLF(lines.join('\n'));
 }
 // ---------- end sanitization ----------
 
-function ensureDir(filePath) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-}
-function resolveSafe(rootDir, rel) {
-  const rootAbs = path.resolve(rootDir);
-  const out = path.resolve(rootAbs, rel);
-  if (out !== rootAbs && !out.startsWith(rootAbs + path.sep)) {
-    throw new Error(`Path escapes root: ${rel}`);
-  }
-  return out;
-}
-function escapeRe(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 function rewritePatchPaths(patch, pairs) {
   let out = patch;
   for (const p of pairs) {
@@ -192,17 +275,33 @@ function applyGitPatch(patchText, { tryRewrites = true } = {}) {
   const modeLabel = flags.dryRun ? 'Checking patch (dry-run)...' : 'Applying patch...';
   console.log(`Detected unified diff. ${modeLabel}`);
 
-  const baseArgs = flags.dryRun ? ['--check', '--whitespace=fix'] : ['--index', '--reject', '--whitespace=fix'];
+  // Always try to recalc broken hunk counts; fix whitespace
+  const baseArgs = flags.dryRun ? ['--check', '--recount', '--whitespace=fix'] : ['--index', '--reject', '--recount', '--whitespace=fix'];
   const tryApply = (text, extraArgs = [], label = '') =>
     spawnSync('git', ['apply', ...baseArgs, ...extraArgs], { input: text, encoding: 'utf8', stdio: ['pipe', 'inherit', 'inherit'] });
 
   const strategies = flags.dryRun
-    ? [{ args: [], label: 'default' }, { args: ['-p1'], label: 'strip -p1' }]
+    ? [
+        { args: [], label: 'default' },
+        { args: ['--unidiff-zero'], label: 'unidiff-zero' },
+        { args: ['-p1'], label: 'strip -p1' },
+        { args: ['-p1', '--unidiff-zero'], label: 'strip -p1 + unidiff-zero' },
+        { args: ['-p2'], label: 'strip -p2' },
+        { args: ['-p2', '--unidiff-zero'], label: 'strip -p2 + unidiff-zero' },
+      ]
     : [
         { args: [], label: 'default' },
+        { args: ['--unidiff-zero'], label: 'unidiff-zero' },
         { args: ['-p1'], label: 'strip -p1' },
+        { args: ['-p1', '--unidiff-zero'], label: 'strip -p1 + unidiff-zero' },
+        { args: ['-p2'], label: 'strip -p2' },
+        { args: ['-p2', '--unidiff-zero'], label: 'strip -p2 + unidiff-zero' },
         { args: ['--3way'], label: '3-way' },
+        { args: ['--3way', '--unidiff-zero'], label: '3-way + unidiff-zero' },
         { args: ['--3way', '-p1'], label: '3-way -p1' },
+        { args: ['--3way', '-p1', '--unidiff-zero'], label: '3-way -p1 + unidiff-zero' },
+        { args: ['--3way', '-p2'], label: '3-way -p2' },
+        { args: ['--3way', '-p2', '--unidiff-zero'], label: '3-way -p2 + unidiff-zero' },
       ];
 
   // First sanitize the incoming patch
@@ -223,7 +322,6 @@ function applyGitPatch(patchText, { tryRewrites = true } = {}) {
     const inferred = inferDefaultMappingsForSrc(mapped);
     if (inferred.length) mapped = rewritePatchPaths(mapped, inferred);
 
-    // sanitize again in case rewrites produced edge cases
     mapped = sanitizePatch(mapped);
 
     console.warn('Retrying with rewritten paths...');
@@ -235,12 +333,13 @@ function applyGitPatch(patchText, { tryRewrites = true } = {}) {
       }
       console.warn(`git apply failed (rewrite + ${s.label}), trying next...`);
     }
-    // Save both originals for manual inspection
     const p1 = path.join(process.cwd(), 'ai.patch');
     const p2 = path.join(process.cwd(), 'ai.rewritten.patch');
+    const p3 = path.join(process.cwd(), 'ai.sanitized.patch');
     fs.writeFileSync(p1, patchText, 'utf8');
     fs.writeFileSync(p2, mapped, 'utf8');
-    console.error(`All strategies failed. Saved to:\n  ${p1}\n  ${p2}\nTry: git apply ${flags.dryRun ? '--check ' : '--index --reject '} ${p2}`);
+    fs.writeFileSync(p3, working, 'utf8');
+    console.error(`All strategies failed. Saved to:\n  ${p1}\n  ${p2}\n  ${p3}\nTry: git apply ${flags.dryRun ? '--check ' : '--index --reject '} ${p2}`);
     process.exit(2);
   }
 

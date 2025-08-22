@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles/dto/response/paginated-vehicles-response.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import { VehicleResponseDto } from './vehicle-response.dto';
 

@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+// path: apps/backend/src/modules/vehicles/vehicles.service.ts
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { VehiclesDataService } from './services/vehicles-data.service';
 import { VehiclesBusinessService } from './services/vehicles-business.service';
 import { VehiclesValidationService } from './services/vehicles-validation.service';
@@ -27,24 +28,21 @@ export class VehiclesService {
 
   async createForUser(createVehicleDto: CreateVehicleDto, user: RequestWithUser['user']): Promise<VehicleResponseDto> {
     // Проверка что customer принадлежит компании пользователя
-    await this.vehiclesValidationService.validateCustomerOwnership(
-      createVehicleDto.customerId, 
-      user.companyId!
-    );
-    
+    await this.vehiclesValidationService.validateCustomerOwnership(createVehicleDto.customerId, user.companyId!);
+
     const vehicleData: CreateVehicleData = {
       ...createVehicleDto,
       companyId: user.companyId!,
     };
-    
+
     const vehicle = await this.vehiclesBusinessService.createVehicle(vehicleData);
     return this.vehiclesMapperService.mapToResponseDto(vehicle);
   }
 
   async findAll(filter: VehicleFilter): Promise<PaginatedVehiclesResponseDto> {
     const [vehicles, total] = await this.vehiclesDataService.findWithFilters(filter);
-    
-    const items = vehicles.map(vehicle => {
+
+    const items = vehicles.map((vehicle) => {
       const dto = this.vehiclesMapperService.mapToResponseDto(vehicle);
       return dto;
     });
@@ -64,13 +62,18 @@ export class VehiclesService {
   }
 
   async findAllForUser(user: RequestWithUser['user'], filter: Partial<VehicleFilter> = {}): Promise<PaginatedVehiclesResponseDto> {
+    // Superadmin-policy: требуем явный companyId для листингов
+    if (user.role === 'superadmin' && !filter.companyId) {
+      throw new BadRequestException('companyId is required for superadmin listings');
+    }
+
     const userFilter: VehicleFilter = {
       ...filter,
       companyId: user.role === 'superadmin' ? filter.companyId : user.companyId,
     };
 
     const result = await this.findAll(userFilter);
-    
+
     // Добавляем мета-информацию для UI
     if (userFilter.companyId) {
       const stats = await this.vehiclesDataService.getStats(userFilter.companyId);
@@ -91,10 +94,7 @@ export class VehiclesService {
   }
 
   async findOneForUser(id: string, user: RequestWithUser['user']): Promise<VehicleResponseDto> {
-    const vehicle = await this.vehiclesValidationService.validateVehicleOwnership(
-      id, 
-      user.companyId!
-    );
+    const vehicle = await this.vehiclesValidationService.validateVehicleOwnership(id, user.companyId!);
     return this.vehiclesMapperService.mapToResponseDto(vehicle);
   }
 
@@ -136,7 +136,7 @@ export class VehiclesService {
   async getVehiclesByCustomer(customerId: string, user: RequestWithUser['user']): Promise<VehicleResponseDto[]> {
     // Проверяем что customer принадлежит компании пользователя
     await this.vehiclesValidationService.validateCustomerOwnership(customerId, user.companyId!);
-    
+
     const filter: VehicleFilter = {
       customerId,
       companyId: user.companyId!,

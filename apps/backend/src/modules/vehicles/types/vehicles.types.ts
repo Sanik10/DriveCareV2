@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles/types/vehicles.types.ts
 import { EngineType } from '../../../database/entities/vehicle.entity';
 
 export type VehicleSortField = 'createdAt' | 'licensePlate' | 'year' | 'mileage' | 'lastServiceDate';

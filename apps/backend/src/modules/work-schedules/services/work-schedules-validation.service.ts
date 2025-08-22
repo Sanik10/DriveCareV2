@@ -1,4 +1,3 @@
-// path: apps/backend/src/modules/work-schedules/services/work-schedules-validation.service.ts
 import { Injectable } from '@nestjs/common';
 import { WorkSchedulesDataService } from './work-schedules-data.service';
 import { CreateScheduleDto } from '../dto/request/create-schedule.dto';
@@ -65,7 +64,7 @@ export class WorkSchedulesValidationService implements IWorkSchedulesValidationS
 
     // Коэффициент эффективности
     if (data.efficiency !== undefined) {
-      await this.validateEfficiency(data.efficiency);
+      await this.validateEfficiency(data.efficiency as number);
     }
 
     // Перерыв
@@ -152,6 +151,14 @@ export class WorkSchedulesValidationService implements IWorkSchedulesValidationS
     await this.validateExceptionDateRange(data.startDate, data.endDate);
     await this.validateAdvanceNotice(data.startDate);
 
+    if (data.isFullDay === false) {
+      const st = (data as any).startTime;
+      const et = (data as any).endTime;
+      if (!st || !et) {
+        throw new ValidationDataException('partialDay', 'Для частичного дня необходимо указать startTime и endTime');
+      }
+    }
+
     if (!data.isFullDay && data.startTime && data.endTime) {
       await this.validateTimeRange(data.startTime, data.endTime);
     }
@@ -184,9 +191,10 @@ export class WorkSchedulesValidationService implements IWorkSchedulesValidationS
     if (!userId || !companyId) {
       throw new ValidationDataException('user', 'Пользователь и компания обязательны');
     }
-    // Предполагаем, что проверка принадлежности пользователя происходит в другом сервисе,
-    // однако для совместимости с guard здесь может быть сделан базовый чекап по компаниям
-    // либо вызов dataService.findUserById, если подключен User репозиторий.
+    const belongs = await this.dataService.userBelongsToCompany(userId, companyId);
+    if (!belongs) {
+      throw new ValidationDataException('userCompany', `Пользователь ${userId} не принадлежит компании ${companyId}`);
+    }
   }
 
   async validateWorkScheduleOwnership(scheduleId: string, companyId: string): Promise<void> {

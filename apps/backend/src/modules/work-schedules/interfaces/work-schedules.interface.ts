@@ -1,4 +1,3 @@
-// path: apps/backend/src/modules/work-schedules/interfaces/work-schedules.interface.ts
 import { WorkSchedule, ScheduleException } from '../../../database/entities';
 import { CreateScheduleDto } from '../dto/request/create-schedule.dto';
 import { UpdateScheduleDto } from '../dto/request/update-schedule.dto';
@@ -34,6 +33,9 @@ export interface IWorkSchedulesDataService {
   findExceptionsForDate(companyId: string, date: Date, userIds?: string[]): Promise<ScheduleException[]>;
   updateExceptionStatus(id: string, status: ExceptionStatus, approvedBy?: string): Promise<ScheduleException>;
   deleteException(id: string): Promise<void>;
+
+  // Users / Ownership
+  userBelongsToCompany(userId: string, companyId: string): Promise<boolean>;
 }
 
 export interface IWorkSchedulesValidationService {

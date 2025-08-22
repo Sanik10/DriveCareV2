@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles/services/vehicles-mapper.service.ts
 import { Injectable } from '@nestjs/common';
 import { Vehicle } from '../../../database/entities/vehicle.entity';
 import { VehicleResponseDto } from '../dto/response/vehicle-response.dto';

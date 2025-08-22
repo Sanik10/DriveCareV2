@@ -1,7 +1,6 @@
-// path: apps/backend/src/modules/work-schedules/services/work-schedules-business.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { WorkSchedulesDataService } from './work-schedules-data.service';
-import { WorkSchedule, ScheduleException } from '../../../database/entities';
+import { WorkSchedule } from '../../../database/entities';
 
 @Injectable()
 export class WorkSchedulesBusinessService {
@@ -50,8 +49,10 @@ export class WorkSchedulesBusinessService {
     const perUser: Record<string, { hours: number; eff: number[] }> = {};
 
     for (const s of filtered) {
-      const { totalHours, effectiveHours, breakHours } = this.calculateWorkingHours(s);
-      totalEffHours += effectiveHours * (s.efficiency ?? 1);
+      // избегаем затенения переменной totalHours
+      const { totalHours: localTotalHours, effectiveHours, breakHours } = this.calculateWorkingHours(s);
+      const eff = this.toNumericEfficiency(s.efficiency);
+      totalEffHours += effectiveHours * eff;
       totalHours += effectiveHours;
 
       // Перерывы: если рабочее время > 6 часов и (нет перерыва или он < 30 минут) — рекомендация
@@ -68,15 +69,15 @@ export class WorkSchedulesBusinessService {
 
       perUser[s.userId] ??= { hours: 0, eff: [] };
       perUser[s.userId].hours += effectiveHours;
-      perUser[s.userId].eff.push(s.efficiency ?? 1);
+      perUser[s.userId].eff.push(eff);
     }
 
     // Балансировка нагрузки: стандартное отклонение эффективности
     const effAll = Object.values(perUser)
       .map((u) => u.eff)
       .flat();
-    const avgEff = effAll.reduce((a, b) => a + b, 0) / Math.max(1, effAll.length);
-    const variance = effAll.reduce((a, b) => a + Math.pow(b - avgEff, 2), 0) / Math.max(1, effAll.length);
+    const avgEff = effAll.reduce<number>((a, b) => a + b, 0) / Math.max(1, effAll.length);
+    const variance = effAll.reduce<number>((a, b) => a + Math.pow(b - avgEff, 2), 0) / Math.max(1, effAll.length);
     const stdev = Math.sqrt(variance);
 
     if (stdev > 0.2) {
@@ -135,16 +136,17 @@ export class WorkSchedulesBusinessService {
     let weightedEff = 0;
 
     for (const s of schedules) {
-      const { effectiveHours, breakHours } = this.calculateWorkingHours(s);
+      const { effectiveHours } = this.calculateWorkingHours(s);
+      const eff = this.toNumericEfficiency(s.efficiency);
 
       const userExceptions = exceptions.filter((e) => e.userId === s.userId);
       // Если есть полно‑дневные исключения — нулевая доступность
       const hasFullDay = userExceptions.some((e) => e.isFullDay);
       const adjustedHours = hasFullDay ? 0 : effectiveHours; // точная корректировка частичных исключений опущена для MVP
 
-      mechanics.push({ userId: s.userId, effectiveHours: adjustedHours, efficiency: s.efficiency ?? 1 });
+      mechanics.push({ userId: s.userId, effectiveHours: adjustedHours, efficiency: eff });
       totalEffectiveHours += adjustedHours;
-      weightedEff += adjustedHours * (s.efficiency ?? 1);
+      weightedEff += adjustedHours * eff;
     }
 
     const overallUtilization = totalEffectiveHours > 0 ? weightedEff / totalEffectiveHours : 0;
@@ -189,9 +191,9 @@ export class WorkSchedulesBusinessService {
     }
     const byShiftType = Object.entries(map).map(([shiftType, count]) => ({ shiftType, count }));
 
-    const efficiencies = all.map((s) => s.efficiency ?? 1);
+    const efficiencies = all.map((s) => this.toNumericEfficiency(s.efficiency));
     const averageEfficiency =
-      efficiencies.length > 0 ? Math.round((efficiencies.reduce((a, b) => a + b, 0) / efficiencies.length) * 100) / 100 : 0;
+      efficiencies.length > 0 ? Math.round((efficiencies.reduce<number>((a, b) => a + b, 0) / efficiencies.length) * 100) / 100 : 0;
 
     // Оценка «утилизации» (грубая): средняя эффективность × средние часы
     const hours = all.map((s) => this.calculateWorkingHours(s).effectiveHours);
@@ -212,8 +214,8 @@ export class WorkSchedulesBusinessService {
       return { totalHours: 0, effectiveHours: 0, breakHours: 0 };
     }
 
-    const startMinutes = this.timeToMinutes(schedule.startTime);
-    const endMinutes = this.timeToMinutes(schedule.endTime);
+    const startMinutes = this.timeToMinutes(schedule.startTime!);
+    const endMinutes = this.timeToMinutes(schedule.endTime!);
     const totalMinutes = Math.max(0, endMinutes - startMinutes);
     const totalHours = totalMinutes / 60;
 
@@ -231,5 +233,14 @@ export class WorkSchedulesBusinessService {
   private timeToMinutes(time: string): number {
     const [hh, mm] = time.split(':').map(Number);
     return (hh || 0) * 60 + (mm || 0);
+  }
+
+  /**
+   * Приведение efficiency из entity (decimal как string) к числу с безопасным дефолтом.
+   */
+  private toNumericEfficiency(eff: string | number | null | undefined): number {
+    if (typeof eff === 'number') return eff;
+    const n = Number(eff);
+    return Number.isFinite(n) && !Number.isNaN(n) ? n : 1;
   }
 }

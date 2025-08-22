@@ -1,3 +1,4 @@
+// path: apps/backend/src/database/entities/vehicle-type.entity.ts
 import { 
   Entity, 
   Column, 

@@ -1,4 +1,3 @@
-// path: apps/backend/src/common/audit/audit.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { createHmac } from 'crypto';
 import { ConfigService } from '@nestjs/config';
@@ -211,6 +210,18 @@ export enum AuditAction {
   APPOINTMENTS_LISTED = 'APPOINTMENTS_LISTED',
   APPOINTMENT_RATED = 'APPOINTMENT_RATED',
   APPOINTMENT_CHECK_AVAILABILITY = 'APPOINTMENT_CHECK_AVAILABILITY',
+
+  // Work Schedules
+  WORK_SCHEDULE_CREATED = 'WORK_SCHEDULE_CREATED',
+  WORK_SCHEDULE_UPDATED = 'WORK_SCHEDULE_UPDATED',
+  WORK_SCHEDULE_DELETED = 'WORK_SCHEDULE_DELETED',
+  WORK_SCHEDULE_VIEWED = 'WORK_SCHEDULE_VIEWED',
+  WORK_SCHEDULES_LISTED = 'WORK_SCHEDULES_LISTED',
+
+  // Schedule Exceptions
+  SCHEDULE_EXCEPTION_CREATED = 'SCHEDULE_EXCEPTION_CREATED',
+  SCHEDULE_EXCEPTION_STATUS_CHANGED = 'SCHEDULE_EXCEPTION_STATUS_CHANGED',
+  SCHEDULE_EXCEPTION_DELETED = 'SCHEDULE_EXCEPTION_DELETED',
 }
 
 export enum AuditLevel {
@@ -610,5 +621,33 @@ export class AuditService {
   }
   async logAppointmentCheckAvailability(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.APPOINTMENT_CHECK_AVAILABILITY, data);
+  }
+
+  // Work Schedules
+  async logWorkScheduleCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.WORK_SCHEDULE_CREATED, data);
+  }
+  async logWorkScheduleUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.WORK_SCHEDULE_UPDATED, data);
+  }
+  async logWorkScheduleDeleted(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.WORK_SCHEDULE_DELETED, { ...data, level: data.level || AuditLevel.WARNING });
+  }
+  async logWorkScheduleViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.WORK_SCHEDULE_VIEWED, data);
+  }
+  async logWorkSchedulesListed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.WORK_SCHEDULES_LISTED, data);
+  }
+
+  // Schedule Exceptions
+  async logScheduleExceptionCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SCHEDULE_EXCEPTION_CREATED, data);
+  }
+  async logScheduleExceptionStatusChanged(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SCHEDULE_EXCEPTION_STATUS_CHANGED, data);
+  }
+  async logScheduleExceptionDeleted(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SCHEDULE_EXCEPTION_DELETED, { ...data, level: data.level || AuditLevel.WARNING });
   }
 }
