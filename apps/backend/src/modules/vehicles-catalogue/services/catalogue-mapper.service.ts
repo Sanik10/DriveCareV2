@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles-catalogue/services/catalogue-mapper.service.ts
 import { Injectable } from '@nestjs/common';
 import { VehicleBrand, VehicleModel, VehicleType } from '../../../database/entities';
 import { BrandResponseDto } from '../dto/brands/brand-response.dto';

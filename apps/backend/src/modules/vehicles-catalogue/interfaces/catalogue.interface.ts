@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles-catalogue/interfaces/catalogue.interface.ts
 import { VehicleBrand, VehicleModel, VehicleType } from '../../../database/entities';
 import { 
   BrandFilter, 

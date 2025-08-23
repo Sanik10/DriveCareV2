@@ -24,19 +24,19 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
     await this.vehiclesValidationService.validateVehicleLimits(data.companyId);
 
     const vehicle = await this.vehiclesDataService.create(data);
-    
+
     this.logger.log(`Created vehicle: ${this.vehiclesMapperService.formatVehicleDisplayName(vehicle)} (${vehicle.id}) for company ${vehicle.companyId}`);
-    
+
     await this.auditService.logVehicleCreated({
       entityId: vehicle.id,
       entityType: 'Vehicle',
       companyId: vehicle.companyId,
-      changes: { after: this.sanitizeVehicleData(vehicle) },
-      metadata: { 
+      changes: { after: this.sanitizeVehicleDataMasked(vehicle) },
+      metadata: {
         vehicleInfo: this.vehiclesMapperService.formatVehicleDisplayName(vehicle),
         customerId: vehicle.customerId,
-        vin: vehicle.vin,
-        licensePlate: vehicle.licensePlate,
+        vinLast6: vehicle.vin ? vehicle.vin.slice(-6) : undefined,
+        licensePlateMasked: this.maskLicensePlate(vehicle.licensePlate),
       },
     });
 
@@ -45,19 +45,19 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
 
   async updateVehicle(id: string, data: UpdateVehicleData): Promise<Vehicle> {
     await this.vehiclesValidationService.validateUpdateData(id, data);
-    
+
     const oldVehicle = await this.vehiclesDataService.findById(id);
     const updatedVehicle = await this.vehiclesDataService.update(id, data);
-    
+
     this.logger.log(`Updated vehicle: ${this.vehiclesMapperService.formatVehicleDisplayName(updatedVehicle)} (${updatedVehicle.id})`);
-    
+
     await this.auditService.logVehicleUpdated({
       entityId: updatedVehicle.id,
       entityType: 'Vehicle',
       companyId: updatedVehicle.companyId,
       changes: {
-        before: this.sanitizeVehicleData(oldVehicle),
-        after: this.sanitizeVehicleData(updatedVehicle),
+        before: this.sanitizeVehicleDataMasked(oldVehicle),
+        after: this.sanitizeVehicleDataMasked(updatedVehicle),
       },
       metadata: {
         updatedFields: Object.keys(data),
@@ -70,11 +70,11 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
 
   async deactivateVehicle(id: string): Promise<void> {
     const vehicle = await this.vehiclesValidationService.validateVehicleExists(id);
-    
+
     await this.vehiclesDataService.softDelete(id);
-    
+
     this.logger.log(`Deactivated vehicle: ${this.vehiclesMapperService.formatVehicleDisplayName(vehicle)} (${vehicle.id})`);
-    
+
     await this.auditService.logVehicleStatusChanged({
       entityId: vehicle.id,
       entityType: 'Vehicle',
@@ -92,12 +92,12 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
 
   async updateVehicleMileage(id: string, mileage: number, updateServiceDates: boolean = false): Promise<Vehicle> {
     await this.vehiclesValidationService.validateMileageUpdate(id, mileage);
-    
+
     const oldVehicle = await this.vehiclesDataService.findById(id);
     const updatedVehicle = await this.vehiclesDataService.updateMileage(id, mileage);
-    
+
     this.logger.log(`Updated mileage for vehicle ${id}: ${oldVehicle?.mileage || 0} -> ${mileage} km`);
-    
+
     await this.auditService.logVehicleMileageUpdated({
       entityId: id,
       entityType: 'Vehicle',
@@ -109,23 +109,22 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
       metadata: {
         vehicleInfo: this.vehiclesMapperService.formatVehicleDisplayName(updatedVehicle),
         updateServiceDates,
+        vinLast6: updatedVehicle.vin ? updatedVehicle.vin.slice(-6) : undefined,
       },
     });
 
     if (updateServiceDates && updatedVehicle.lastServiceDate) {
-      // Автоматический расчет следующего ТО на основе пробега
-      const serviceMileageInterval = 10000; // Каждые 10,000 км
+      const serviceMileageInterval = 10000;
       const lastServiceMileage = oldVehicle?.mileage || 0;
       const mileageSinceService = mileage - lastServiceMileage;
-      
+
       if (mileageSinceService >= serviceMileageInterval) {
         const nextServiceMileage = mileage + serviceMileageInterval;
-        // Примерно определяем дату на основе среднего пробега
-        const averageDailyMileage = 50; // км в день
+        const averageDailyMileage = 50;
         const daysToNextService = serviceMileageInterval / averageDailyMileage;
         const nextServiceDate = new Date();
         nextServiceDate.setDate(nextServiceDate.getDate() + daysToNextService);
-        
+
         await this.vehiclesDataService.updateServiceDates(id, undefined, nextServiceDate);
       }
     }
@@ -135,36 +134,34 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
 
   async scheduleNextService(vehicleId: string, nextServiceDate: Date): Promise<Vehicle> {
     const vehicle = await this.vehiclesValidationService.validateVehicleExists(vehicleId);
-    
+
     const updatedVehicle = await this.vehiclesDataService.updateServiceDates(
-      vehicleId, 
-      undefined, 
-      nextServiceDate
+      vehicleId,
+      undefined,
+      nextServiceDate,
     );
-    
+
     this.logger.log(`Scheduled next service for vehicle ${vehicleId} on ${nextServiceDate.toISOString().split('T')[0]}`);
-    
+
     return updatedVehicle;
   }
 
   async markServiceCompleted(vehicleId: string, serviceDate: Date, newMileage?: number): Promise<Vehicle> {
     const vehicle = await this.vehiclesValidationService.validateVehicleExists(vehicleId);
-    
-    // Обновляем дату последнего ТО
+
     let updatedVehicle = await this.vehiclesDataService.updateServiceDates(
-      vehicleId, 
-      serviceDate, 
-      undefined // Очищаем дату следующего ТО
+      vehicleId,
+      serviceDate,
+      undefined,
     );
 
-    // Обновляем пробег если предоставлен
     if (newMileage !== undefined) {
       await this.vehiclesValidationService.validateMileageUpdate(vehicleId, newMileage);
       updatedVehicle = await this.vehiclesDataService.updateMileage(vehicleId, newMileage);
     }
-    
+
     this.logger.log(`Marked service completed for vehicle ${vehicleId} on ${serviceDate.toISOString().split('T')[0]}`);
-    
+
     await this.auditService.logVehicleServiceCompleted({
       entityId: vehicleId,
       entityType: 'Vehicle',
@@ -174,6 +171,8 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
         oldMileage: vehicle.mileage,
         newMileage,
         vehicleInfo: this.vehiclesMapperService.formatVehicleDisplayName(vehicle),
+        vinLast6: vehicle.vin ? vehicle.vin.slice(-6) : undefined,
+        licensePlateMasked: this.maskLicensePlate(vehicle.licensePlate),
       },
     });
 
@@ -182,7 +181,7 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
 
   async getVehicleWithFullDetails(id: string, companyId: string): Promise<VehicleWithDetails> {
     const vehicle = await this.vehiclesValidationService.validateVehicleOwnership(id, companyId);
-    
+
     await this.auditService.logVehicleViewed({
       entityId: vehicle.id,
       entityType: 'Vehicle',
@@ -199,13 +198,13 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
   async transferVehicleToCustomer(vehicleId: string, newCustomerId: string, userCompanyId: string): Promise<Vehicle> {
     const vehicle = await this.vehiclesValidationService.validateVehicleOwnership(vehicleId, userCompanyId);
     await this.vehiclesValidationService.validateCustomerOwnership(newCustomerId, userCompanyId);
-    
+
     const updatedVehicle = await this.vehiclesDataService.update(vehicleId, {
       customerId: newCustomerId,
     });
-    
+
     this.logger.log(`Transferred vehicle ${vehicleId} from customer ${vehicle.customerId} to ${newCustomerId}`);
-    
+
     await this.auditService.logVehicleTransferred({
       entityId: vehicleId,
       entityType: 'Vehicle',
@@ -218,6 +217,8 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
         vehicleInfo: this.vehiclesMapperService.formatVehicleDisplayName(vehicle),
         fromCustomerId: vehicle.customerId,
         toCustomerId: newCustomerId,
+        vinLast6: vehicle.vin ? vehicle.vin.slice(-6) : undefined,
+        licensePlateMasked: this.maskLicensePlate(vehicle.licensePlate),
       },
     });
 
@@ -226,17 +227,14 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
 
   async generateVehicleReport(vehicleId: string, companyId: string): Promise<any> {
     const vehicle = await this.vehiclesValidationService.validateVehicleOwnership(vehicleId, companyId);
-    
+
     const serviceHistory = vehicle.serviceHistory || [];
-    
-    // 🔥 ИСПРАВЛЕНО: VehicleServiceHistory не имеет поля cost
-    // Будем считать условную стоимость на основе описания
-    const totalServiceCost = serviceHistory.length * 5000; // Примерная стоимость за ТО
-    
-    // Расчет среднего интервала ТО
+
+    const totalServiceCost = serviceHistory.length * 5000;
+
     let averageServiceInterval = 0;
     if (serviceHistory.length > 1) {
-      const intervals = [];
+      const intervals: number[] = [];
       for (let i = 1; i < serviceHistory.length; i++) {
         const prevService = new Date(serviceHistory[i - 1].date);
         const currentService = new Date(serviceHistory[i].date);
@@ -246,8 +244,7 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
       averageServiceInterval = intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
     }
 
-    // Прогноз следующих ТО
-    const upcomingServices = [];
+    const upcomingServices: any[] = [];
     if (vehicle.nextServiceDate) {
       upcomingServices.push({
         type: 'scheduled',
@@ -270,19 +267,28 @@ export class VehiclesBusinessService implements IVehiclesBusinessService {
     };
   }
 
-  private sanitizeVehicleData(vehicle: Vehicle | null): Partial<Vehicle> {
+  private sanitizeVehicleDataMasked(vehicle: Vehicle | null): Partial<Vehicle> {
     if (!vehicle) return {};
-    
-    const { 
-      id, customerId, companyId, modelId, vehicleTypeId, vin, licensePlate, 
-      year, color, engineType, engineVolume, mileage, lastServiceDate, 
-      nextServiceDate, isActive, createdAt, updatedAt 
+    const {
+      id, customerId, companyId, modelId, vehicleTypeId, vin, licensePlate,
+      year, color, engineType, engineVolume, mileage, lastServiceDate,
+      nextServiceDate, isActive, createdAt, updatedAt,
     } = vehicle;
-    
-    return { 
-      id, customerId, companyId, modelId, vehicleTypeId, vin, licensePlate, 
-      year, color, engineType, engineVolume, mileage, lastServiceDate, 
-      nextServiceDate, isActive, createdAt, updatedAt 
+    return {
+      id, customerId, companyId, modelId, vehicleTypeId,
+      vin: vin ? `***${vin.slice(-6)}` : undefined,
+      licensePlate: this.maskLicensePlate(licensePlate),
+      year, color, engineType, engineVolume, mileage, lastServiceDate,
+      nextServiceDate, isActive, createdAt, updatedAt,
     };
+  }
+
+  private maskLicensePlate(lp?: string): string | undefined {
+    if (!lp) return undefined;
+    const s = String(lp);
+    if (s.length <= 2) return s[0] + '•';
+    const start = s.slice(0, 2);
+    const end = s.slice(-2);
+    return `${start}••${end}`;
   }
 }

@@ -2,17 +2,23 @@
 /* Apply AI changes from clipboard or stdin.
    Formats:
    A) Unified diff (raw or inside ```diff/```patch) → git apply
-      - Auto-extracts diff code blocks from the message
-      - Dry-run uses `git apply --check`
-      - Tries strategies:
+      - Auto-extract multiple diff/patch code blocks and concatenate
+      - If code blocks exist → use only them (no raw autoscan)
+      - Dry-run uses `git apply --check` with enhanced strategy matrix
+      - Tries strategies (no --reject, no --index):
           default, unidiff-zero,
           -p1, -p1 + unidiff-zero,
           -p2, -p2 + unidiff-zero,
-          (and for apply) --3way, --3way + unidiff-zero, --3way -p1 (+unidiff-zero), --3way -p2 (+unidiff-zero)
-      - Always uses --recount to recalc broken hunk counts
+          each with: --ignore-space-change, --ignore-whitespace,
+          and 3-way variants (also for dry-run)
+      - Always uses --recount and --whitespace=fix
+      - Reverse-check per segment: if already applied → skip
       - Path rewrite: a/src/... → a/apps/<base>/src/... (base=backend|frontend) or custom --map
-      - Sanitizes malformed diffs: adds missing context " " in hunks, strips BOM/ZW/NBSP, normalizes EOL
-      - Strips non-diff trailers in raw text (промпт/описания в конце не попадут в git apply)
+      - Sanitizes malformed diffs: context padding " ", strips BOM/ZW/NBSP, normalizes EOL
+      - Splits mega-patch into diff segments (by diff --git) and applies sequentially (robust to duplicates)
+      - If no "diff --git" segments found, tries whole unified patch (---/+++)
+      - Saves ai.patch / ai.rewritten.patch / ai.sanitized.patch for debugging
+      - On failure: falls back to path-blocks if present
    B) Path-blocks:
       <!-- path: relative/path.ext[, action: delete|replace|append|move, from: old/path.ext] -->
       ```lang
@@ -24,10 +30,13 @@
      pbpaste | node scripts/apply-from-clipboard.mjs [--root .] [--dry-run] [--verbose]
      node scripts/apply-from-clipboard.mjs --dry-run
    Extra flags:
-     --map=FROM:TO        Add path rewrite rule (e.g. --map=src:apps/backend/src)
-     --src-base=backend|frontend  Shortcut for mapping plain "src" (default: backend)
-     --save-input         Save raw input to ai.last.txt
-     --no-path-rewrite    Disable automatic path rewrite heuristics
+     --map=FROM:TO               Add path rewrite rule (e.g. --map=src:apps/backend/src)
+     --src-base=backend|frontend Shortcut for mapping plain "src" (default: backend)
+     --save-input                Save raw input to ai.last.txt
+     --no-path-rewrite          Disable automatic path rewrite heuristics
+     --prefer-blocks            Skip diffs and apply path-blocks if present
+     --only-diff                Ignore path-blocks completely (for testing pure patch)
+     --only-blocks              Ignore diffs completely (alias of --prefer-blocks)
 */
 import fs from 'fs';
 import path from 'path';
@@ -42,6 +51,9 @@ const flags = {
   noPathRewrite: false,
   srcBase: 'backend',
   maps: [],
+  preferBlocks: false,
+  onlyDiff: false,
+  onlyBlocks: false,
 };
 
 for (const a of args) {
@@ -59,6 +71,11 @@ for (const a of args) {
       console.error('Invalid --map format. Expected --map=FROM:TO');
       process.exit(1);
     }
+  } else if (a === '--prefer-blocks' || a === '--only-blocks') {
+    flags.preferBlocks = true;
+    flags.onlyBlocks = true;
+  } else if (a === '--only-diff') {
+    flags.onlyDiff = true;
   }
 }
 
@@ -70,7 +87,9 @@ async function readInput() {
   const isPiped = !process.stdin.isTTY;
   if (isPiped) {
     const chunks = [];
-    for await (const c of process.stdin) chunks.push(c);
+    for await (const c of process.stdin) {
+      chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c)));
+    }
     return Buffer.concat(chunks).toString('utf8');
   }
   const r = spawnSync('bash', ['-lc', 'pbpaste'], { encoding: 'utf8' });
@@ -104,7 +123,7 @@ function resolveSafe(rootDir, rel) {
 }
 // ---------- End helpers ----------
 
-// Extract diff/patch code blocks
+// Extract diff/patch code blocks (concat all blocks)
 function extractCodeBlockDiffs(input) {
   const re = /```(?:diff|patch)[^\n]*\n([\s\S]*?)```/gi;
   const parts = [];
@@ -113,8 +132,8 @@ function extractCodeBlockDiffs(input) {
   return parts;
 }
 
-// Extract all raw unified diff segments from free text (strip trailers)
-function extractUnifiedDiffSegments(input) {
+// Extract raw unified diff segments only if they start with "diff --git"
+function extractUnifiedDiffSegmentsByDiffGit(input) {
   const txt = normalizeEOL(input);
   const lines = txt.split('\n');
   const starts = [];
@@ -150,7 +169,7 @@ function extractUnifiedDiffSegments(input) {
     let lastValid = -1;
 
     for (let i = 0; i < seg.length; i++) {
-      const l = seg[i];
+      let l = seg[i];
 
       if (/^@@ /.test(l)) {
         inHunk = true;
@@ -186,24 +205,52 @@ function extractUnifiedDiffSegments(input) {
   return segments;
 }
 
-function extractUnifiedDiffSegment(input) {
-  const segs = extractUnifiedDiffSegments(input);
-  if (segs.length) return ensureTrailingLF(segs.join('\n'));
+// If message contains unified diff without "diff --git" (e.g. plain ---/+++), extract whole patch
+function extractWholeUnifiedPatch(input) {
+  const txt = normalizeEOL(input);
+  // find first plausible patch header
+  const lines = txt.split('\n');
+
+  const isHeader = (l) =>
+    /^diff --git /.test(l) ||
+    /^---\s+\S/.test(l) ||
+    /^\*\*\*\s+\S/.test(l) ||   // context diff (rare from LLMs)
+    /^Index:\s+\S/.test(l);
+
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (isHeader(lines[i])) { start = i; break; }
+  }
+  if (start === -1) return '';
+
+  const patch = lines.slice(start).join('\n');
+
+  // quick sanity check: unified diff should have +++ and @@ somewhere
+  const hasTriple = /(^|\n)\+\+\+ /.test(patch);
+  const hasHunk = /(^|\n)@@ /.test(patch);
+  if (hasTriple || hasHunk) return ensureTrailingLF(patch);
+
   return '';
 }
 
+// Build final patch text (no duplication)
 function getPatchText(input) {
   const blocks = extractCodeBlockDiffs(input);
   if (blocks.length) {
     log(`found ${blocks.length} diff/patch code block(s)`);
+    // If blocks exist → use only them to avoid duplication
     return ensureTrailingLF(blocks.join('\n\n'));
   }
-  if (/(^|\n)diff --git\s/.test(input) || /(^|\n)From [0-9a-f]{7,}\s/m.test(input)) {
-    const seg = extractUnifiedDiffSegment(input);
-    if (seg) {
-      log('using unified diff segment(s) from raw text');
-      return seg;
-    }
+  const segs = extractUnifiedDiffSegmentsByDiffGit(input);
+  if (segs.length) {
+    log(`found ${segs.length} raw unified diff segment(s) via diff --git`);
+    return ensureTrailingLF(segs.join('\n'));
+  }
+  // Try a whole unified patch (---/+++), if any
+  const whole = extractWholeUnifiedPatch(input);
+  if (whole) {
+    log('found raw unified patch (---/+++ without diff --git)');
+    return ensureTrailingLF(whole);
   }
   return '';
 }
@@ -213,14 +260,21 @@ function sanitizePatch(patch) {
   let txt = normalizeEOL(patch)
     .replace(/^\uFEFF/, '')
     .replace(/\n\uFEFF/g, '\n');
+
+  // Common invisible troublemakers
+  txt = txt.replace(/[\u200B\u200C\u200D\u2060\u00A0]/g, (m) => {
+    // remove zero-widths and NBSP entirely
+    return '';
+  });
+
   const lines = txt.split('\n');
   let inHunk = false;
 
   for (let i = 0; i < lines.length; i++) {
     let l = lines[i];
 
-    // Remove leading zero-width and NBSP characters; they often break prefixes
-    l = l.replace(/^[\u200B\u200C\u200D\u00A0]+/, '');
+    // Trim only trailing \r (in case some sneaked in)
+    if (l.endsWith('\r')) l = l.slice(0, -1);
 
     if (/^@@ /.test(l)) {
       inHunk = true;
@@ -228,7 +282,7 @@ function sanitizePatch(patch) {
       continue;
     }
     // Headers turn hunk mode off
-    if (/^(diff --git |index |--- |\+\+\+ |new file mode|deleted file mode|rename from |rename to |similarity index |dissimilarity index |old mode |new mode |Binary files |GIT binary patch)/.test(l)) {
+    if (/^(diff --git |index |--- |\+\+\+ |new file mode|deleted file mode|rename from |rename to |similarity index |dissimilarity index |old mode |new mode |Binary files |GIT binary patch|Index: )/.test(l)) {
       inHunk = false;
       lines[i] = l;
       continue;
@@ -236,6 +290,7 @@ function sanitizePatch(patch) {
     if (inHunk) {
       // Valid hunk lines: ' ', '+', '-', '\' (No newline at end of file)
       if (!/^[ +\-\\]/.test(l)) {
+        // Prepend space to salvage malformed context lines
         l = ' ' + l;
       }
       lines[i] = l;
@@ -257,96 +312,176 @@ function rewritePatchPaths(patch, pairs) {
       { from: `b/${from}/`, to: `b/${to}/` },
       { from: `--- a/${from}/`, to: `--- a/${to}/` },
       { from: `+++ b/${from}/`, to: `+++ b/${to}/` },
+      // Also attempt raw ---/+++ without a/b prefixes
+      { from: `--- ${from}/`, to: `--- ${to}/` },
+      { from: `+++ ${from}/`, to: `+++ ${to}/` },
     ];
     for (const r of rules) out = out.replace(new RegExp(escapeRe(r.from), 'g'), r.to);
   }
   return out;
 }
+
 function inferDefaultMappingsForSrc(patch) {
   const pairs = [];
-  if (/(^|\n)(--- a\/src\/|\+\+\+ b\/src\/|diff --git a\/src\/|diff --git [^\n]* b\/src\/)/.test(patch)) {
+  if (/(^|\n)(--- a\/src\/|\+\+\+ b\/src\/|diff --git a\/src\/|diff --git [^\n]* b\/src\/|--- src\/|\+\+\+ src\/)/.test(patch)) {
     const target = flags.srcBase === 'frontend' ? 'apps/frontend/src' : 'apps/backend/src';
     pairs.push({ from: 'src', to: target });
   }
   return pairs;
 }
 
-function applyGitPatch(patchText, { tryRewrites = true } = {}) {
-  const modeLabel = flags.dryRun ? 'Checking patch (dry-run)...' : 'Applying patch...';
-  console.log(`Detected unified diff. ${modeLabel}`);
+function splitPatchIntoSegments(patch) {
+  const lines = patch.split('\n');
+  const segments = [];
+  let buf = [];
+  let sawAnyDiffGit = false;
 
-  // Always try to recalc broken hunk counts; fix whitespace
-  const baseArgs = flags.dryRun ? ['--check', '--recount', '--whitespace=fix'] : ['--index', '--reject', '--recount', '--whitespace=fix'];
-  const tryApply = (text, extraArgs = [], label = '') =>
-    spawnSync('git', ['apply', ...baseArgs, ...extraArgs], { input: text, encoding: 'utf8', stdio: ['pipe', 'inherit', 'inherit'] });
-
-  const strategies = flags.dryRun
-    ? [
-        { args: [], label: 'default' },
-        { args: ['--unidiff-zero'], label: 'unidiff-zero' },
-        { args: ['-p1'], label: 'strip -p1' },
-        { args: ['-p1', '--unidiff-zero'], label: 'strip -p1 + unidiff-zero' },
-        { args: ['-p2'], label: 'strip -p2' },
-        { args: ['-p2', '--unidiff-zero'], label: 'strip -p2 + unidiff-zero' },
-      ]
-    : [
-        { args: [], label: 'default' },
-        { args: ['--unidiff-zero'], label: 'unidiff-zero' },
-        { args: ['-p1'], label: 'strip -p1' },
-        { args: ['-p1', '--unidiff-zero'], label: 'strip -p1 + unidiff-zero' },
-        { args: ['-p2'], label: 'strip -p2' },
-        { args: ['-p2', '--unidiff-zero'], label: 'strip -p2 + unidiff-zero' },
-        { args: ['--3way'], label: '3-way' },
-        { args: ['--3way', '--unidiff-zero'], label: '3-way + unidiff-zero' },
-        { args: ['--3way', '-p1'], label: '3-way -p1' },
-        { args: ['--3way', '-p1', '--unidiff-zero'], label: '3-way -p1 + unidiff-zero' },
-        { args: ['--3way', '-p2'], label: '3-way -p2' },
-        { args: ['--3way', '-p2', '--unidiff-zero'], label: '3-way -p2 + unidiff-zero' },
-      ];
-
-  // First sanitize the incoming patch
-  let working = sanitizePatch(patchText);
-
-  for (const s of strategies) {
-    const res = tryApply(working, s.args, s.label);
-    if (res.status === 0) {
-      console.log(`Patch OK (${s.label}).`);
-      return true;
+  for (const l of lines) {
+    if (l.startsWith('diff --git ')) {
+      sawAnyDiffGit = true;
+      if (buf.length) segments.push(ensureTrailingLF(buf.join('\n')));
+      buf = [l];
+    } else {
+      buf.push(l);
     }
-    console.warn(`git apply failed (${s.label}), trying next...`);
+  }
+  if (buf.length) segments.push(ensureTrailingLF(buf.join('\n')));
+
+  // If there was no diff --git at all, treat the "segment" as a single patch
+  if (!sawAnyDiffGit) {
+    return [ensureTrailingLF(patch)];
   }
 
+  return segments.filter(s => s.trim().length > 0);
+}
+
+function tryGitApply(text, extraArgs = [], label = '') {
+  const baseArgs = flags.dryRun
+    ? ['--check', '--recount', '--whitespace=fix']
+    : ['--recount', '--whitespace=fix'];
+  const args = ['apply', ...baseArgs, ...extraArgs];
+  log('git', args.join(' '), label ? `[${label}]` : '');
+  return spawnSync('git', args, { input: text, encoding: 'utf8', stdio: ['pipe', 'inherit', 'inherit'] });
+}
+
+function buildStrategies() {
+  const bases = [
+    [],
+    ['--unidiff-zero'],
+    ['-p1'],
+    ['-p1', '--unidiff-zero'],
+    ['-p2'],
+    ['-p2', '--unidiff-zero'],
+  ];
+  const ignores = [
+    [],
+    ['--ignore-space-change'],
+    ['--ignore-whitespace'],
+  ];
+  const combos = [];
+  for (const b of bases) for (const ig of ignores) combos.push([...b, ...ig]);
+
+  const with3way = [];
+  for (const c of combos) with3way.push(['--3way', ...c]);
+
+  // Prefer 3-way first (helps when worktree diverged), then plain combos
+  return [...with3way, ...combos];
+}
+
+function reverseCheck(text) {
+  // If segment seems already applied, `git apply --reverse --check` should succeed for some combo
+  const reverseCombos = [
+    [],
+    ['--unidiff-zero'],
+    ['-p1'],
+    ['-p2'],
+    ['--ignore-space-change'],
+    ['--ignore-whitespace'],
+    ['--3way'],
+  ];
+  for (const s of reverseCombos) {
+    const res = tryGitApply(text, ['--reverse', ...s], `reverse ${s.join(' ')}`);
+    if (res.status === 0) return true;
+  }
+  return false;
+}
+
+function applySegment(seg) {
+  const strategies = buildStrategies();
+
+  // Quick reverse-check per segment
+  if (!flags.dryRun && reverseCheck(seg)) {
+    console.log('Segment already applied (reverse-check). Skipping.');
+    return { ok: true, alreadyApplied: true };
+  }
+
+  for (const s of strategies) {
+    const res = tryGitApply(seg, s, `seg ${s.join(' ')}`);
+    if (res.status === 0) return { ok: true, alreadyApplied: false };
+  }
+  return { ok: false, alreadyApplied: false };
+}
+
+function applyGitPatch(patchText, { tryRewrites = true } = {}) {
+  console.log(`Detected unified diff. ${flags.dryRun ? 'Checking patch (dry-run)...' : 'Applying patch...'}`);
+
+  const orig = sanitizePatch(patchText);
+
+  // 1) Try original, split into segments, apply sequentially
+  let segments = splitPatchIntoSegments(orig);
+  let allOk = true;
+  let anyApplied = false;
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    console.log(`>>> Applying segment ${i + 1}/${segments.length}`);
+    const r = applySegment(seg);
+    if (r.ok) { anyApplied = true; continue; }
+    allOk = false;
+    console.warn(`Segment ${i + 1} failed on original paths.`);
+  }
+  if (allOk) {
+    console.log('Patch OK (all segments).');
+    return { ok: true, alreadyApplied: !anyApplied };
+  }
+
+  // 2) Try path rewrites if allowed
   if (tryRewrites && !flags.noPathRewrite) {
-    // User-defined map rules have priority
-    let mapped = rewritePatchPaths(working, flags.maps);
+    let mapped = rewritePatchPaths(orig, flags.maps);
     const inferred = inferDefaultMappingsForSrc(mapped);
     if (inferred.length) mapped = rewritePatchPaths(mapped, inferred);
-
     mapped = sanitizePatch(mapped);
 
-    console.warn('Retrying with rewritten paths...');
-    for (const s of strategies) {
-      const res = tryApply(mapped, s.args, `rewrite + ${s.label}`);
-      if (res.status === 0) {
-        console.log(`Patch OK after rewrite (${s.label}).`);
-        return true;
-      }
-      console.warn(`git apply failed (rewrite + ${s.label}), trying next...`);
+    const segs2 = splitPatchIntoSegments(mapped);
+    let allOk2 = true;
+    let anyApplied2 = false;
+    for (let i = 0; i < segs2.length; i++) {
+      const seg = segs2[i];
+      console.log(`>>> Applying (rewritten) segment ${i + 1}/${segs2.length}`);
+      const r = applySegment(seg);
+      if (r.ok) { anyApplied2 = true; continue; }
+      allOk2 = false;
+      console.warn(`Segment ${i + 1} failed on rewritten paths.`);
     }
+    if (allOk2) {
+      console.log('Patch OK after rewrite (all segments).');
+      return { ok: true, alreadyApplied: !anyApplied2 };
+    }
+
+    // Save debugging artifacts
     const p1 = path.join(process.cwd(), 'ai.patch');
     const p2 = path.join(process.cwd(), 'ai.rewritten.patch');
     const p3 = path.join(process.cwd(), 'ai.sanitized.patch');
     fs.writeFileSync(p1, patchText, 'utf8');
     fs.writeFileSync(p2, mapped, 'utf8');
-    fs.writeFileSync(p3, working, 'utf8');
-    console.error(`All strategies failed. Saved to:\n  ${p1}\n  ${p2}\n  ${p3}\nTry: git apply ${flags.dryRun ? '--check ' : '--index --reject '} ${p2}`);
-    process.exit(2);
+    fs.writeFileSync(p3, orig, 'utf8');
+    console.warn(`Some segments failed. Saved to:\n  ${p1}\n  ${p2}\n  ${p3}`);
+    return { ok: false, alreadyApplied: false };
   }
 
   const tmp = path.join(process.cwd(), 'ai.patch');
   fs.writeFileSync(tmp, patchText, 'utf8');
-  console.error(`git apply failed. Patch saved to ${tmp}. Try: git apply ${flags.dryRun ? '--check ' : '--index --reject '} ${tmp}`);
-  process.exit(2);
+  console.warn(`git apply failed. Patch saved to ${tmp}.`);
+  return { ok: false, alreadyApplied: false };
 }
 
 function parseBlocks(input) {
@@ -442,13 +577,32 @@ function applyBlocks(blocks, rootDir) {
   }
   if (flags.saveInput) fs.writeFileSync(path.join(process.cwd(), 'ai.last.txt'), input, 'utf8');
 
-  const patch = getPatchText(input);
-  if (patch) {
-    applyGitPatch(patch, { tryRewrites: !flags.noPathRewrite });
+  const patch = flags.onlyBlocks ? '' : getPatchText(input);
+  const blocks = flags.onlyDiff ? [] : parseBlocks(input);
+
+  // Prefer blocks if asked
+  if (flags.preferBlocks && blocks.length) {
+    applyBlocks(blocks, path.resolve(flags.root));
     process.exit(0);
   }
 
-  const blocks = parseBlocks(input);
+  if (patch) {
+    const res = applyGitPatch(patch, { tryRewrites: !flags.noPathRewrite });
+    if (res.ok) process.exit(0);
+
+    // Fallback to blocks if diff failed and blocks exist
+    if (blocks.length) {
+      console.warn('Diff failed. Falling back to path-blocks...');
+      applyBlocks(blocks, path.resolve(flags.root));
+      process.exit(0);
+    }
+
+    // Final failure
+    console.error('Diff/patch failed and no path-blocks found. See ai.patch/ai.rewritten.patch/ai.sanitized.patch for details.');
+    process.exit(2);
+  }
+
+  // No diff → try blocks
   if (blocks.length) {
     applyBlocks(blocks, path.resolve(flags.root));
     process.exit(0);

@@ -1,4 +1,3 @@
-// path: apps/backend/src/database/entities/vehicle.entity.ts
 import { 
   Entity, 
   Column, 
@@ -8,7 +7,8 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
-  Index
+  Index,
+  Check
 } from 'typeorm';
 import { Company } from './company.entity';
 import { Customer } from './customer.entity';
@@ -24,12 +24,16 @@ export enum EngineType {
 }
 
 @Entity('vehicles')
+@Check(`"mileage" IS NULL OR "mileage" >= 0`)
+@Check(`"engine_volume" IS NULL OR ("engine_volume" >= 0.1 AND "engine_volume" <= 20.0)`)
+@Check(`"year" IS NULL OR "year" >= 1900`)
+@Check(`"year" IS NULL OR "year" <= EXTRACT(YEAR FROM CURRENT_DATE) + 2`)
 @Index(['companyId'])
 @Index(['customerId'])
 @Index(['vin'], { unique: true, where: 'vin IS NOT NULL AND is_deleted = false' })
 @Index(['licensePlate', 'companyId'], { unique: true, where: 'license_plate IS NOT NULL AND is_deleted = false' })
 @Index(['isDeleted'])
-@Index(['isActive']) // 🔥 ДОБАВЛЕНО: Индекс для isActive
+@Index(['isActive'])
 export class Vehicle {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -83,20 +87,19 @@ export class Vehicle {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
-  // 🔥 ДОБАВЛЕНО: Поле isActive для управления активностью
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 
   @Column({ name: 'is_deleted', type: 'boolean', default: false })
   isDeleted: boolean;
 
-  @Column({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
   deletedAt: Date | null;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 
   @ManyToOne(() => Company)

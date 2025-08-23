@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles-catalogue/dto/brands/brand-response.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class BrandResponseDto {

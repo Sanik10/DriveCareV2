@@ -6,7 +6,6 @@ import { VehicleBasicInfo, VehicleWithDetails } from '../types/vehicles.types';
 
 @Injectable()
 export class VehiclesMapperService {
-  
   mapToResponseDto(vehicle: Vehicle): VehicleResponseDto {
     const dto: VehicleResponseDto = {
       id: vehicle.id,
@@ -29,7 +28,6 @@ export class VehiclesMapperService {
       displayName: this.formatVehicleDisplayName(vehicle),
     };
 
-    // Дополнительные поля из relations
     if (vehicle.customer) {
       dto.customerName = this.formatCustomerName(vehicle.customer);
     }
@@ -50,12 +48,11 @@ export class VehiclesMapperService {
       dto.serviceHistoryCount = vehicle.serviceHistory.length;
     }
 
-    // Проверка необходимости ТО
     if (vehicle.nextServiceDate) {
       const today = new Date();
       const nextService = new Date(vehicle.nextServiceDate);
       dto.needsService = nextService <= today;
-      
+
       const diffTime = nextService.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       dto.daysUntilService = diffDays;
@@ -64,8 +61,26 @@ export class VehiclesMapperService {
     return dto;
   }
 
+  mapToResponseDtoForRole(vehicle: Vehicle, role?: string): VehicleResponseDto {
+    const dto = this.mapToResponseDto(vehicle);
+    const lowPIIRoles = new Set(['mechanic', 'diagnostic']);
+    if (role && lowPIIRoles.has(role)) {
+      if (dto.vin) dto.vin = `***${dto.vin.slice(-6)}`;
+      if (dto.licensePlate) dto.licensePlate = this.maskLicensePlate(dto.licensePlate);
+      dto.notes = undefined;
+      if (!vehicle.licensePlate && vehicle.vin) {
+        dto.displayName = dto.displayName?.replace(/VIN:\s*[A-Z0-9]+$/i, `VIN: ${vehicle.vin.slice(-6)}`);
+      }
+    }
+    return dto;
+  }
+
+  mapArrayToResponseDtoForRole(vehicles: Vehicle[], role?: string): VehicleResponseDto[] {
+    return vehicles.map((v) => this.mapToResponseDtoForRole(v, role));
+  }
+
   mapArrayToResponseDto(vehicles: Vehicle[]): VehicleResponseDto[] {
-    return vehicles.map(vehicle => this.mapToResponseDto(vehicle));
+    return vehicles.map((vehicle) => this.mapToResponseDto(vehicle));
   }
 
   mapToBasicInfo(vehicle: Vehicle): VehicleBasicInfo {
@@ -78,13 +93,13 @@ export class VehiclesMapperService {
       customerId: vehicle.customerId,
       customerName: vehicle.customer ? this.formatCustomerName(vehicle.customer) : '',
       companyId: vehicle.companyId,
-      isActive: true, // Assuming active if not deleted
+      isActive: Boolean(vehicle.isActive),
     };
-  }
+    }
 
   mapToWithDetails(vehicle: Vehicle): VehicleWithDetails {
     const basicInfo = this.mapToBasicInfo(vehicle);
-    
+
     return {
       ...basicInfo,
       model: {
@@ -117,7 +132,6 @@ export class VehiclesMapperService {
   formatVehicleDisplayName(vehicle: Vehicle): string {
     const parts: string[] = [];
 
-    // Бренд и модель
     if (vehicle.model) {
       if (vehicle.model.brand) {
         parts.push(`${vehicle.model.brand.name} ${vehicle.model.name}`);
@@ -126,16 +140,14 @@ export class VehiclesMapperService {
       }
     }
 
-    // Год
     if (vehicle.year) {
       parts.push(`(${vehicle.year})`);
     }
 
-    // Номер или VIN
     if (vehicle.licensePlate) {
       parts.push(`[${vehicle.licensePlate}]`);
     } else if (vehicle.vin) {
-      parts.push(`[VIN: ${vehicle.vin.slice(-6)}]`); // Последние 6 символов VIN
+      parts.push(`[VIN: ${vehicle.vin.slice(-6)}]`);
     }
 
     return parts.length > 0 ? parts.join(' ') : `Автомобиль ${vehicle.id.slice(-8)}`;
@@ -145,7 +157,7 @@ export class VehiclesMapperService {
     if (vehicle.licensePlate) {
       return vehicle.licensePlate;
     }
-    
+
     if (vehicle.vin) {
       return `VIN: ${vehicle.vin.slice(-6)}`;
     }
@@ -161,11 +173,20 @@ export class VehiclesMapperService {
     if (customer.type === 'company' && customer.companyName) {
       return customer.companyName;
     }
-    
+
     if (customer.firstName && customer.lastName) {
       return `${customer.firstName} ${customer.lastName}`;
     }
-    
+
     return customer.firstName || customer.lastName || customer.companyName || customer.email;
+  }
+
+  private maskLicensePlate(lp?: string): string | undefined {
+    if (!lp) return undefined;
+    const s = String(lp);
+    if (s.length <= 2) return s[0] + '•';
+    const start = s.slice(0, 2);
+    const end = s.slice(-2);
+    return `${start}••${end}`;
   }
 }

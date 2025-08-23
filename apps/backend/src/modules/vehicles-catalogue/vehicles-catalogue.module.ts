@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles-catalogue/vehicles-catalogue.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VehiclesCatalogueController } from './vehicles-catalogue.controller';

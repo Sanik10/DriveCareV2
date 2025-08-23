@@ -15,6 +15,7 @@ import {
   ParseBoolPipe,
   Req,
   BadRequestException,
+  Header,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -106,12 +107,10 @@ export class VehiclesController {
     @Query('sortField', new DefaultValuePipe('createdAt')) sortField: string = 'createdAt',
     @Query('sortOrder', new DefaultValuePipe('desc')) sortOrder: 'asc' | 'desc' = 'desc',
   ): Promise<PaginatedVehiclesResponseDto> {
-    // Superadmin-policy: требуем явный companyId для листингов
     if (req.user.role === 'superadmin' && !companyId) {
       throw new BadRequestException('companyId is required for superadmin listings');
     }
 
-    // Нормализация входных параметров
     const toNum = (v: any): number | undefined => {
       if (v === null || v === undefined || v === '') return undefined;
       const n = Number(v);
@@ -160,6 +159,10 @@ export class VehiclesController {
   @ApiUnauthorizedResponse({ description: 'Требуется авторизация' })
   @ApiForbiddenResponse({ description: 'Нет доступа к клиенту' })
   @Throttle({ default: { limit: 50, ttl: 60000 } })
+  @Roles('company_owner', 'company_admin', 'manager', 'mechanic', 'superadmin')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
   async findByCustomer(@Param('customerId') customerId: string, @Req() req: RequestWithUser): Promise<VehicleResponseDto[]> {
     return this.vehiclesService.getVehiclesByCustomer(customerId, req.user);
   }
@@ -171,9 +174,17 @@ export class VehiclesController {
     summary: 'Статистика по автопарку',
     description: 'Получение статистики по автомобилям для дашборда.',
   })
+  @ApiQuery({ name: 'companyId', required: false, description: 'ID компании (обязательно для superadmin)' })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  async getStats(@Req() req: RequestWithUser): Promise<any> {
-    return this.vehiclesService.getStats(req.user.companyId!);
+  async getStats(
+    @Req() req: RequestWithUser,
+    @Query('companyId') companyId?: string,
+  ): Promise<any> {
+    if (req.user.role === 'superadmin' && !companyId) {
+      throw new BadRequestException('companyId is required for superadmin listings');
+    }
+    const targetCompanyId = req.user.role === 'superadmin' ? companyId! : req.user.companyId!;
+    return this.vehiclesService.getStats(targetCompanyId);
   }
 
   @Get(':id')
@@ -190,8 +201,11 @@ export class VehiclesController {
   @ApiUnauthorizedResponse({ description: 'Требуется авторизация' })
   @ApiForbiddenResponse({ description: 'Нет доступа к автомобилю' })
   @Throttle({ default: { limit: 50, ttl: 60000 } })
-  async findOne(@Param('id') id: string): Promise<VehicleResponseDto> {
-    return this.vehiclesService.findOne(id);
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  async findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<VehicleResponseDto> {
+    return this.vehiclesService.findOneForUser(id, req.user);
   }
 
   @Patch(':id')

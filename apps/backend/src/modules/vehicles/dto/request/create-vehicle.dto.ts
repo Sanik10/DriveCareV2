@@ -49,6 +49,7 @@ export class CreateVehicleDto {
     minLength: VEHICLES_CONSTANTS.VALIDATION.VIN_LENGTH,
     maxLength: VEHICLES_CONSTANTS.VALIDATION.VIN_LENGTH,
   })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
   @IsString({ message: 'VIN должен быть строкой' })
   @Length(VEHICLES_CONSTANTS.VALIDATION.VIN_LENGTH, VEHICLES_CONSTANTS.VALIDATION.VIN_LENGTH, {
     message: `VIN должен содержать ровно ${VEHICLES_CONSTANTS.VALIDATION.VIN_LENGTH} символов`,
@@ -63,6 +64,9 @@ export class CreateVehicleDto {
     minLength: VEHICLES_CONSTANTS.VALIDATION.MIN_LICENSE_PLATE_LENGTH,
     maxLength: VEHICLES_CONSTANTS.VALIDATION.MAX_LICENSE_PLATE_LENGTH,
   })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase().replace(/\s+/g, ' ') : value,
+  )
   @IsString({ message: 'Номер должен быть строкой' })
   @Length(
     VEHICLES_CONSTANTS.VALIDATION.MIN_LICENSE_PLATE_LENGTH,

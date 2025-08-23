@@ -1,387 +1,249 @@
-Отлично! Делаем Вариант B — “блоки с путём” + скрипт, который сам раскладывает файлы. Ниже — максимально подробный пошаговый план с командами и готовыми шаблонами.
+Да, сделаем набор “живых” тестов на новом скрипте. Ниже 8 тестов, каждый проверяет свой сценарий. Формат:
+- Setup: создаём/заливаем исходники через path‑blocks (запускать с --prefer-blocks).
+- Patch: применяем diff (запускать без флагов или с --verbose, по желанию).
 
-Идея: ты продолжаешь просить ИИ присылать полные файлы в формате:
-<!-- path: относительный/путь/внутри/репо -->
+Команды для запуска:
+- Setup: node scripts/apply-from-clipboard.mjs --root . --prefer-blocks --verbose
+- Dry-run патча: node scripts/apply-from-clipboard.mjs --root . --dry-run --verbose
+- Применение патча: node scripts/apply-from-clipboard.mjs --root . --verbose
+
+Важно
+- Копируй “Setup” отдельно от “Patch” (по одному блоку за прогон).
+- Путь файлов — внутри apps/backend/src/ai-tests (чтобы не мешать проекту).
+- В diff-хунках контент должен точно совпадать с исходником: соблюдай пробелы и строки (скрипт теперь многое прощает, но лучше без сюрпризов).
+
+Тест 1 — Single-file diff (базовый кейс)
+Setup (создаём файл):
+<!-- path: apps/backend/src/ai-tests/test1.ts, action: replace -->
 ```ts
-...полный контент файла...
-```
-Дальше ты просто копируешь весь ответ в буфер → запускаешь один скрипт → файлы раскладываются по местам. Скрипт также понимает удаление и (дополнительно) перенос/переименование файлов.
-
-Шаг 0 — подготовка (разово)
-1) Убедись, что ты в корне репозитория:
-- /Users/mac/Desktop/GitHubProj/DriveCareV2
-
-2) На всякий случай создай ветку под этот механизм:
-- git checkout -b chore/ai-apply-pipeline
-
-Шаг 1 — добавляем скрипт
-1) Создай (или открой) папку scripts (у тебя уже есть).
-2) Создай файл scripts/apply-from-clipboard.mjs и вставь код ниже.
-
-```js
-#!/usr/bin/env node
-/* Apply AI changes from clipboard or stdin.
-   Supported formats:
-   A) Unified diff (contains "diff --git") → applies via `git apply`.
-   B) Path-blocks:
-      <!-- path: relative/path.ext[, action: delete|replace|append|move, from: old/path.ext] -->
-      ```lang
-      ...full file content...
-      ```
-   - Default action is "replace".
-   - delete: removes file.
-   - append: appends content to file (creates if not exists).
-   - move: moves file from "from" to "path" (no content block needed, but allowed).
-   Usage:
-     pbpaste | node scripts/apply-from-clipboard.mjs [--root .] [--dry-run] [--verbose]
-     node scripts/apply-from-clipboard.mjs --dry-run (reads from clipboard on macOS)
-*/
-import fs from 'fs';
-import path from 'path';
-import { spawnSync } from 'child_process';
-
-const args = process.argv.slice(2);
-const flags = {
-  root: '.',
-  dryRun: false,
-  verbose: false,
-};
-
-for (const a of args) {
-  if (a === '--dry-run') flags.dryRun = true;
-  else if (a === '--verbose') flags.verbose = true;
-  else if (a.startsWith('--root=')) flags.root = a.slice('--root='.length);
-}
-
-function log(...m) {
-  if (flags.verbose) console.log('[apply]', ...m);
-}
-
-async function readInput() {
-  const isPiped = !process.stdin.isTTY;
-  if (isPiped) {
-    const chunks = [];
-    for await (const c of process.stdin) chunks.push(c);
-    return Buffer.concat(chunks).toString('utf8');
-  }
-  const r = spawnSync('bash', ['-lc', 'pbpaste'], { encoding: 'utf8' });
-  if (r.status !== 0) {
-    console.error('Failed to read from clipboard. Pipe content via stdin or install pbpaste.');
-    process.exit(1);
-  }
-  return r.stdout;
-}
-
-function applyGitPatch(patchText) {
-  console.log('Detected unified diff. Applying via git apply...');
-  const tryApply = (extraArgs = []) =>
-    spawnSync('git', ['apply', '--index', '--reject', '--whitespace=fix', ...extraArgs], {
-      input: patchText,
-      encoding: 'utf8',
-      stdio: ['pipe', 'inherit', 'inherit'],
-    });
-
-  let res = tryApply([]);
-  if (res.status !== 0) {
-    console.warn('git apply failed, retry with -p1');
-    res = tryApply(['-p1']);
-  }
-  if (res.status !== 0) {
-    const tmp = path.join(process.cwd(), 'ai.patch');
-    fs.writeFileSync(tmp, patchText, 'utf8');
-    console.error(`git apply failed. Patch saved to ${tmp}. Try: git apply --index --reject ${tmp}`);
-    process.exit(2);
-  }
-  console.log('Patch applied.');
-}
-
-function parseBlocks(input) {
-  // Matches:
-  // <!-- path: file[, key: value, key2: value2] -->
-  // ```lang
-  // content
-  // ```
-  const re =
-    /<!--\s*path:\s*([^\s,>]+)(?:\s*,\s*([^>]*))?\s*-->\s*```(?:[a-zA-Z0-9#+.\-]*)\s*\n([\s\S]*?)```/g;
-  const blocks = [];
-  let m;
-  while ((m = re.exec(input)) !== null) {
-    const relPath = m[1].trim();
-    const optsRaw = (m[2] || '').trim();
-    const content = m[3] ?? '';
-    const options = {};
-    if (optsRaw) {
-      for (const kv of optsRaw.split(',').map((s) => s.trim()).filter(Boolean)) {
-        const idx = kv.indexOf(':');
-        if (idx === -1) {
-          options[kv.toLowerCase()] = true;
-        } else {
-          const key = kv.slice(0, idx).trim().toLowerCase();
-          const val = kv.slice(idx + 1).trim();
-          options[key] = val;
-        }
-      }
-    }
-    blocks.push({ relPath, options, content });
-  }
-  return blocks;
-}
-
-function normalizeEOL(s) {
-  return s.replace(/\r\n/g, '\n');
-}
-
-function ensureDir(filePath) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-}
-
-function resolveSafe(rootDir, rel) {
-  const rootAbs = path.resolve(rootDir);
-  const out = path.resolve(rootAbs, rel);
-  if (out !== rootAbs && !out.startsWith(rootAbs + path.sep)) {
-    throw new Error(`Path escapes root: ${rel}`);
-  }
-  return out;
-}
-
-function applyBlocks(blocks, rootDir) {
-  const actions = [];
-  for (const b of blocks) {
-    const outPath = resolveSafe(rootDir, b.relPath);
-    const action = ((b.options.action || b.options.mode) ?? 'replace').toString().toLowerCase();
-    if (action === 'delete') {
-      actions.push({ type: 'delete', outPath });
-    } else if (action === 'append') {
-      actions.push({ type: 'append', outPath, content: normalizeEOL(b.content) });
-    } else if (action === 'move') {
-      const fromRel = b.options.from;
-      if (!fromRel) {
-        console.error(`Move action requires "from: old/path". Block: ${b.relPath}`);
-        process.exit(2);
-      }
-      const fromPath = resolveSafe(rootDir, fromRel);
-      actions.push({ type: 'move', fromPath, outPath });
-      // Optional: if content present with move, also replace destination content after move
-      if (b.content && b.content.trim()) {
-        actions.push({ type: 'replace', outPath, content: normalizeEOL(b.content) });
-      }
-    } else {
-      actions.push({ type: 'replace', outPath, content: normalizeEOL(b.content) });
-    }
-  }
-
-  if (flags.dryRun) {
-    console.log('Dry-run. Planned changes:');
-    for (const a of actions) {
-      if (a.type === 'move') {
-        console.log('- move', path.relative(process.cwd(), a.fromPath), '→', path.relative(process.cwd(), a.outPath));
-      } else {
-        console.log('-', a.type, path.relative(process.cwd(), a.outPath));
-      }
-    }
-    return;
-  }
-
-  let changed = 0;
-  for (const a of actions) {
-    if (a.type === 'delete') {
-      if (fs.existsSync(a.outPath)) {
-        fs.rmSync(a.outPath);
-        log('deleted', a.outPath);
-        changed++;
-      } else {
-        log('skip delete (not found)', a.outPath);
-      }
-    } else if (a.type === 'append') {
-      ensureDir(a.outPath);
-      fs.appendFileSync(a.outPath, a.content);
-      log('appended', a.outPath);
-      changed++;
-    } else if (a.type === 'move') {
-      ensureDir(a.outPath);
-      if (!fs.existsSync(a.fromPath)) {
-        console.error(`Move failed: source not found ${a.fromPath}`);
-        process.exit(2);
-      }
-      fs.renameSync(a.fromPath, a.outPath);
-      log('moved', a.fromPath, '→', a.outPath);
-      changed++;
-    } else if (a.type === 'replace') {
-      ensureDir(a.outPath);
-      fs.writeFileSync(a.outPath, a.content);
-      log('wrote', a.outPath);
-      changed++;
-    }
-  }
-  console.log(`Applied ${changed} change(s).`);
-}
-
-(async () => {
-  const input = await readInput();
-  if (!input || !input.trim()) {
-    console.error('No input. Copy message to clipboard or pipe it via stdin.');
-    process.exit(1);
-  }
-
-  if (/(^|\n)diff --git\s/.test(input)) {
-    applyGitPatch(input);
-    process.exit(0);
-  }
-
-  const blocks = parseBlocks(input);
-  if (!blocks.length) {
-    console.error('No blocks found. Expect either "diff --git" or <!-- path: ... --> + ```...``` blocks.');
-    process.exit(1);
-  }
-
-  applyBlocks(blocks, path.resolve(flags.root));
-})();
-```
-
-3) Сделай файл исполняемым (не обязательно, но удобно):
-- chmod +x scripts/apply-from-clipboard.mjs
-
-Шаг 2 — добавляем npm-скрипты
-Открой package.json и добавь (или расширь) секцию scripts:
-
-```json
-{
-  "scripts": {
-    "apply:clip": "node scripts/apply-from-clipboard.mjs --root .",
-    "apply:clip:dry": "node scripts/apply-from-clipboard.mjs --root . --dry-run --verbose"
-  }
+export function hello(name: string): string {
+  return `Hello, ${name}`;
 }
 ```
 
-Теперь можно:
-- Копировать ответ ИИ → npm run apply:clip
-- Для проверки перед применением: npm run apply:clip:dry
-
-Шаг 3 — добавляем VS Code Task и хоткей (опционально, но удобно)
-1) Создай .vscode/tasks.json:
-```json
-{
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "Apply AI from clipboard",
-      "type": "shell",
-      "command": "node scripts/apply-from-clipboard.mjs --root ${workspaceFolder}",
-      "problemMatcher": []
-    },
-    {
-      "label": "Apply AI from clipboard (dry-run)",
-      "type": "shell",
-      "command": "node scripts/apply-from-clipboard.mjs --root ${workspaceFolder} --dry-run --verbose",
-      "problemMatcher": []
-    }
-  ]
-}
+Patch (меняем одну строку):
+```diff
+diff --git a/apps/backend/src/ai-tests/test1.ts b/apps/backend/src/ai-tests/test1.ts
+index 1111111..2222222 100644
+--- a/apps/backend/src/ai-tests/test1.ts
++++ b/apps/backend/src/ai-tests/test1.ts
+@@ -1,3 +1,3 @@
+ export function hello(name: string): string {
+-  return `Hello, ${name}`;
++  return `Hello, ${name}!`.toUpperCase();
+ }
 ```
 
-2) Назначь хоткей:
-- VS Code → Keyboard Shortcuts → открой keybindings.json → добавь:
-```json
-[
-  {
-    "key": "cmd+shift+9",
-    "command": "workbench.action.tasks.runTask",
-    "args": "Apply AI from clipboard"
-  },
-  {
-    "key": "cmd+shift+8",
-    "command": "workbench.action.tasks.runTask",
-    "args": "Apply AI from clipboard (dry-run)"
-  }
-]
-```
-
-Шаг 4 — как просить ИИ присылать изменения
-Сохрани себе этот промпт и вставляй в начало запросов к ИИ:
-
-```
-Формат ответа строго такой:
-- Для каждого измененного файла:
-  <!-- path: <относительный путь от корня репо>, action: replace -->
-  ```<язык>
-  <полный контент файла>
-  ```
-- Для нового файла: то же самое (action можно опустить — по умолчанию replace).
-- Для удаления файла:
-  <!-- path: <путь>, action: delete -->
-  ```txt
-  (пусто)
-  ```
-- Для переноса/переименования файла:
-  <!-- path: <новый путь>, action: move, from: <старый путь> -->
-  ```<язык>  (опционально: если добавить — скрипт перезапишет файл после переноса)
-  <полный контент>
-  ```
-Текст вне этих блоков можно добавить, но главное — каждый файл должен идти отдельным блоком.
-Не отправляй частичные куски кода — только полные файлы.
-Используй пути от корня (например: apps/backend/src/modules/appointments/appointments.service.ts).
-```
-
-Мини-пример от ИИ:
-<!-- path: apps/backend/src/modules/appointments/appointments.service.ts -->
+Тест 2 — Multi-file diff в одном блоке
+Setup:
+<!-- path: apps/backend/src/ai-tests/test2.ts, action: replace -->
 ```ts
-// полный контент файла...
+export function sum(a: number, b: number): number {
+  return a + b;
+}
 ```
-
-<!-- path: apps/backend/src/modules/appointments/constants/old.ts, action: delete -->
+<!-- path: apps/backend/src/ai-tests/test3.ts, action: replace -->
 ```ts
+export interface GreetingOptions {
+  shout?: boolean;
+}
+export function greetV2(name: string, opts: GreetingOptions = {}): string {
+  const base = `Hello, ${name}`;
+  return opts.shout ? base.toUpperCase() : base;
+}
 ```
 
-<!-- path: apps/backend/src/modules/appointments/new-utils.ts, action: replace -->
+Patch:
+```diff
+diff --git a/apps/backend/src/ai-tests/test2.ts b/apps/backend/src/ai-tests/test2.ts
+index 1111111..2222222 100644
+--- a/apps/backend/src/ai-tests/test2.ts
++++ b/apps/backend/src/ai-tests/test2.ts
+@@ -1,3 +1,7 @@
+-export function sum(a: number, b: number): number {
+-  return a + b;
+-}
++export const PI = 3.14159;
++export function sum(a: number, b: number, factor = 1): number {
++  return (a + b) * factor;
++}
+diff --git a/apps/backend/src/ai-tests/test3.ts b/apps/backend/src/ai-tests/test3.ts
+index 1111111..2222222 100644
+--- a/apps/backend/src/ai-tests/test3.ts
++++ b/apps/backend/src/ai-tests/test3.ts
+@@ -1,6 +1,8 @@
+ export interface GreetingOptions {
+-  shout?: boolean;
++  shout?: boolean;
++  prefix?: string;
+ }
+ export function greetV2(name: string, opts: GreetingOptions = {}): string {
+-  const base = `Hello, ${name}`;
++  const base = `${opts.prefix ?? 'Hello'}, ${name}`;
+   return opts.shout ? base.toUpperCase() : base;
+ }
+```
+
+Тест 3 — Несколько diff‑блоков в одном сообщении
+(скрипт их склеит и применит все)
+Patch (два отдельных блока подряд):
+```diff
+diff --git a/apps/backend/src/ai-tests/test2.ts b/apps/backend/src/ai-tests/test2.ts
+index 2222222..3333333 100644
+--- a/apps/backend/src/ai-tests/test2.ts
++++ b/apps/backend/src/ai-tests/test2.ts
+@@ -1,4 +1,8 @@
+ export const PI = 3.14159;
+ export function sum(a: number, b: number, factor = 1): number {
+   return (a + b) * factor;
+ }
++export function avg(values: number[]): number {
++  return values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0;
++}
+diff --git a/apps/backend/src/ai-tests/test3.ts b/apps/backend/src/ai-tests/test3.ts
+index 2222222..3333333 100644
+--- a/apps/backend/src/ai-tests/test3.ts
++++ b/apps/backend/src/ai-tests/test3.ts
+@@ -1,8 +1,10 @@
+ export interface GreetingOptions {
+   shout?: boolean;
+   prefix?: string;
+ }
++export type Punctuation = '!' | '.' | '?';
+ export function greetV2(name: string, opts: GreetingOptions = {}): string {
+-  const base = `${opts.prefix ?? 'Hello'}, ${name}`;
+-  return opts.shout ? base.toUpperCase() : base;
++  const base = `${(opts.prefix ?? 'Hello')}, ${name}`;
++  return opts.shout ? `${base}!`.toUpperCase() : base;
+ }
+```
+
+Тест 4 — Path rewrite (diff указывает src/, скрипт мапит в apps/backend/src)
+Setup:
+<!-- path: apps/backend/src/ai-tests/rewrite.ts, action: replace -->
 ```ts
-export const x = 1;
+export const tag = 'v1';
+export function tagify(s: string) { return `[${tag}] ${s}`; }
 ```
 
-<!-- path: apps/backend/src/modules/orders/legacy.ts, action: move, from: apps/backend/src/modules/orders/old-legacy.ts -->
+Patch (обрати внимание на пути a/src/...):
+```diff
+diff --git a/src/ai-tests/rewrite.ts b/src/ai-tests/rewrite.ts
+index 1111111..2222222 100644
+--- a/src/ai-tests/rewrite.ts
++++ b/src/ai-tests/rewrite.ts
+@@ -1,2 +1,2 @@
+-export const tag = 'v1';
++export const tag = 'v2';
+ export function tagify(s: string) { return `[${tag}] ${s}`; }
+```
+
+Тест 5 — Игнорирование пробелов (whitespace-insensitive)
+Setup:
+<!-- path: apps/backend/src/ai-tests/whitespace.ts, action: replace -->
 ```ts
-// опциональный новый контент после move
+export function indentA(): string {
+  return 'A';
+}
 ```
 
-Шаг 5 — как применять изменения
-- Способ 1 (быстрый, через буфер):
-  1) Скопируй весь ответ ИИ в буфер (Cmd+C).
-  2) В корне репо: npm run apply:clip:dry — проверь план изменений.
-  3) Если ок: npm run apply:clip — применит.
-  4) Посмотри git status → git diff.
-  5) Закоммить: git add -A && git commit -m "Apply AI patch: <описание>"
+Patch ( меняем отступы, содержимое то же ):
+```diff
+diff --git a/apps/backend/src/ai-tests/whitespace.ts b/apps/backend/src/ai-tests/whitespace.ts
+index 1111111..2222222 100644
+--- a/apps/backend/src/ai-tests/whitespace.ts
++++ b/apps/backend/src/ai-tests/whitespace.ts
+@@ -1,3 +1,3 @@
+ export function indentA(): string {
+-  return 'A';
++    return 'A';
+ }
+```
 
-- Способ 2 (через файл):
-  1) Сохрани ответ в файл, например ai.txt
-  2) cat ai.txt | node scripts/apply-from-clipboard.mjs --root .
-  3) Дальше как обычно: git status → commit.
+Тест 6 — 3‑way merge (патч поверх изменённого файла)
+Setup:
+<!-- path: apps/backend/src/ai-tests/merge.ts, action: replace -->
+```ts
+const a = 1;
+const b = 2;
+export function calc() {
+  return a + b;
+}
+```
 
-Шаг 6 — fallback: поддержка unified diff
-Если ИИ прислал git diff (начинается с diff --git):
-- Просто копируешь → npm run apply:clip
-- Скрипт сам определит формат и выполнит git apply. В случае ошибки сохранит ai.patch в корне.
+Patch 6a (первое изменение):
+```diff
+diff --git a/apps/backend/src/ai-tests/merge.ts b/apps/backend/src/ai-tests/merge.ts
+index 1111111..2222222 100644
+--- a/apps/backend/src/ai-tests/merge.ts
++++ b/apps/backend/src/ai-tests/merge.ts
+@@ -1,4 +1,4 @@
+ const a = 1;
+-const b = 2;
++const b = 3;
+ export function calc() {
+   return a + b;
+ }
+```
 
-Шаг 7 — полезные дополнения (опционально)
-- Автоформат после применения:
-  - Добавь скрипт: "postapply": "prettier --write . && eslint --fix ." (если у тебя установлены prettier/eslint).
-  - Или создай отдельный: "fix": "prettier --write . && eslint --fix ."
-- Безопасность: скрипт не позволяет выходить за корень проекта (path traversal защита).
-- Перенос (move): если укажешь action: move, from: старый_путь — файл переедет. Если добавить контент в блоке — файл после переноса будет перезаписан новым контентом.
+Patch 6b (патч на основе старой версии — меняем return):
+```diff
+diff --git a/apps/backend/src/ai-tests/merge.ts b/apps/backend/src/ai-tests/merge.ts
+index 1111111..3333333 100644
+--- a/apps/backend/src/ai-tests/merge.ts
++++ b/apps/backend/src/ai-tests/merge.ts
+@@ -1,4 +1,4 @@
+ const a = 1;
+ const b = 2;
+ export function calc() {
+-  return a + b;
++  return a + b + 1;
+ }
+```
 
-Troubleshooting
-- Сообщение “No blocks found”:
-  - Проверь, что у блоков есть комментарий <!-- path: ... --> и сразу после него — кодовый блок ```...``` с контентом.
-- Пробелы/язык внутри тройных кавычек:
-  - ```ts, ```json, ```diff и т.п. — ок. Важно закрыть теми же тремя обратными кавычками.
-- Слишком длинный ответ не влазит в буфер:
-  - Сохрани в файл и подай через stdin: cat ai.txt | npm run apply:clip
-- move без from:
-  - Для action: move нужно дописать from: старый/путь.
-- git apply падает:
-  - Запусти ещё раз с -p1 (скрипт пробует сам). Либо сохрани в ai.patch и примени вручную: git apply --index --reject ai.patch
+Ожидаемое: 6a применится; 6b пройдёт через 3‑way и сольёт изменения (итог будет учитывать и b=3 и +1 в сумме).
 
-Готово! Дальше твой цикл будет таким:
-- Просишь ИИ в нужном формате → копируешь → Cmd+Shift+8 (dry-run) → Cmd+Shift+9 (apply) → git commit.
+Тест 7 — Создание нового файла через diff
+Patch:
+```diff
+diff --git a/apps/backend/src/ai-tests/created-by-diff.ts b/apps/backend/src/ai-tests/created-by-diff.ts
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/apps/backend/src/ai-tests/created-by-diff.ts
+@@ -0,0 +1,5 @@
++export function created(): string {
++  return 'I was created by a diff';
++}
++
++export default created;
+```
 
-Если хочешь, могу:
-- Сгенерировать для тебя готовый tasks.json + keybindings.json под твою репу (с учётом текущей структуры).
-- Прислать шаблон первого “проба пера” для Appointments (например, мелкая правка одного файла), чтобы ты проверил процесс.
+Тест 8 — Удаление файла через diff
+Setup (создаём файл, который потом удалим):
+<!-- path: apps/backend/src/ai-tests/delete-me.ts, action: replace -->
+```ts
+export const toBeRemoved = true;
+export function bye() { return 'bye'; }
+```
+
+Patch (удаление):
+```diff
+diff --git a/apps/backend/src/ai-tests/delete-me.ts b/apps/backend/src/ai-tests/delete-me.ts
+deleted file mode 100644
+index 1111111..0000000
+--- a/apps/backend/src/ai-tests/delete-me.ts
++++ /dev/null
+@@ -1,2 +0,0 @@
+-export const toBeRemoved = true;
+-export function bye() { return 'bye'; }
+```
+
+Подсказки по сценариям
+- Если нужно проверить fallback на path‑blocks: пришли заведомо “битый” diff (например, с неправильным путём), и следом path‑block с корректным файлом. Скрипт попробует diff → упадёт → применит path‑blocks.
+- Проверить reverse‑check: примените любой patch второй раз — скрипт должен сказать, что патч уже применён (и не падать).
+
+Если хочешь, могу подготовить ещё тесты:
+- “only-diff” против “only-blocks” режим;
+- “intent to add” (git add -N) как экспериментальная опция для новых файлов без new file mode;
+- батч тесты с множеством файлов и смешанными блоками.

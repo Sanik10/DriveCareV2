@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/users/users.constants.ts
 export const USERS_CONSTANTS = {
   PAGINATION: {
     DEFAULT_PAGE: 1,

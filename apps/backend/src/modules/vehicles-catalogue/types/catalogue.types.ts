@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles-catalogue/types/catalogue.types.ts
 export interface BrandFilter {
   search?: string;
   country?: string;

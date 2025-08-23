@@ -6,7 +6,6 @@ import { DataSource } from 'typeorm';
 import { AuditLog } from '../../database/entities/audit-log.entity';
 
 export enum AuditAction {
-  // Аутентификация
   USER_LOGIN = 'USER_LOGIN',
   USER_LOGIN_FAILED = 'USER_LOGIN_FAILED',
   USER_REGISTERED = 'USER_REGISTERED',
@@ -31,20 +30,17 @@ export enum AuditAction {
   USER_DATA_EXPORTED = 'USER_DATA_EXPORTED',
   USER_CONSENT_REVOKED = 'USER_CONSENT_REVOKED',
 
-  // Security & Access Control
   ACCESS_DENIED = 'ACCESS_DENIED',
   PERMISSION_GRANTED = 'PERMISSION_GRANTED',
   API_ERROR = 'API_ERROR',
   SECURITY_VIOLATION = 'SECURITY_VIOLATION',
   UNAUTHORIZED_ACCESS_ATTEMPT = 'UNAUTHORIZED_ACCESS_ATTEMPT',
 
-  // System & Health
   HEALTH_CHECK_REQUESTED = 'HEALTH_CHECK_REQUESTED',
   SUPERADMIN_INFO_BLOCKED_PRODUCTION = 'SUPERADMIN_INFO_BLOCKED_PRODUCTION',
   SUPERADMIN_INFO_ACCESSED = 'SUPERADMIN_INFO_ACCESSED',
   SUPERADMIN_INFO_ERROR = 'SUPERADMIN_INFO_ERROR',
 
-  // Seeds & Database
   SEEDS_BLOCKED_IN_PRODUCTION = 'SEEDS_BLOCKED_IN_PRODUCTION',
   SEEDS_COMPLETED = 'SEEDS_COMPLETED',
   SEEDS_FAILED = 'SEEDS_FAILED',
@@ -53,26 +49,22 @@ export enum AuditAction {
   SUPERADMIN_USER_CREATED = 'SUPERADMIN_USER_CREATED',
   SUPERADMIN_EXISTENCE_CHECK = 'SUPERADMIN_EXISTENCE_CHECK',
 
-  // Компании
   COMPANY_CREATED = 'COMPANY_CREATED',
   COMPANY_UPDATED = 'COMPANY_UPDATED',
   COMPANY_STATUS_CHANGED = 'COMPANY_STATUS_CHANGED',
   COMPANY_DELETED = 'COMPANY_DELETED',
 
-  // Тарифы
   TARIFF_CREATED = 'TARIFF_CREATED',
   TARIFF_UPDATED = 'TARIFF_UPDATED',
   TARIFF_STATUS_CHANGED = 'TARIFF_STATUS_CHANGED',
   TARIFF_DELETED = 'TARIFF_DELETED',
 
-  // Подписки
   SUBSCRIPTION_CREATED = 'SUBSCRIPTION_CREATED',
   SUBSCRIPTION_UPDATED = 'SUBSCRIPTION_UPDATED',
   SUBSCRIPTION_CANCELED = 'SUBSCRIPTION_CANCELED',
   SUBSCRIPTION_EXPIRED = 'SUBSCRIPTION_EXPIRED',
   SUBSCRIPTION_RENEWED = 'SUBSCRIPTION_RENEWED',
 
-  // Клиенты
   CUSTOMER_CREATED = 'CUSTOMER_CREATED',
   CUSTOMER_UPDATED = 'CUSTOMER_UPDATED',
   CUSTOMER_STATUS_CHANGED = 'CUSTOMER_STATUS_CHANGED',
@@ -82,7 +74,6 @@ export enum AuditAction {
   CUSTOMER_CONSENT_REVOKED = 'CUSTOMER_CONSENT_REVOKED',
   CUSTOMER_ANONYMIZED = 'CUSTOMER_ANONYMIZED',
 
-  // Автомобили
   VEHICLE_CREATED = 'VEHICLE_CREATED',
   VEHICLE_UPDATED = 'VEHICLE_UPDATED',
   VEHICLE_STATUS_CHANGED = 'VEHICLE_STATUS_CHANGED',
@@ -91,12 +82,11 @@ export enum AuditAction {
   VEHICLE_SERVICE_COMPLETED = 'VEHICLE_SERVICE_COMPLETED',
   VEHICLE_TRANSFERRED = 'VEHICLE_TRANSFERRED',
   VEHICLE_MILEAGE_UPDATED = 'VEHICLE_MILEAGE_UPDATED',
+  VEHICLES_LISTED = 'VEHICLES_LISTED',
 
-  // Лимиты
   LIMIT_CHECK_FAILED = 'LIMIT_CHECK_FAILED',
   LIMIT_EXCEEDED = 'LIMIT_EXCEEDED',
 
-  // Inventory Parts
   PART_CREATED = 'PART_CREATED',
   PART_UPDATED = 'PART_UPDATED',
   PART_DELETED = 'PART_DELETED',
@@ -107,14 +97,12 @@ export enum AuditAction {
   PARTS_SEARCHED = 'PARTS_SEARCHED',
   PARTS_BULK_UPDATED = 'PARTS_BULK_UPDATED',
 
-  // Inventory
   INVENTORY_UPDATED = 'INVENTORY_UPDATED',
   RESERVATION_CREATED = 'RESERVATION_CREATED',
   RESERVATION_RELEASED = 'RESERVATION_RELEASED',
   STOCK_RESERVED_FOR_ORDER = 'STOCK_RESERVED_FOR_ORDER',
   STOCK_RELEASED_FROM_ORDER = 'STOCK_RELEASED_FROM_ORDER',
 
-  // Inventory Alerts
   INVENTORY_ALERT_CREATED = 'INVENTORY_ALERT_CREATED',
   INVENTORY_ALERT_UPDATED = 'INVENTORY_ALERT_UPDATED',
   INVENTORY_ALERT_DISMISSED = 'INVENTORY_ALERT_DISMISSED',
@@ -123,7 +111,6 @@ export enum AuditAction {
   INVENTORY_ALERT_SETTINGS_UPDATED = 'INVENTORY_ALERT_SETTINGS_UPDATED',
   INVENTORY_ALERT_TEST_NOTIFICATION = 'INVENTORY_ALERT_TEST_NOTIFICATION',
 
-  // Stock Movements
   STOCK_MOVEMENT_CREATED = 'STOCK_MOVEMENT_CREATED',
   STOCK_MOVEMENT_UPDATED = 'STOCK_MOVEMENT_UPDATED',
   STOCK_MOVEMENT_REVERSED = 'STOCK_MOVEMENT_REVERSED',
@@ -133,7 +120,6 @@ export enum AuditAction {
   STOCK_RECEIPT_CREATED = 'STOCK_RECEIPT_CREATED',
   STOCK_ISSUE_CREATED = 'STOCK_ISSUE_CREATED',
 
-  // Suppliers
   SUPPLIER_CREATED = 'SUPPLIER_CREATED',
   SUPPLIER_UPDATED = 'SUPPLIER_UPDATED',
   SUPPLIER_DEACTIVATED = 'SUPPLIER_DEACTIVATED',
@@ -147,7 +133,6 @@ export enum AuditAction {
   BEST_SUPPLIER_SEARCH = 'BEST_SUPPLIER_SEARCH',
   TOP_SUPPLIERS_VIEWED = 'TOP_SUPPLIERS_VIEWED',
 
-  // Orders
   ORDER_CREATED = 'ORDER_CREATED',
   ORDER_UPDATED = 'ORDER_UPDATED',
   ORDER_STATUS_CHANGED = 'ORDER_STATUS_CHANGED',
@@ -158,18 +143,15 @@ export enum AuditAction {
   ORDER_VIEWED = 'ORDER_VIEWED',
   ORDER_DELETED = 'ORDER_DELETED',
 
-  // Order Services
   ORDER_SERVICE_ADDED = 'ORDER_SERVICE_ADDED',
   ORDER_SERVICE_UPDATED = 'ORDER_SERVICE_UPDATED',
   ORDER_SERVICE_REMOVED = 'ORDER_SERVICE_REMOVED',
   ORDER_SERVICE_STATUS_CHANGED = 'ORDER_SERVICE_STATUS_CHANGED',
 
-  // Order Parts
   ORDER_PART_ADDED = 'ORDER_PART_ADDED',
   ORDER_PART_UPDATED = 'ORDER_PART_UPDATED',
   ORDER_PART_REMOVED = 'ORDER_PART_REMOVED',
 
-  // Invoices
   INVOICE_CREATED = 'INVOICE_CREATED',
   INVOICE_UPDATED = 'INVOICE_UPDATED',
   INVOICE_STATUS_CHANGED = 'INVOICE_STATUS_CHANGED',
@@ -180,7 +162,6 @@ export enum AuditAction {
   INVOICE_AUTO_GENERATED_FROM_ORDER = 'INVOICE_AUTO_GENERATED_FROM_ORDER',
   INVOICE_VIEWED = 'INVOICE_VIEWED',
 
-  // Payments
   PAYMENT_CREATED = 'PAYMENT_CREATED',
   PAYMENT_UPDATED = 'PAYMENT_UPDATED',
   PAYMENT_STATUS_CHANGED = 'PAYMENT_STATUS_CHANGED',
@@ -197,7 +178,6 @@ export enum AuditAction {
   PAYMENT_STATISTICS_GENERATED = 'PAYMENT_STATISTICS_GENERATED',
   PAYMENT_OVERDUE_PROCESSED = 'PAYMENT_OVERDUE_PROCESSED',
 
-  // Appointments
   APPOINTMENT_CREATED = 'APPOINTMENT_CREATED',
   APPOINTMENT_UPDATED = 'APPOINTMENT_UPDATED',
   APPOINTMENT_STATUS_CHANGED = 'APPOINTMENT_STATUS_CHANGED',
@@ -211,14 +191,12 @@ export enum AuditAction {
   APPOINTMENT_RATED = 'APPOINTMENT_RATED',
   APPOINTMENT_CHECK_AVAILABILITY = 'APPOINTMENT_CHECK_AVAILABILITY',
 
-  // Work Schedules
   WORK_SCHEDULE_CREATED = 'WORK_SCHEDULE_CREATED',
   WORK_SCHEDULE_UPDATED = 'WORK_SCHEDULE_UPDATED',
   WORK_SCHEDULE_DELETED = 'WORK_SCHEDULE_DELETED',
   WORK_SCHEDULE_VIEWED = 'WORK_SCHEDULE_VIEWED',
   WORK_SCHEDULES_LISTED = 'WORK_SCHEDULES_LISTED',
 
-  // Schedule Exceptions
   SCHEDULE_EXCEPTION_CREATED = 'SCHEDULE_EXCEPTION_CREATED',
   SCHEDULE_EXCEPTION_STATUS_CHANGED = 'SCHEDULE_EXCEPTION_STATUS_CHANGED',
   SCHEDULE_EXCEPTION_DELETED = 'SCHEDULE_EXCEPTION_DELETED',
@@ -321,7 +299,6 @@ export class AuditService {
     try {
       await repo.save(entity);
     } catch (e: any) {
-      // Аудит не должен ронять приложение, но должен сигнализировать
       this.logger.error(`Failed to persist audit log: ${e?.message || e}`);
     }
   }
@@ -343,7 +320,6 @@ export class AuditService {
 
   private sanitize(data: AuditLogData): AuditLogData {
     const clone: AuditLogData = { ...data };
-    // Не вычищаем email/phone по ключу — в метаданных обычно уже маскируем значения
     const dropKeyPatterns = ['token', 'refreshToken', 'password', 'secret', 'cvv', 'pan', 'apiKey', 'authorization'];
     const limit = (obj?: Record<string, any>) => {
       if (!obj) return obj;
@@ -354,7 +330,7 @@ export class AuditService {
         else res[k] = v;
       }
       const size = Buffer.byteLength(JSON.stringify(res), 'utf8');
-      const max = 20 * 1024; // 20KB
+      const max = 20 * 1024;
       if (size > max) {
         const trimmed: Record<string, any> = {};
         let current = 0;
@@ -373,9 +349,6 @@ export class AuditService {
     return clone;
   }
 
-  // ===== High-level helpers =====
-
-  // Auth
   async logAccessDenied(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.ACCESS_DENIED, { ...data, level: data.level || AuditLevel.WARNING });
   }
@@ -413,7 +386,6 @@ export class AuditService {
     await this.log(AuditAction.USER_ALL_DEVICES_LOGOUT, data);
   }
 
-  // Companies
   async logCompanyCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.COMPANY_CREATED, data);
   }
@@ -427,7 +399,6 @@ export class AuditService {
     await this.log(AuditAction.COMPANY_STATUS_CHANGED, data);
   }
 
-  // Tariffs
   async logTariffCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.TARIFF_CREATED, data);
   }
@@ -441,7 +412,6 @@ export class AuditService {
     await this.log(AuditAction.TARIFF_STATUS_CHANGED, data);
   }
 
-  // Subscriptions
   async logSubscriptionCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.SUBSCRIPTION_CREATED, data);
   }
@@ -458,7 +428,6 @@ export class AuditService {
     await this.log(AuditAction.SUBSCRIPTION_RENEWED, data);
   }
 
-  // Customers
   async logCustomerCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.CUSTOMER_CREATED, data);
   }
@@ -484,7 +453,6 @@ export class AuditService {
     await this.log(AuditAction.CUSTOMER_ANONYMIZED, { ...data, level: AuditLevel.INFO });
   }
 
-  // Vehicles
   async logVehicleCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.VEHICLE_CREATED, data);
   }
@@ -506,8 +474,10 @@ export class AuditService {
   async logVehicleTransferred(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.VEHICLE_TRANSFERRED, data);
   }
+  async logVehiclesListed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.VEHICLES_LISTED, data);
+  }
 
-  // Orders
   async logOrderCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.ORDER_CREATED, data);
   }
@@ -530,7 +500,6 @@ export class AuditService {
     await this.log(AuditAction.ORDER_FINANCIALS_RECALCULATED, data);
   }
 
-  // Limits
   async logLimitCheckFailed(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.LIMIT_CHECK_FAILED, { ...data, level: AuditLevel.ERROR });
   }
@@ -538,7 +507,6 @@ export class AuditService {
     await this.log(AuditAction.LIMIT_EXCEEDED, { ...data, level: AuditLevel.WARNING });
   }
 
-  // Payments
   async logPaymentCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.PAYMENT_CREATED, data);
   }
@@ -564,16 +532,16 @@ export class AuditService {
     await this.log(AuditAction.PAYMENT_PARTIALLY_REFUNDED, data);
   }
   async logPaymentDisputed(data: AuditLogData): Promise<void> {
-    await this.log(AuditAction.PAYMENT_DISPUTED, { ...data, level: data.level || AuditLevel.WARNING });
+    await this.log(AuditAction.PAYMENT_DISPUTED, { ...data, level: AuditLevel.WARNING });
   }
   async logPaymentExpired(data: AuditLogData): Promise<void> {
-    await this.log(AuditAction.PAYMENT_EXPIRED, { ...data, level: data.level || AuditLevel.WARNING });
+    await this.log(AuditAction.PAYMENT_EXPIRED, { ...data, level: AuditLevel.WARNING });
   }
   async logPaymentViewed(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.PAYMENT_VIEWED, data);
   }
   async logPaymentDeleted(data: AuditLogData): Promise<void> {
-    await this.log(AuditAction.PAYMENT_DELETED, { ...data, level: data.level || AuditLevel.WARNING });
+    await this.log(AuditAction.PAYMENT_DELETED, { ...data, level: AuditLevel.WARNING });
   }
   async logPaymentBalanceCalculated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.PAYMENT_BALANCE_CALCULATED, data);
@@ -585,7 +553,6 @@ export class AuditService {
     await this.log(AuditAction.PAYMENT_OVERDUE_PROCESSED, data);
   }
 
-  // Appointments
   async logAppointmentCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.APPOINTMENT_CREATED, data);
   }
@@ -623,7 +590,6 @@ export class AuditService {
     await this.log(AuditAction.APPOINTMENT_CHECK_AVAILABILITY, data);
   }
 
-  // Work Schedules
   async logWorkScheduleCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.WORK_SCHEDULE_CREATED, data);
   }
@@ -640,7 +606,6 @@ export class AuditService {
     await this.log(AuditAction.WORK_SCHEDULES_LISTED, data);
   }
 
-  // Schedule Exceptions
   async logScheduleExceptionCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.SCHEDULE_EXCEPTION_CREATED, data);
   }

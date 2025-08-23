@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles-catalogue/services/models-data.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';

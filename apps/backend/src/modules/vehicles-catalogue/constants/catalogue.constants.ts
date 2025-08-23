@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles-catalogue/constants/catalogue.constants.ts
 export const CATALOGUE_CONSTANTS = {
   VALIDATION: {
     MIN_NAME_LENGTH: 2,

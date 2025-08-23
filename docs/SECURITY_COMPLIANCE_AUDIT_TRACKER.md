@@ -159,6 +159,27 @@
     - Индексы: (companyId), (companyId,isActive), (companyId,dayOfWeek); unique(companyId,userId,dayOfWeek).
     - CHECK: корректность диапазонов времени; efficiency ∈ [0.5;2.0]; перерыв внутри смены и 15..120 минут; длительность смен 2..12 часов.
 
+- **Vehicles (ОБНОВЛЕНО, Tech‑Hardened — завершено):**
+  - Безопасность/PII:
+    - Role‑based маппинг: для mechanic/diagnostic скрываются notes; vin → "***" + last6; номер → частично маскируется (A1••77).
+    - no-store заголовки на детальных ответах и автомобилях клиента (findOne, findByCustomer).
+    - Superadmin‑policy: для stats/dashboard обязателен ?companyId (как и для листинга).
+  - Guards/RBAC:
+    - @AuthWithOwnership + @VehicleResource на ресурсных эндпоинтах.
+    - CompanyOwnershipGuard — кейс 'vehicle' с реальной проверкой владения (validateVehicleOwnership).
+  - DTO/XSS/нормализация:
+    - CreateVehicleDto: Transform для vin/номер (trim + upper), sanitize‑html для notes, строгие Length/Matches/Min/Max.
+  - Data‑layer:
+    - Строгая фильтрация по companyId; безопасные ILIKE/параметры; whitelist сортировок; пагинация с лимитом.
+  - Mapper:
+    - Новые методы mapToResponseDtoForRole/mapArrayToResponseDtoForRole; isActive берётся из entity.
+  - Аудит:
+    - VEHICLES_LISTED, VEHICLE_VIEWED; маскирование ПДн в метаданных; sanitizeVehicleDataMasked для before/after.
+  - Entity/DB:
+    - CHECK: mileage ≥ 0; engine_volume ∈ [0.1; 20.0]; year ∈ [1900; now+2].
+    - Partial unique: vin (WHERE vin IS NOT NULL AND is_deleted=false); (companyId, licensePlate) аналогично.
+    - createdAt/updatedAt/deletedAt → timestamptz; индексы companyId/customerId/isActive/isDeleted.
+
 ---
 
 ## 📊 MASTER MODULE TABLE (обновлено)
@@ -181,7 +202,7 @@
 | 14 | inventory/alerts | ✅ Tech‑Hardened (RBAC + @InventoryAlertResource, superadmin‑rule, sanitize DTO, whitelist сортировок/пагинации, idempotency, settings persistence, scheduler, email notifications, DB checks/indices) | 🟢 402‑ФЗ соблюдено; 152‑ФЗ N/A | 🟡 Высокий | 🟢 Near‑Ready (Tech) |
 | 15 | appointments | 🟢 Near‑Ready (Tech: RBAC/ownership, DTO XSS, tracking/stats) | 🟡 Pending | 🟢 Средний | 🟢 Near‑Ready (Tech) |
 | 16 | work-schedules | 🟢 Near‑Ready (Tech) | 🟡 Pending (light) | 🟢 Средний | 🟢 Near‑Ready (Tech) |
-| 17 | vehicles | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
+| 17 | vehicles | ✅ Tech‑Hardened (RBAC/ownership, XSS DTO, audit, role‑based PII, DB checks/indices, no‑store) | 🟡 152‑ФЗ light pending (орг‑процедуры/ретеншн) | 🟢 Средний | 🟢 COMPLETED (Tech) |
 | 18 | vehicles-catalogue | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
 | 19 | services | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
 | 20 | services/categories | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
@@ -573,6 +594,48 @@
 - [ ] E2E: статусы/услуги, назначение механика, склады, пересчёт totals, RBAC.
 - [ ] Payments/Invoices: запрет отмены при оплаченных платежах/счетах; опциональный авто‑инвойс.
 - [ ] Автопересчёт totals по событийной модели.
+
+---
+
+## 🧩 Vehicles — детальное состояние (Tech‑Hardened, Completed Tech)
+
+### ✅ Реализовано (технически)
+- Guards/RBAC/Ownership:
+  - Все эндпоинты под @AuthWithOwnership; ресурсные — под @VehicleResource.
+  - CompanyOwnershipGuard: добавлен полноценный кейс 'vehicle' с валидацией владения через VehiclesValidationService.validateVehicleOwnership.
+  - Superadmin‑policy: листинги требуют явный companyId (в контроллере), stats/dashboard — также требуют ?companyId для superadmin.
+- Контроллер/безопасность:
+  - Детальные ответы (GET :id) и автомобили клиента (GET customer/:customerId) отдают заголовки Cache-Control: no-store; Pragma: no-cache; Expires: 0.
+  - Throttle в унифицированном формате { default: { limit, ttl } }.
+- DTO/XSS/нормализация:
+  - CreateVehicleDto: Transform для vin и licensePlate (trim + upper + нормализация пробелов), sanitize‑html для notes, строгие Length/Matches/Min/Max.
+  - UpdateVehicleDto: sanitize‑html и лимиты для notes; DateString для дат ТО.
+- Mapper/минимизация ПДн:
+  - Роль‑ориентированная выдача: mapToResponseDtoForRole / mapArrayToResponseDtoForRole; для mechanic/diagnostic скрываются notes, vin → "***"+last6, номер → маска; displayName корректируется.
+  - mapToBasicInfo: isActive берётся из entity (без допущений).
+- Data‑layer/SQL:
+  - Фильтрация по companyId обязательна; безопасные ILIKE; whitelist сортировок; пагинация с верхним лимитом.
+- Бизнес/аудит:
+  - События: VEHICLE_CREATED/UPDATED/STATUS_CHANGED/MILEAGE_UPDATED/SERVICE_COMPLETED/TRANSFERRED/VIEWED и VEHICLES_LISTED.
+  - Метаданные маскированы (vinLast6, licensePlateMasked); before/after — через sanitizeVehicleDataMasked (без сырых ПДн).
+- Entity/DB:
+  - CHECK: mileage ≥ 0; engine_volume ∈ [0.1; 20.0]; year ∈ [1900; currentYear+2].
+  - partial unique: vin WHERE vin IS NOT NULL AND is_deleted=false; (companyId, license_plate) WHERE license_plate IS NOT NULL AND is_deleted=false.
+  - Индексы: companyId, customerId, isActive, isDeleted; timestamptz для createdAt/updatedAt/deletedAt.
+
+### 🟡 Юридическая база (light)
+- 152‑ФЗ:
+  - Реализовано: минимизация ПДн по ролям; маскирование ПДн в аудите; no‑store на PII‑ответах.
+  - Требуется: орг‑регламенты (основание и сроки хранения данных об авто, порядок обращений субъектов). Опционально — VEHICLE_DATA_RETENTION_YEARS + cron‑анонимизация (если политика требует).
+- 242‑ФЗ: соблюдается на уровне инфраструктуры (локализация БД/бэкапов в РФ).
+- 402‑ФЗ/54‑ФЗ/161‑ФЗ/PCI: неприменимо.
+
+### 🧪 Короткий чеклист доводки Vehicles
+- [ ] E2E/интеграция:
+  - Superadmin‑policy: без ?companyId → 400 на листингах/статистике.
+  - Role‑based маскирование в списках и деталях (mechanic/diagnostic).
+  - XSS‑санитизация notes; нормализация vin/номер.
+- [ ] Организационно (152‑ФЗ): регламент хранения/удаления; журнал обращений субъектов; SLA.
 
 ---
 

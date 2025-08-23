@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles-catalogue/dto/brands/create-brand.dto.ts
 import { IsString, IsOptional, MaxLength, MinLength, IsUrl } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CATALOGUE_CONSTANTS } from '../../constants/catalogue.constants';

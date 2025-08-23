@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles-catalogue/vehicles-catalogue.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { BrandsDataService } from './services/brands-data.service';
 import { ModelsDataService } from './services/models-data.service';

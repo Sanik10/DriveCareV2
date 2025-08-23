@@ -1,3 +1,4 @@
+// apps/backend/src/modules/vehicles-catalogue/dto/brands/update-brand.dto.ts
 import { PartialType } from '@nestjs/swagger';
 import { CreateBrandDto } from './create-brand.dto';
 

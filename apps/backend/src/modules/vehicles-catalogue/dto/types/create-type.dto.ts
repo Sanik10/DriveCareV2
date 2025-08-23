@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles-catalogue/dto/types/create-type.dto.ts
 import { IsString, IsOptional, MaxLength, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CATALOGUE_CONSTANTS } from '../../constants/catalogue.constants';

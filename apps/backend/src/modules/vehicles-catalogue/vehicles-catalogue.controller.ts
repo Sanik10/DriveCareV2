@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/vehicles-catalogue/vehicles-catalogue.controller.ts
 import {
   Controller, Get, Post, Body, Patch, Param, Delete,
   HttpCode, HttpStatus, Query, DefaultValuePipe, ParseIntPipe,

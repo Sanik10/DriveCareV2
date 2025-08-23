@@ -1,3 +1,4 @@
+// apps/backend/src/modules/vehicles-catalogue/dto/models/update-model.dto.ts
 import { PartialType } from '@nestjs/swagger';
 import { CreateModelDto } from './create-model.dto';
 

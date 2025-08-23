@@ -1,4 +1,3 @@
-// path: apps/backend/src/common/guards/company-ownership.guard.ts
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException, Logger } from '@nestjs/common';
 import { Reflector, ModuleRef } from '@nestjs/core';
 import { RequestWithUser } from '../../modules/auth/interfaces/request-with-user.interface';
@@ -29,7 +28,6 @@ export class CompanyOwnershipGuard implements CanActivate {
       throw new ForbiddenException('Пользователь не аутентифицирован');
     }
 
-    // Superadmin допускается на ресурсных эндпоинтах; листинги ограничиваются в контроллерах
     if (user.role === 'superadmin') {
       await this.auditService.log(AuditAction.PERMISSION_GRANTED, {
         userId: user.id,
@@ -399,10 +397,34 @@ export class CompanyOwnershipGuard implements CanActivate {
     return true;
   }
 
-  private async checkVehicleOwnership(user: RequestWithUser['user'], _vehicleId: string, _request: any): Promise<boolean> {
-    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании для доступа к автомобилям');
+  private async checkVehicleOwnership(user: RequestWithUser['user'], vehicleId: string, request: any): Promise<boolean> {
+    if (!user.companyId) {
+      await this.auditService.log(AuditAction.ACCESS_DENIED, {
+        userId: user.id,
+        level: AuditLevel.WARNING,
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+        details: { reason: 'User has no company for vehicle access', vehicleId },
+        status: 'denied',
+      });
+      throw new ForbiddenException('Пользователь не принадлежит к компании для доступа к автомобилям');
+    }
+    const { VehiclesValidationService } = await import('../../modules/vehicles/services/vehicles-validation.service');
+    const validationService = this.moduleRef.get(VehiclesValidationService, { strict: false });
+    if (!validationService) throw new ForbiddenException('Доступ к автомобилю временно недоступен');
+    await validationService.validateVehicleOwnership(vehicleId, user.companyId);
+    await this.auditService.log(AuditAction.PERMISSION_GRANTED, {
+      userId: user.id,
+      companyId: user.companyId,
+      level: AuditLevel.INFO,
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent'],
+      details: { reason: 'Vehicle ownership validated', vehicleId },
+      status: 'granted',
+    });
     return true;
   }
+
   private async checkServiceHistoryOwnership(user: RequestWithUser['user'], _historyId: string, _request: any): Promise<boolean> {
     if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании для доступа к истории обслуживания');
     return true;
