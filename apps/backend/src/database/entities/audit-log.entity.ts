@@ -8,36 +8,6 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-export enum AuditAction {
-  USER_LOGIN = 'user_login',
-  USER_LOGIN_FAILED = 'user_login_failed',
-  USER_LOGIN_BLOCKED = 'user_login_blocked',
-  USER_LOGOUT = 'user_logout',
-  USER_REGISTERED = 'user_registered',
-  USER_TOKEN_REFRESH = 'user_token_refresh',
-  USER_TOKEN_REFRESH_FAILED = 'user_token_refresh_failed',
-  USER_DEVICE_LOGOUT = 'user_device_logout',
-  USER_ALL_DEVICES_LOGOUT = 'user_all_devices_logout',
-  PASSWORD_RESET_REQUESTED = 'password_reset_requested',
-  PASSWORD_RESET_COMPLETED = 'password_reset_completed',
-  USER_UPDATED = 'user_updated',
-  USER_DELETED = 'user_deleted',
-  USER_ACTIVATED = 'user_activated',
-  USER_DEACTIVATED = 'user_deactivated',
-  PERMISSION_GRANTED = 'permission_granted',
-  PERMISSION_REVOKED = 'permission_revoked',
-  ACCESS_DENIED = 'access_denied',
-  RATE_LIMIT_EXCEEDED = 'rate_limit_exceeded',
-  API_ERROR = 'api_error',
-}
-
-export enum AuditLevel {
-  INFO = 'info',
-  WARNING = 'warning',
-  ERROR = 'error',
-  CRITICAL = 'critical',
-}
-
 @Entity('audit_logs')
 @Index('idx_audit_company_created_at', ['companyId', 'createdAt'])
 export class AuditLog {
@@ -53,7 +23,7 @@ export class AuditLog {
   @Column({ name: 'action', type: 'varchar', length: 150 })
   action: string;
 
-  @Column({ name: 'level', type: 'varchar', length: 16, default: AuditLevel.INFO })
+  @Column({ name: 'level', type: 'varchar', length: 16, default: 'info' })
   level: 'info' | 'warning' | 'error' | 'critical';
 
   @Column({ name: 'ip_address', type: 'varchar', length: 45, nullable: true })

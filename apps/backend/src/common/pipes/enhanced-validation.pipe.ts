@@ -20,6 +20,27 @@ import { ConfigService } from '@nestjs/config';
  *
  * Важно: не заменяет контекстные валидаторы DTO и БД-уровень, а дополняет их.
  */
+
+// ВЫНЕСЕНО ВНЕ КЛАССА, чтобы не обращаться к this до super()
+function buildExceptionFactory(isDevelopment: boolean) {
+  return (errors: any[]): BadRequestException => {
+    if (isDevelopment) {
+      const errorMessages = errors.map((error) => {
+        const constraints = Object.values(error.constraints || {});
+        return `${error.property}: ${constraints.join(', ')}`;
+      });
+
+      return new BadRequestException({
+        message: 'Validation failed',
+        errors: errorMessages,
+        statusCode: 400,
+      });
+    } else {
+      return new BadRequestException('Validation failed');
+    }
+  };
+}
+
 @Injectable()
 export class EnhancedValidationPipe extends ValidationPipe implements PipeTransform {
   private readonly logger = new Logger(EnhancedValidationPipe.name);
@@ -29,6 +50,7 @@ export class EnhancedValidationPipe extends ValidationPipe implements PipeTransf
     const environment = configService.get('NODE_ENV', 'development');
     const isDevelopment = environment === 'development';
 
+    // НЕЛЬЗЯ ссылаться на this до super()
     super({
       whitelist: true,
       forbidNonWhitelisted: true,
@@ -38,7 +60,7 @@ export class EnhancedValidationPipe extends ValidationPipe implements PipeTransf
       transformOptions: {
         enableImplicitConversion: false,
       },
-      exceptionFactory: (errors) => this.createSecurityAwareException(errors),
+      exceptionFactory: buildExceptionFactory(isDevelopment),
     });
 
     this.isDevelopment = isDevelopment;
@@ -154,23 +176,6 @@ export class EnhancedValidationPipe extends ValidationPipe implements PipeTransf
     if (sizeInBytes > maxSize) {
       this.logger.error(`Request too large: ${sizeInBytes} bytes (max: ${maxSize})`);
       throw new BadRequestException('Request payload too large');
-    }
-  }
-
-  private createSecurityAwareException(errors: any[]): BadRequestException {
-    if (this.isDevelopment) {
-      const errorMessages = errors.map((error) => {
-        const constraints = Object.values(error.constraints || {});
-        return `${error.property}: ${constraints.join(', ')}`;
-      });
-
-      return new BadRequestException({
-        message: 'Validation failed',
-        errors: errorMessages,
-        statusCode: 400,
-      });
-    } else {
-      return new BadRequestException('Validation failed');
     }
   }
 }

@@ -6,7 +6,8 @@ import { AppModule } from './app.module';
 import helmet from 'helmet';
 import * as compression from 'compression';
 import * as cookieParser from 'cookie-parser';
-import express, { Request, Response, NextFunction } from 'express';
+import * as express from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { EnhancedValidationPipe } from './common/pipes/enhanced-validation.pipe';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { SecurityHeadersInterceptor } from './common/interceptors/security-headers.interceptor';
@@ -163,17 +164,18 @@ async function configureCORS(app: any, configService: ConfigService, environment
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { logger: ['error', 'warn', 'log'] });
+  const app = await NestFactory.create(AppModule, { logger: ['log', 'warn', 'error'] });
   const configService = app.get(ConfigService);
   const environment = configService.get('NODE_ENV', 'development');
+  const isProduction = environment === 'production';
   const apiPrefix = configService.get('API_PREFIX', 'api/v1');
 
   app.setGlobalPrefix(apiPrefix);
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
   app.getHttpAdapter().getInstance().disable('x-powered-by');
 
-  // Helmet c безопасным CSP (в dev — послабления для Swagger)
-  const scriptSrc = ["'self'", ...(environment !== 'production' ? ["'unsafe-inline'", "'unsafe-eval'"] : [])];
+  // Helmet: отключаем HSTS и upgrade-insecure-requests в dev/staging (Safari иначе форсит HTTPS)
+  const scriptSrc = ["'self'", ...(isProduction ? [] : ["'unsafe-inline'", "'unsafe-eval'"])];
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -183,20 +185,30 @@ async function bootstrap() {
           styleSrc: ["'self'", "'unsafe-inline'"],
           scriptSrc,
           imgSrc: ["'self'", 'data:', 'https:'],
-          connectSrc: ["'self'", ...(environment !== 'production' ? ['ws:', 'wss:'] : [])],
+          connectSrc: ["'self'", ...(isProduction ? [] : ['ws:', 'wss:'])],
           fontSrc: ["'self'", 'https:', 'data:'],
           objectSrc: ["'none'"],
           frameAncestors: ["'none'"],
           baseUri: ["'self'"],
           formAction: ["'self'"],
-          upgradeInsecureRequests: [],
+          // ВАЖНО: добавляем upgrade-insecure-requests только в проде
+          ...(isProduction ? { upgradeInsecureRequests: [] } : {}),
         },
       },
+      // ВАЖНО: HSTS только в проде (Safari может кешировать и форсить HTTPS)
+      hsts: isProduction
+        ? { maxAge: 31536000, includeSubDomains: true, preload: true }
+        : false,
       frameguard: { action: 'deny' },
-      hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
       crossOriginEmbedderPolicy: false,
     }),
+  );
+
+  const http = app.getHttpAdapter().getInstance();
+  // Тихие заглушки для “дефолтных” иконок Safari/браузеров (чтобы 404 не летели в аудит)
+  ['/apple-touch-icon.png', '/apple-touch-icon-precomposed.png', '/favicon.ico', '/favicon-32x32.png', '/favicon-16x16.png'].forEach(
+    (p) => http.get(p, (_req: Request, res: Response) => res.status(204).end()),
   );
 
   const cookieSecret = configService.get<string>('COOKIE_SECRET');
@@ -220,7 +232,7 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   const port = configService.get('PORT', 3001);
-  const host = environment === 'production' ? '0.0.0.0' : 'localhost';
+  const host = isProduction ? '0.0.0.0' : 'localhost';
   await app.listen(port, host);
 
   const swaggerTitle = configService.get('SWAGGER_TITLE', 'DriveCare API');
@@ -228,7 +240,7 @@ async function bootstrap() {
   console.log(`🌍 Environment: ${environment}`);
   console.log(`🔗 Server: http://${host}:${port}`);
   console.log(`🔍 Health: http://${host}:${port}/${apiPrefix}/health`);
-  if (environment !== 'production') {
+  if (!isProduction) {
     const swaggerPath = configService.get('SWAGGER_PATH', 'docs');
     console.log(`📚 API Docs: http://${host}:${port}/${swaggerPath}`);
   }

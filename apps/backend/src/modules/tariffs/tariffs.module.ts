@@ -1,18 +1,20 @@
 // path: apps/backend/src/modules/tariffs/tariffs.module.ts
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TariffsController } from './tariffs.controller';
 import { TariffsService } from './tariffs.service';
 import { TariffsDataService } from './services/tariffs-data.service';
 import { TariffsBusinessService } from './services/tariffs-business.service';
 import { TariffsValidationService } from './services/tariffs-validation.service';
-import { TariffsMapperService } from './services/tariffs-mapper.service'; // 🔥 ДОБАВЛЕНО
+import { TariffsMapperService } from './services/tariffs-mapper.service';
 import { Tariff } from '../../database/entities';
 import { AuditService } from '../../common/audit/audit.service';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Tariff]),
+    forwardRef(() => AuthModule), // ✅ нужен для JwtAuthGuard/SessionService/SecurityService
   ],
   controllers: [TariffsController],
   providers: [
@@ -20,13 +22,13 @@ import { AuditService } from '../../common/audit/audit.service';
     TariffsDataService,
     TariffsBusinessService,
     TariffsValidationService,
-    TariffsMapperService, // 🔥 ДОБАВЛЕНО
+    TariffsMapperService,
     AuditService,
   ],
   exports: [
     TariffsService,
-    TariffsDataService, // Для других модулей (subscriptions)
-    TariffsMapperService, // 🔥 ДОБАВЛЕНО для экспорта
+    TariffsDataService,
+    TariffsMapperService,
   ],
 })
 export class TariffsModule {}

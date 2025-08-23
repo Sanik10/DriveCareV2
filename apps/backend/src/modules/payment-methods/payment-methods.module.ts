@@ -1,7 +1,8 @@
 // path: apps/backend/src/modules/payment-methods/payment-methods.module.ts
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PaymentMethod, Payment } from '../../database/entities';
+import { AuthModule } from '../auth/auth.module'; // ✅ для JwtAuthGuard/SessionService/SecurityService
 
 import { PaymentMethodsController } from './payment-methods.controller';
 import { PaymentMethodsService } from './payment-methods.service';
@@ -13,6 +14,7 @@ import { PaymentMethodsMapperService } from './services/payment-methods-mapper.s
 @Module({
   imports: [
     TypeOrmModule.forFeature([PaymentMethod, Payment]),
+    forwardRef(() => AuthModule), // ✅ добавлено
   ],
   controllers: [PaymentMethodsController],
   providers: [

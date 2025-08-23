@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/auth/services/security.service.ts
 import { Injectable, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';

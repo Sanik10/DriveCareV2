@@ -1,249 +1,62 @@
-Да, сделаем набор “живых” тестов на новом скрипте. Ниже 8 тестов, каждый проверяет свой сценарий. Формат:
-- Setup: создаём/заливаем исходники через path‑blocks (запускать с --prefer-blocks).
-- Patch: применяем diff (запускать без флагов или с --verbose, по желанию).
+Супер. Бэкенд живой, сиды прошли, Swagger и безопасность — ок. Предлагаю не разгоняться сегодня. Вот понятный план “что дальше”, с вариантами и чек‑листами на завтра.
 
-Команды для запуска:
-- Setup: node scripts/apply-from-clipboard.mjs --root . --prefer-blocks --verbose
-- Dry-run патча: node scripts/apply-from-clipboard.mjs --root . --dry-run --verbose
-- Применение патча: node scripts/apply-from-clipboard.mjs --root . --verbose
+Что делать завтра (2–4 часа, без кода-адов)
+- Зафиксировать схему БД миграцией
+  - Сгенерируй init-миграцию из текущих entities.
+  - Отключи synchronize в dev/staging/prod, оставь ensureSchema только в dev (или под флагом).
+- Подготовить окружения
+  - .env.staging и .env.production (JWT_SECRET/REFRESH, AUDIT_CHAIN_KEY, PWD_PEPPER, DEVICE_ID_SECRET, COOKIE_SECRET, REDIS_URL, CORS_ORIGINS).
+  - Swagger off в prod (у тебя уже так).
+  - Seeds: dev=on, staging=по флагу, prod=off.
+- Мини smoke‑тест
+  - Логин супер‑админа → 200 и JWT.
+  - 401/403 на защищённых ручках без токена.
+  - GET /health, swagger доступ из Safari (после патча).
+- Сменить временный пароль супер‑админа (из логов) и сохранить в менеджере паролей.
 
-Важно
-- Копируй “Setup” отдельно от “Patch” (по одному блоку за прогон).
-- Путь файлов — внутри apps/backend/src/ai-tests (чтобы не мешать проекту).
-- В diff-хунках контент должен точно совпадать с исходником: соблюдай пробелы и строки (скрипт теперь многое прощает, но лучше без сюрпризов).
+Дальше — три варианта курса
 
-Тест 1 — Single-file diff (базовый кейс)
-Setup (создаём файл):
-<!-- path: apps/backend/src/ai-tests/test1.ts, action: replace -->
-```ts
-export function hello(name: string): string {
-  return `Hello, ${name}`;
-}
-```
+Вариант A: Prod‑lite (быстрый выход)
+- Цель: вывести MVP на staging/prod за 1–2 дня.
+- Шаги:
+  - Миграции в репо; synchronize=false везде, ensureSchema выключить (или под флаг).
+  - CI/CD: build → migration:run → старт.
+  - Секьюрити: cookies secure/sameSite, CORS только фронту, HSTS включить в prod.
+  - Набор обязательных ENV в валидации (у тебя уже есть Joi, просто заполни значения).
+  - Лёгкие E2E smoke (логин, 401/403, пара CRUD по ключевым модулям).
+- Риски: юр‑доки частично; платежи без ККТ/PCI (если не нужны сразу — ок).
 
-Patch (меняем одну строку):
-```diff
-diff --git a/apps/backend/src/ai-tests/test1.ts b/apps/backend/src/ai-tests/test1.ts
-index 1111111..2222222 100644
---- a/apps/backend/src/ai-tests/test1.ts
-+++ b/apps/backend/src/ai-tests/test1.ts
-@@ -1,3 +1,3 @@
- export function hello(name: string): string {
--  return `Hello, ${name}`;
-+  return `Hello, ${name}!`.toUpperCase();
- }
-```
+Вариант B: Prod‑hardened (тех. полировка)
+- Цель: довести модули до “Completed Tech” + базовая наблюдаемость (3–5 дней).
+- Шаги:
+  - Довести Near‑Ready модули по чек‑листам (Inventory/Alerts/Orders/Appointments/Service‑History/Services).
+  - Аудит событий SERVICE_* / CATEGORY_* добросить.
+  - Наблюдаемость: JSON‑логи, health/readiness, Sentry/Prometheus (минимум алертов).
+  - Кэш/перф: ETag/Redis для каталогов/справочников (по желанию).
+- Риски: больше времени до первого прод.
 
-Тест 2 — Multi-file diff в одном блоке
-Setup:
-<!-- path: apps/backend/src/ai-tests/test2.ts, action: replace -->
-```ts
-export function sum(a: number, b: number): number {
-  return a + b;
-}
-```
-<!-- path: apps/backend/src/ai-tests/test3.ts, action: replace -->
-```ts
-export interface GreetingOptions {
-  shout?: boolean;
-}
-export function greetV2(name: string, opts: GreetingOptions = {}): string {
-  const base = `Hello, ${name}`;
-  return opts.shout ? base.toUpperCase() : base;
-}
-```
+Вариант C: Compliance‑first (152‑ФЗ/242‑ФЗ/54‑ФЗ)
+- Цель: закрыть юр‑базу и регламенты (5–10 дней, параллельно с фронтом).
+- Шаги:
+  - 152‑ФЗ: Политика ПДн, регламенты хранения/анонимизации, порядок обращений субъектов, Журнал обращений, договоры поручения с процессорами.
+  - 242‑ФЗ: гарантия локализации БД/бэков в РФ (договоры/инфра).
+  - 54‑ФЗ/161‑ФЗ (если бьёшь чеки/принимаешь платежи сам): решение через провайдера, чек‑связка с платежами/счетами (можно позже).
+- Риски: больше менеджерки/бумажек, но легально безопасно.
 
-Patch:
-```diff
-diff --git a/apps/backend/src/ai-tests/test2.ts b/apps/backend/src/ai-tests/test2.ts
-index 1111111..2222222 100644
---- a/apps/backend/src/ai-tests/test2.ts
-+++ b/apps/backend/src/ai-tests/test2.ts
-@@ -1,3 +1,7 @@
--export function sum(a: number, b: number): number {
--  return a + b;
--}
-+export const PI = 3.14159;
-+export function sum(a: number, b: number, factor = 1): number {
-+  return (a + b) * factor;
-+}
-diff --git a/apps/backend/src/ai-tests/test3.ts b/apps/backend/src/ai-tests/test3.ts
-index 1111111..2222222 100644
---- a/apps/backend/src/ai-tests/test3.ts
-+++ b/apps/backend/src/ai-tests/test3.ts
-@@ -1,6 +1,8 @@
- export interface GreetingOptions {
--  shout?: boolean;
-+  shout?: boolean;
-+  prefix?: string;
- }
- export function greetV2(name: string, opts: GreetingOptions = {}): string {
--  const base = `Hello, ${name}`;
-+  const base = `${opts.prefix ?? 'Hello'}, ${name}`;
-   return opts.shout ? base.toUpperCase() : base;
- }
-```
+Рекомендую такой маршрут
+1) Завтра: Prod‑lite база (миграции, env, CI/CD). Пара часов — и у тебя staging.
+2) Параллельно: фронтенд (логин, Users, Customers, Orders, Inventory — хотя бы листинги).
+3) На неделе: Prod‑hardened по чек‑листам Near‑Ready → Completed.
+4) Юр‑комплаенс — запланировать как отдельный трек (вынести документы из твоего “Audit Tracker” в реальный набор артефактов).
 
-Тест 3 — Несколько diff‑блоков в одном сообщении
-(скрипт их склеит и применит все)
-Patch (два отдельных блока подряд):
-```diff
-diff --git a/apps/backend/src/ai-tests/test2.ts b/apps/backend/src/ai-tests/test2.ts
-index 2222222..3333333 100644
---- a/apps/backend/src/ai-tests/test2.ts
-+++ b/apps/backend/src/ai-tests/test2.ts
-@@ -1,4 +1,8 @@
- export const PI = 3.14159;
- export function sum(a: number, b: number, factor = 1): number {
-   return (a + b) * factor;
- }
-+export function avg(values: number[]): number {
-+  return values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0;
-+}
-diff --git a/apps/backend/src/ai-tests/test3.ts b/apps/backend/src/ai-tests/test3.ts
-index 2222222..3333333 100644
---- a/apps/backend/src/ai-tests/test3.ts
-+++ b/apps/backend/src/ai-tests/test3.ts
-@@ -1,8 +1,10 @@
- export interface GreetingOptions {
-   shout?: boolean;
-   prefix?: string;
- }
-+export type Punctuation = '!' | '.' | '?';
- export function greetV2(name: string, opts: GreetingOptions = {}): string {
--  const base = `${opts.prefix ?? 'Hello'}, ${name}`;
--  return opts.shout ? base.toUpperCase() : base;
-+  const base = `${(opts.prefix ?? 'Hello')}, ${name}`;
-+  return opts.shout ? `${base}!`.toUpperCase() : base;
- }
-```
+Мелкие тех. хвосты (коротко)
+- Двойное закрытие пула на SIGTERM: мы уже предложили убрать app.enableShutdownHooks() и оставить свои обработчики — так не будет “Called end on pool more than once”.
+- Safari — ок после отключения HSTS/upgrade-insecure в dev (в prod включить обратно).
+- AuthModule: мы импортировали его в нужные модули; при желании можно сделать его @Global(), но текущая явная схема прозрачнее.
 
-Тест 4 — Path rewrite (diff указывает src/, скрипт мапит в apps/backend/src)
-Setup:
-<!-- path: apps/backend/src/ai-tests/rewrite.ts, action: replace -->
-```ts
-export const tag = 'v1';
-export function tagify(s: string) { return `[${tag}] ${s}`; }
-```
+Если хочешь, я могу:
+- Сформировать init‑миграцию командами и шаблон .env.staging/.env.production.
+- Подготовить docker-compose для staging (Postgres/Redis + бэкенд).
+- Свести минимальный E2E smoke‑скрипт.
 
-Patch (обрати внимание на пути a/src/...):
-```diff
-diff --git a/src/ai-tests/rewrite.ts b/src/ai-tests/rewrite.ts
-index 1111111..2222222 100644
---- a/src/ai-tests/rewrite.ts
-+++ b/src/ai-tests/rewrite.ts
-@@ -1,2 +1,2 @@
--export const tag = 'v1';
-+export const tag = 'v2';
- export function tagify(s: string) { return `[${tag}] ${s}`; }
-```
-
-Тест 5 — Игнорирование пробелов (whitespace-insensitive)
-Setup:
-<!-- path: apps/backend/src/ai-tests/whitespace.ts, action: replace -->
-```ts
-export function indentA(): string {
-  return 'A';
-}
-```
-
-Patch ( меняем отступы, содержимое то же ):
-```diff
-diff --git a/apps/backend/src/ai-tests/whitespace.ts b/apps/backend/src/ai-tests/whitespace.ts
-index 1111111..2222222 100644
---- a/apps/backend/src/ai-tests/whitespace.ts
-+++ b/apps/backend/src/ai-tests/whitespace.ts
-@@ -1,3 +1,3 @@
- export function indentA(): string {
--  return 'A';
-+    return 'A';
- }
-```
-
-Тест 6 — 3‑way merge (патч поверх изменённого файла)
-Setup:
-<!-- path: apps/backend/src/ai-tests/merge.ts, action: replace -->
-```ts
-const a = 1;
-const b = 2;
-export function calc() {
-  return a + b;
-}
-```
-
-Patch 6a (первое изменение):
-```diff
-diff --git a/apps/backend/src/ai-tests/merge.ts b/apps/backend/src/ai-tests/merge.ts
-index 1111111..2222222 100644
---- a/apps/backend/src/ai-tests/merge.ts
-+++ b/apps/backend/src/ai-tests/merge.ts
-@@ -1,4 +1,4 @@
- const a = 1;
--const b = 2;
-+const b = 3;
- export function calc() {
-   return a + b;
- }
-```
-
-Patch 6b (патч на основе старой версии — меняем return):
-```diff
-diff --git a/apps/backend/src/ai-tests/merge.ts b/apps/backend/src/ai-tests/merge.ts
-index 1111111..3333333 100644
---- a/apps/backend/src/ai-tests/merge.ts
-+++ b/apps/backend/src/ai-tests/merge.ts
-@@ -1,4 +1,4 @@
- const a = 1;
- const b = 2;
- export function calc() {
--  return a + b;
-+  return a + b + 1;
- }
-```
-
-Ожидаемое: 6a применится; 6b пройдёт через 3‑way и сольёт изменения (итог будет учитывать и b=3 и +1 в сумме).
-
-Тест 7 — Создание нового файла через diff
-Patch:
-```diff
-diff --git a/apps/backend/src/ai-tests/created-by-diff.ts b/apps/backend/src/ai-tests/created-by-diff.ts
-new file mode 100644
-index 0000000..1111111
---- /dev/null
-+++ b/apps/backend/src/ai-tests/created-by-diff.ts
-@@ -0,0 +1,5 @@
-+export function created(): string {
-+  return 'I was created by a diff';
-+}
-+
-+export default created;
-```
-
-Тест 8 — Удаление файла через diff
-Setup (создаём файл, который потом удалим):
-<!-- path: apps/backend/src/ai-tests/delete-me.ts, action: replace -->
-```ts
-export const toBeRemoved = true;
-export function bye() { return 'bye'; }
-```
-
-Patch (удаление):
-```diff
-diff --git a/apps/backend/src/ai-tests/delete-me.ts b/apps/backend/src/ai-tests/delete-me.ts
-deleted file mode 100644
-index 1111111..0000000
---- a/apps/backend/src/ai-tests/delete-me.ts
-+++ /dev/null
-@@ -1,2 +0,0 @@
--export const toBeRemoved = true;
--export function bye() { return 'bye'; }
-```
-
-Подсказки по сценариям
-- Если нужно проверить fallback на path‑blocks: пришли заведомо “битый” diff (например, с неправильным путём), и следом path‑block с корректным файлом. Скрипт попробует diff → упадёт → применит path‑blocks.
-- Проверить reverse‑check: примените любой patch второй раз — скрипт должен сказать, что патч уже применён (и не падать).
-
-Если хочешь, могу подготовить ещё тесты:
-- “only-diff” против “only-blocks” режим;
-- “intent to add” (git add -N) как экспериментальная опция для новых файлов без new file mode;
-- батч тесты с множеством файлов и смешанными блоками.
+А сегодня — закрывай ноут. Завтра с чистой головой: миграция → env → staging, и всё поедет дальше.

@@ -1,3 +1,4 @@
+// path: apps/backend/src/database/seeds/run-seeds.ts
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { AppModule } from '../../app.module';

@@ -1,12 +1,13 @@
 // path: apps/backend/src/database/seeds/seeds.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { User } from '../entities/user.entity';
 import { Role } from '../entities/role.entity';
 import { Company } from '../entities/company.entity';
-import { AuditService, AuditAction } from '../../common/audit/audit.service'; // 🔥 ИСПРАВЛЕНО: Import AuditAction
+import { AuditService, AuditAction } from '../../common/audit/audit.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -23,7 +24,51 @@ export class SeedsService {
     private companiesRepository: Repository<Company>,
     private readonly configService: ConfigService,
     private readonly auditService: AuditService,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
+
+  /**
+   * В dev/staging гарантируем схему перед сидом:
+   * - если базовые таблицы отсутствуют — вызываем synchronize()
+   */
+  private async ensureSchema(): Promise<void> {
+    const env = this.configService.get<string>('NODE_ENV', 'development');
+
+    if (env === 'production') return;
+
+    const runner = this.dataSource.createQueryRunner();
+    try {
+      await runner.connect();
+
+      const exists = async (table: string) => {
+        const res = await runner.query(`SELECT to_regclass($1) AS name`, [`public.${table}`]);
+        return !!res?.[0]?.name;
+        // to_regclass returns table name or null
+      };
+
+      // Минимальный набор для сидов
+      const requiredTables = ['roles', 'users', 'companies', 'audit_logs'];
+      let needSync = false;
+      for (const t of requiredTables) {
+        const ok = await exists(t);
+        if (!ok) {
+          needSync = true;
+          break;
+        }
+      }
+
+      if (needSync) {
+        this.logger.warn('🧱 Schema missing required tables — running TypeORM synchronize() (dev/staging only)');
+        await this.dataSource.synchronize();
+        this.logger.log('✅ Schema synchronized successfully');
+      }
+    } catch (e: any) {
+      this.logger.error(`Failed to check/synchronize schema: ${e?.message || e}`);
+      // не падаем — дадим сидерам попытаться (но, скорее всего, упадут с понятной ошибкой)
+    } finally {
+      await runner.release();
+    }
+  }
 
   /**
    * 🛡️ SECURITY: Environment-specific seeding с полной защитой
@@ -31,11 +76,10 @@ export class SeedsService {
    */
   async runAllSeeds(): Promise<void> {
     const environment = this.configService.get('NODE_ENV', 'development');
-    
+
     // 🚨 CRITICAL SECURITY: Блокируем выполнение в production
     if (environment === 'production') {
       this.logger.warn('🚫 Seeds are disabled in production environment for security');
-      // 🔥 ИСПРАВЛЕНО: Использование enum значения
       await this.auditService.log(AuditAction.SEEDS_BLOCKED_IN_PRODUCTION, {
         environment,
         timestamp: new Date().toISOString(),
@@ -52,34 +96,34 @@ export class SeedsService {
       }
     }
 
+    // ⛑️ Гарантируем схему до любых операций/логирования
+    await this.ensureSchema();
+
     this.logger.log(`🌱 Starting database seeding in ${environment} environment...`);
-    
+
     try {
       const startTime = Date.now();
-      
+
       await this.createSuperadminRole();
       await this.createSuperadmin();
-      
+
       const duration = Date.now() - startTime;
       this.logger.log(`✅ Database seeding completed successfully in ${duration}ms`);
-      
-      // 🔥 ИСПРАВЛЕНО: Использование enum значения
+
       await this.auditService.log(AuditAction.SEEDS_COMPLETED, {
         environment,
         duration,
         timestamp: new Date().toISOString(),
       });
-      
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error('❌ Database seeding failed:', error.message);
-      
-      // 🔥 ИСПРАВЛЕНО: Использование enum значения
+
       await this.auditService.log(AuditAction.SEEDS_FAILED, {
         environment,
         error: error.message,
         timestamp: new Date().toISOString(),
       });
-      
+
       throw error;
     }
   }
@@ -89,7 +133,7 @@ export class SeedsService {
    */
   private async createSuperadminRole(): Promise<Role> {
     const existingRole = await this.rolesRepository.findOne({
-      where: { name: 'superadmin' }
+      where: { name: 'superadmin' },
     });
 
     if (existingRole) {
@@ -106,14 +150,13 @@ export class SeedsService {
 
     const savedRole = await this.rolesRepository.save(superadminRole);
     this.logger.log('✅ Superadmin role created successfully');
-    
-    // 🔥 ИСПРАВЛЕНО: Использование enum значения
+
     await this.auditService.log(AuditAction.SUPERADMIN_ROLE_CREATED, {
       roleId: savedRole.id,
       roleName: savedRole.name,
       timestamp: new Date().toISOString(),
     });
-    
+
     return savedRole;
   }
 
@@ -122,9 +165,9 @@ export class SeedsService {
    */
   private async createSuperadmin(): Promise<void> {
     const superadminEmail = 'superadmin@drivecare.com';
-    
+
     const existingSuperadmin = await this.usersRepository.findOne({
-      where: { email: superadminEmail }
+      where: { email: superadminEmail },
     });
 
     if (existingSuperadmin) {
@@ -134,12 +177,11 @@ export class SeedsService {
 
     // 🔍 Получаем роль superadmin
     const superadminRole = await this.rolesRepository.findOne({
-      where: { name: 'superadmin' }
+      where: { name: 'superadmin' },
     });
 
     if (!superadminRole) {
       const error = new Error('Superadmin role not found - cannot create superadmin user');
-      // 🔥 ИСПРАВЛЕНО: Использование enum значения
       await this.auditService.log(AuditAction.SUPERADMIN_CREATION_FAILED, {
         reason: 'role_not_found',
         email: superadminEmail,
@@ -167,11 +209,9 @@ export class SeedsService {
 
     const savedUser = await this.usersRepository.save(superadmin);
 
-    // 📧 SECURE LOGGING: НЕ логируем пароль в production logs
     this.logger.log('✅ Superadmin user created successfully');
     this.logger.log(`📧 Email: ${superadminEmail}`);
-    
-    // 🔐 SECURITY: Временный пароль только в development
+
     const environment = this.configService.get('NODE_ENV');
     if (environment === 'development') {
       this.logger.warn('🔑 TEMPORARY PASSWORD (development only):');
@@ -182,7 +222,6 @@ export class SeedsService {
       this.logger.warn('🔐 Secure password generated - check secure storage for credentials');
     }
 
-    // 🔥 ИСПРАВЛЕНО: Использование enum значения
     await this.auditService.log(AuditAction.SUPERADMIN_USER_CREATED, {
       userId: savedUser.id,
       email: superadminEmail,
@@ -193,48 +232,34 @@ export class SeedsService {
     });
   }
 
-  /**
-   * 🔐 ENTERPRISE: Secure random password generation
-   * Generates cryptographically secure passwords meeting enterprise requirements
-   */
   private generateSecurePassword(): string {
     const length = 16;
     const charset = {
       uppercase: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
       lowercase: 'abcdefghijklmnopqrstuvwxyz',
       numbers: '0123456789',
-      symbols: '!@#$%^&*()_+-=[]{}|;:,.<>?'
+      symbols: '!@#$%^&*()_+-=[]{}|;:,.<>?',
     };
 
     let password = '';
-    
-    // 🔒 SECURITY: Ensure at least one character from each category
     password += this.getRandomChar(charset.uppercase);
     password += this.getRandomChar(charset.lowercase);
     password += this.getRandomChar(charset.numbers);
     password += this.getRandomChar(charset.symbols);
 
-    // 🔐 Fill remaining length with random characters
     const allChars = Object.values(charset).join('');
     for (let i = password.length; i < length; i++) {
       password += this.getRandomChar(allChars);
     }
 
-    // 🔀 SECURITY: Shuffle the password to avoid predictable patterns
     return this.shuffleString(password);
   }
 
-  /**
-   * 🔐 Cryptographically secure random character selection
-   */
   private getRandomChar(charset: string): string {
     const randomIndex = crypto.randomInt(0, charset.length);
     return charset[randomIndex];
   }
 
-  /**
-   * 🔀 Secure string shuffling
-   */
   private shuffleString(str: string): string {
     const arr = str.split('');
     for (let i = arr.length - 1; i > 0; i--) {
@@ -244,54 +269,45 @@ export class SeedsService {
     return arr.join('');
   }
 
-  /**
-   * 🔍 SECURITY: Enhanced superadmin existence check
-   */
   async checkSuperadminExists(): Promise<boolean> {
     try {
       const superadmin = await this.usersRepository.findOne({
-        where: { 
+        where: {
           email: 'superadmin@drivecare.com',
-          isActive: true
+          isActive: true,
         },
-        relations: ['role']
+        relations: ['role'],
       });
 
       const exists = !!superadmin && superadmin.role?.name === 'superadmin';
-      
-      // 🔥 ИСПРАВЛЕНО: Использование enum значения
+
       await this.auditService.log(AuditAction.SUPERADMIN_EXISTENCE_CHECK, {
         exists,
         timestamp: new Date().toISOString(),
       });
 
       return exists;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error('Error checking superadmin existence:', error.message);
       return false;
     }
   }
 
-  /**
-   * 🛡️ SECURITY: Secure superadmin info retrieval (limited data)
-   * Returns only safe, non-sensitive information
-   */
   async getSuperadminInfo(): Promise<any> {
     try {
       const superadmin = await this.usersRepository.findOne({
-        where: { 
+        where: {
           email: 'superadmin@drivecare.com',
-          isActive: true
+          isActive: true,
         },
         relations: ['role'],
-        select: ['id', 'email', 'firstName', 'lastName', 'isActive', 'createdAt']
+        select: ['id', 'email', 'firstName', 'lastName', 'isActive', 'createdAt'],
       });
 
       if (!superadmin) {
         return null;
       }
 
-      // 🛡️ SECURITY: Return sanitized information only
       return {
         id: superadmin.id,
         email: superadmin.email,
@@ -299,9 +315,9 @@ export class SeedsService {
         lastName: superadmin.lastName,
         isActive: superadmin.isActive,
         role: superadmin.role ? { name: superadmin.role.name } : null,
-        createdAt: superadmin.createdAt
+        createdAt: superadmin.createdAt,
       };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error('Error retrieving superadmin info:', error.message);
       return null;
     }

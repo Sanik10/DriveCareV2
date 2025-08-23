@@ -1,4 +1,5 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+// path: apps/backend/src/app.controller.ts
+import { Controller, Get, Optional } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
@@ -6,14 +7,14 @@ import { AppService } from './app.service';
 import { SeedsService } from './database/seeds';
 import { AuthWithOwnership } from './common/guards/auth-with-ownership.guard';
 import { Roles } from './modules/auth/decorators/roles.decorator';
-import { AuditService, AuditAction } from './common/audit/audit.service'; // 🔥 ИСПРАВЛЕНО: Import AuditAction
+import { AuditService, AuditAction } from './common/audit/audit.service';
 
 @ApiTags('🏠 Система')
 @Controller()
 export class AppController {
   constructor(
     private readonly appService: AppService,
-    private readonly seedsService: SeedsService,
+    @Optional() private readonly seedsService: SeedsService,
     private readonly configService: ConfigService,
     private readonly auditService: AuditService,
   ) {}
@@ -32,16 +33,16 @@ export class AppController {
    * Предоставляет базовую информацию о состоянии системы
    */
   @ApiOperation({ summary: 'Проверка здоровья системы' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: '✅ Система работает нормально',
     example: {
       status: 'ok',
       timestamp: '2025-01-01T12:00:00.000Z',
       service: 'DriveCare API',
       version: '2.0',
-      environment: 'development'
-    }
+      environment: 'development',
+    },
   })
   @Get('health')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
@@ -54,7 +55,6 @@ export class AppController {
       environment: this.configService.get('NODE_ENV', 'development'),
     };
 
-    // 🔥 ИСПРАВЛЕНО: Использование enum значения
     await this.auditService.log(AuditAction.HEALTH_CHECK_REQUESTED, {
       timestamp: healthData.timestamp,
       environment: healthData.environment,
@@ -68,18 +68,18 @@ export class AppController {
    * 🚨 SECURITY: Доступен ТОЛЬКО в development и ТОЛЬКО для superadmin
    * 🔒 PRODUCTION: Endpoint полностью отключен в production environment
    */
-  @ApiOperation({ 
+  @ApiOperation({
     summary: '👑 Информация о суперадмине (ТОЛЬКО development + superadmin)',
     description: `
-    🚨 SECURITY NOTICE: 
+    🚨 SECURITY NOTICE:
     - Доступен ТОЛЬКО в development environment
     - Требует superadmin права доступа
     - Полностью отключен в production
     - Все обращения логируются в audit trail
-    `
+    `,
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: '✅ Информация о суперадмине',
     example: {
       exists: true,
@@ -89,56 +89,69 @@ export class AppController {
         firstName: 'System',
         lastName: 'Administrator',
         isActive: true,
-        role: { name: 'superadmin' }
+        role: { name: 'superadmin' },
       },
       environment: 'development',
-      warning: 'This endpoint is disabled in production'
-    }
+      warning: 'This endpoint is disabled in production',
+    },
   })
   @ApiResponse({
     status: 403,
-    description: '🚫 Доступ запрещен - production environment или недостаточно прав'
+    description: '🚫 Доступ запрещен - production environment или недостаточно прав',
   })
   @Get('superadmin-info')
-  @UseGuards(AuthWithOwnership)
+  @AuthWithOwnership()
   @Roles('superadmin')
   @ApiBearerAuth('JWT-auth')
   @Throttle({ default: { limit: 5, ttl: 300000 } })
   async getSuperadminInfo() {
     const environment = this.configService.get('NODE_ENV', 'development');
-    
+
     // 🚨 CRITICAL SECURITY: Блокируем в production
     if (environment === 'production') {
-      // 🔥 ИСПРАВЛЕНО: Использование enum значения
       await this.auditService.log(AuditAction.SUPERADMIN_INFO_BLOCKED_PRODUCTION, {
         environment,
         timestamp: new Date().toISOString(),
-        message: 'Attempt to access superadmin-info in production environment'
+        message: 'Attempt to access superadmin-info in production environment',
       });
-      
+
       throw new Error('This endpoint is disabled in production environment');
     }
 
-    // 🔥 ИСПРАВЛЕНО: Использование enum значения
     await this.auditService.log(AuditAction.SUPERADMIN_INFO_ACCESSED, {
       environment,
       timestamp: new Date().toISOString(),
-      message: 'Superadmin information endpoint accessed'
+      message: 'Superadmin information endpoint accessed',
     });
+
+    // Если SeedsService недоступен (модуль не импортирован) — возвращаем безопасный ответ
+    if (!this.seedsService) {
+      await this.auditService.log(AuditAction.SUPERADMIN_INFO_ERROR, {
+        environment,
+        timestamp: new Date().toISOString(),
+        reason: 'seeds_service_unavailable',
+      });
+      return {
+        exists: null,
+        superadmin: null,
+        environment,
+        warning: 'SeedsService is not available (module not loaded)',
+        timestamp: new Date().toISOString(),
+      };
+    }
 
     try {
       const exists = await this.seedsService.checkSuperadminExists();
       const superadmin = exists ? await this.seedsService.getSuperadminInfo() : null;
-      
+
       return {
         exists,
         superadmin,
         environment,
         warning: 'This endpoint is disabled in production',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
-    } catch (error) {
-      // 🔥 ИСПРАВЛЕНО: Использование enum значения
+    } catch (error: any) {
       await this.auditService.log(AuditAction.SUPERADMIN_INFO_ERROR, {
         environment,
         error: error.message,

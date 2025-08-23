@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+// path: apps/backend/src/modules/companies/companies.module.ts
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule } from '@nestjs/config'; // ✅ ДОБАВЛЕНО: Для EnhancedValidationPipe
+import { ConfigModule } from '@nestjs/config';
 import { CompaniesController } from './companies.controller';
 import { CompaniesService } from './companies.service';
 import { CompaniesDataService } from './services/companies-data.service';
@@ -9,11 +10,13 @@ import { CompaniesValidationService } from './services/companies-validation.serv
 import { CompaniesMapperService } from './services/companies-mapper.service';
 import { Company } from '../../database/entities';
 import { AuditService } from '../../common/audit/audit.service';
+import { AuthModule } from '../auth/auth.module'; // ✅ нужно для JwtAuthGuard/SessionService/SecurityService
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Company]),
-    ConfigModule, // ✅ ДОБАВЛЕНО: Для ConfigService в контроллере
+    ConfigModule,
+    forwardRef(() => AuthModule), // ✅ добавлено: доступ к SecurityService/JwtAuthGuard из AuthModule
   ],
   controllers: [CompaniesController],
   providers: [
@@ -26,9 +29,9 @@ import { AuditService } from '../../common/audit/audit.service';
   ],
   exports: [
     CompaniesService,
-    CompaniesDataService, // Для других модулей
-    CompaniesValidationService, // ✅ ДОБАВЛЕНО: Для company-ownership.guard.ts
-    CompaniesMapperService, // Для экспорта
+    CompaniesDataService,
+    CompaniesValidationService,
+    CompaniesMapperService,
   ],
 })
 export class CompaniesModule {}

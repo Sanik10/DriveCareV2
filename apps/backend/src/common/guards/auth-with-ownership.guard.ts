@@ -1,15 +1,15 @@
 // path: apps/backend/src/common/guards/auth-with-ownership.guard.ts
 import { applyDecorators, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../modules/auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../../modules/auth/guards/roles.guard';
+import { AuthGuard } from '@nestjs/passport';
+import { RolesGuard } from './roles.guard';
 import { CompanyOwnershipGuard } from './company-ownership.guard';
 
 /**
  * Композитный декоратор, объединяющий все необходимые Guards для безопасности:
- * 1. JwtAuthGuard - проверка JWT токена
- * 2. RolesGuard - проверка ролей пользователя
- * 3. CompanyOwnershipGuard - проверка принадлежности ресурсов
+ * 1. Passport Jwt AuthGuard - проверка JWT токена
+ * 2. RolesGuard (common) - проверка ролей пользователя
+ * 3. CompanyOwnershipGuard (common) - проверка принадлежности ресурсов
  *
  * Использование:
  * @AuthWithOwnership()
@@ -19,6 +19,6 @@ import { CompanyOwnershipGuard } from './company-ownership.guard';
  */
 export const AuthWithOwnership = () =>
   applyDecorators(
-    UseGuards(JwtAuthGuard, RolesGuard, CompanyOwnershipGuard),
+    UseGuards(AuthGuard('jwt'), RolesGuard, CompanyOwnershipGuard),
     ApiBearerAuth('JWT-auth'),
   );

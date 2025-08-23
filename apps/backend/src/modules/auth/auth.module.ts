@@ -13,7 +13,7 @@ import { UsersModule } from '../users/users.module';
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
-import { RolesGuard } from './guards/roles.guard';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 import { AuditService } from '../../common/audit/audit.service';
 import { TokenService } from './services/token.service';
@@ -46,7 +46,8 @@ import { RedisModule } from '../../common/redis/redis.module';
           const publicKey = config.get<string>('JWT_PUBLIC_KEY');
           if (!privateKey || !publicKey) throw new Error('RS256 selected but keys not set');
           return {
-            privateKey, publicKey,
+            privateKey,
+            publicKey,
             signOptions: { algorithm: 'RS256', issuer, audience, expiresIn: config.get<string>('JWT_EXPIRATION') || '15m' },
             verifyOptions: { algorithms: ['RS256'], issuer, audience, clockTolerance: 5 },
           };
@@ -63,7 +64,7 @@ import { RedisModule } from '../../common/redis/redis.module';
       { name: 'default', ttl: 60_000, limit: 20 },
       { name: 'strict', ttl: 300_000, limit: 3 },
     ]),
-    RedisModule, // ⬅️ вместо локального провайдера
+    RedisModule,
     forwardRef(() => UsersModule),
   ],
   providers: [
@@ -76,11 +77,11 @@ import { RedisModule } from '../../common/redis/redis.module';
     TwoFAService,
     LocalStrategy,
     JwtStrategy,
-    RolesGuard,
+    JwtAuthGuard,
     AuditService,
     Logger,
   ],
   controllers: [AuthController],
-  exports: [AuthService, TokenService, SessionService, SecurityService, RolesGuard, JwtModule],
+  exports: [AuthService, TokenService, SessionService, SecurityService, JwtAuthGuard, JwtModule],
 })
 export class AuthModule {}
