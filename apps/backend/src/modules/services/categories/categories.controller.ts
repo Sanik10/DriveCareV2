@@ -1,13 +1,15 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Patch, 
-  Delete, 
-  Body, 
-  Param, 
+// path: apps/backend/src/modules/services/categories/categories.controller.ts
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
   Query,
-  Req 
+  Req,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { AuthWithOwnership, ServiceCategoryResource } from '../../../common';
@@ -26,18 +28,14 @@ export class ServiceCategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Get()
-  @AuthWithOwnership() // 🛡️ Security: JWT + Roles + Ownership
+  @AuthWithOwnership()
   @ApiOperation({ summary: 'Получить список категорий услуг' })
   @ApiResponse({ type: PaginatedCategoriesResponseDto })
   @ApiQuery({ name: 'page', required: false, description: 'Номер страницы' })
   @ApiQuery({ name: 'limit', required: false, description: 'Количество элементов на странице' })
   @ApiQuery({ name: 'search', required: false, description: 'Поиск по названию или описанию' })
   @ApiQuery({ name: 'includeGlobal', required: false, description: 'Включать глобальные категории' })
-  async findAll(
-    @Req() req: RequestWithUser,
-    @Query() filter: CategoriesFilter
-  ): Promise<PaginatedCategoriesResponseDto> {
-    // 🔒 КРИТИЧНО: фильтрация по принадлежности компании
+  async findAll(@Req() req: RequestWithUser, @Query() filter: CategoriesFilter): Promise<PaginatedCategoriesResponseDto> {
     return this.categoriesService.findAllForUser(req.user, filter);
   }
 
@@ -52,66 +50,58 @@ export class ServiceCategoriesController {
   @AuthWithOwnership()
   @ApiOperation({ summary: 'Поиск категорий по названию' })
   @ApiQuery({ name: 'q', required: true, description: 'Поисковый запрос' })
-  async search(
-    @Query('q') query: string,
-    @Req() req: RequestWithUser
-  ): Promise<CategoryResponseDto[]> {
+  async search(@Query('q') query: string, @Req() req: RequestWithUser): Promise<CategoryResponseDto[]> {
     return this.categoriesService.search(query, req.user);
   }
 
   @Get('for-select')
   @AuthWithOwnership()
   @ApiOperation({ summary: 'Получить категории для dropdown/select компонентов' })
-  async getForSelect(@Req() req: RequestWithUser): Promise<Array<{
-    value: string;
-    label: string;
-    group?: string;
-    disabled?: boolean;
-  }>> {
+  async getForSelect(
+    @Req() req: RequestWithUser,
+  ): Promise<Array<{ value: string; label: string; group?: string; disabled?: boolean }>> {
     return this.categoriesService.getForSelect(req.user);
   }
 
   @Get('with-services-count')
   @AuthWithOwnership()
   @ApiOperation({ summary: 'Получить категории с количеством услуг' })
-  async getWithServicesCount(@Req() req: RequestWithUser): Promise<Array<CategoryResponseDto & { servicesCount: number }>> {
+  async getWithServicesCount(
+    @Req() req: RequestWithUser,
+  ): Promise<Array<CategoryResponseDto & { servicesCount: number }>> {
     return this.categoriesService.getWithServicesCount(req.user);
   }
 
   @Get('grouped')
   @AuthWithOwnership()
   @ApiOperation({ summary: 'Получить сгруппированные категории (глобальные/компании)' })
-  async getGrouped(@Req() req: RequestWithUser): Promise<{
-    global: CategoryResponseDto[];
-    company: CategoryResponseDto[];
-  }> {
+  async getGrouped(
+    @Req() req: RequestWithUser,
+  ): Promise<{ global: CategoryResponseDto[]; company: CategoryResponseDto[] }> {
     return this.categoriesService.getGrouped(req.user);
   }
 
   @Get(':id')
   @AuthWithOwnership()
-  @ServiceCategoryResource() // 🛡️ Проверка: category доступна для компании
+  @ServiceCategoryResource()
   @ApiOperation({ summary: 'Получить категорию по ID' })
   @ApiResponse({ type: CategoryResponseDto })
-  async findOne(@Param('id') id: string): Promise<CategoryResponseDto> {
+  async findOne(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<CategoryResponseDto> {
     return this.categoriesService.findOne(id);
   }
 
   @Post()
   @AuthWithOwnership()
-  @Roles('owner', 'admin', 'manager') // 🔒 Только admin+ могут создавать категории
+  @Roles('owner', 'admin', 'manager')
   @ApiOperation({ summary: 'Создать новую категорию' })
   @ApiResponse({ type: CategoryResponseDto })
-  async create(
-    @Body() dto: CreateCategoryDto,
-    @Req() req: RequestWithUser
-  ): Promise<CategoryResponseDto> {
+  async create(@Body() dto: CreateCategoryDto, @Req() req: RequestWithUser): Promise<CategoryResponseDto> {
     return this.categoriesService.createForUser(dto, req.user);
   }
 
   @Post('initialize-global')
   @AuthWithOwnership()
-  @Roles('superadmin') // 🔒 Только superadmin может создавать глобальные категории
+  @Roles('superadmin')
   @ApiOperation({ summary: 'Инициализировать глобальные категории' })
   async initializeGlobal(@Req() req: RequestWithUser): Promise<CategoryResponseDto[]> {
     return this.categoriesService.initializeGlobal(req.user);
@@ -119,24 +109,25 @@ export class ServiceCategoriesController {
 
   @Patch(':id')
   @AuthWithOwnership()
-  @ServiceCategoryResource() // 🛡️ Нельзя редактировать чужие/глобальные категории
+  @ServiceCategoryResource()
   @Roles('owner', 'admin', 'manager')
   @ApiOperation({ summary: 'Обновить категорию' })
   @ApiResponse({ type: CategoryResponseDto })
   async update(
-    @Param('id') id: string,
-    @Body() dto: UpdateCategoryDto
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: UpdateCategoryDto,
+    @Req() req: RequestWithUser,
   ): Promise<CategoryResponseDto> {
-    return this.categoriesService.update(id, dto);
+    return this.categoriesService.update(id, dto, req.user);
   }
 
   @Delete(':id')
   @AuthWithOwnership()
-  @ServiceCategoryResource() // 🛡️ Нельзя удалять чужие/глобальные категории
-  @Roles('owner', 'admin') // 🔒 Только admin+ могут удалять
+  @ServiceCategoryResource()
+  @Roles('owner', 'admin')
   @ApiOperation({ summary: 'Удалить категорию' })
-  async remove(@Param('id') id: string): Promise<{ message: string }> {
-    await this.categoriesService.remove(id);
+  async remove(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @Req() req: RequestWithUser): Promise<{ message: string }> {
+    await this.categoriesService.remove(id, req.user);
     return { message: 'Категория успешно удалена' };
   }
 }

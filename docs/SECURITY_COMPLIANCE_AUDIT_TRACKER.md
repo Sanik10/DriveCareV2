@@ -1,7 +1,7 @@
 # 📋 DRIVECARE V2 — SECURITY & COMPLIANCE AUDIT TRACKER (RESET)
 
 Дата создания: 06.08.2025  
-Последнее обновление: 22.08.2025  
+Последнее обновление: 23.08.2025  
 Статус: 🔄 ONGOING SECURITY AUDIT (ре-аудит с учётом ФЗ РФ)  
 Методология: Enterprise Security Review + РФ-комплаенс (152‑ФЗ, 242‑ФЗ, 1119‑ПП, Приказ ФСТЭК №21)
 
@@ -180,6 +180,22 @@
     - Partial unique: vin (WHERE vin IS NOT NULL AND is_deleted=false); (companyId, licensePlate) аналогично.
     - createdAt/updatedAt/deletedAt → timestamptz; индексы companyId/customerId/isActive/isDeleted.
 
+- Vehicles‑Catalogue (ОБНОВЛЕНО, Tech‑Hardened — завершено):
+  - RBAC: write‑операции только для платформенных ролей ('superadmin','platform_admin'); удалён legacy‑алиас 'admin' (который давал 'company_admin').
+  - Ввод/санитизация:
+    - DTO: Transform‑trim/collapse для name/country/class; sanitize‑html для type.description; строгие Min/Max длины/года.
+    - Query: добавлены page/limit (пагинация с верхним лимитом).
+  - Аудит:
+    - Добавлены события CATALOGUE_* в AuditAction;
+    - Вызовы аудита на create/update/delete в бизнес‑слое и list/view в сервисе.
+  - База данных/схема:
+    - nameNormalized + уникальные индексы по нормализованным именам: brands (LOWER), models (brandId+LOWER), types (LOWER) с partial WHERE is_deleted=false;
+    - createdAt/updatedAt/deletedAt → timestamptz.
+    - Soft‑delete сохранён; hardDelete оставлен в data‑слое, но не используется бизнес‑логикой (историчность сохраняется).
+  - Производительность:
+    - Убрана подгрузка больших коллекций vehicles в листингах моделей/типов; бренды — без изменений по models (опционально улучшить COUNT’ом).
+  - Конфиг: добавлен каталоговый раздел (pagination, sanitize, cacheTtl).
+
 ---
 
 ## 📊 MASTER MODULE TABLE (обновлено)
@@ -203,11 +219,11 @@
 | 15 | appointments | 🟢 Near‑Ready (Tech: RBAC/ownership, DTO XSS, tracking/stats) | 🟡 Pending | 🟢 Средний | 🟢 Near‑Ready (Tech) |
 | 16 | work-schedules | 🟢 Near‑Ready (Tech) | 🟡 Pending (light) | 🟢 Средний | 🟢 Near‑Ready (Tech) |
 | 17 | vehicles | ✅ Tech‑Hardened (RBAC/ownership, XSS DTO, audit, role‑based PII, DB checks/indices, no‑store) | 🟡 152‑ФЗ light pending (орг‑процедуры/ретеншн) | 🟢 Средний | 🟢 COMPLETED (Tech) |
-| 18 | vehicles-catalogue | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
-| 19 | services | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
-| 20 | services/categories | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
-| 21 | service-history | 🟡 Review pending | 🟡 Pending | 🟢 Средний | ⏳ Pending |
-| 22 | tariffs | 🟡 Review pending | 🟡 Pending | 🟢 Низкий | ⏳ Pending |
+| 18 | vehicles-catalogue | ✅ Tech‑Hardened (RBAC tightened, DTO sanitize/trim, pagination, normalized unique, timestamptz, audit CATALOGUE_*) | 🟢 N/A (ПДн не обрабатываются); аудит админских действий включён | 🟢 Средний | 🟢 COMPLETED (Tech) |
+| 19 | services | 🟢 Near‑Ready (Tech) | Юр.: 🟢 N/A (ПДн напрямую не обрабатываются) | Приоритет: 🟢 Средний | Статус: 🟢 Near‑Ready (Tech) |
+| 20 | services/categories | 🟢 Near‑Ready (Tech) | Юр.: 🟢 N/A (ПДн не обрабатываются) | Приоритет: 🟢 Средний | Статус: 🟢 Near‑Ready (Tech) |
+| 21 | service-history | 🟢 Near‑Ready (Tech) | 🟡 152‑ФЗ light pending (орг‑процедуры/ретеншн) | 🟢 Средний | 🟢 Near‑Ready (Tech) |
+| 22 | tariffs | ✅ Tech‑Hardened (RBAC tightened; цены в рублях; DTO sanitize; read/write аудит; имя в LOWER + unique; индексы; конфиг/ENV) | 🟢 N/A (ПДн не обрабатываются) | 🟢 Низкий | 🟢 COMPLETED (Tech) |
 
 ---
 
@@ -639,16 +655,209 @@
 
 ---
 
-## 🚀 Очередь модулей (обновлено)
+## 🧩 Vehicles‑Catalogue — детальное состояние (Tech‑Hardened, COMPLETED)
 
-- Затем: Invoices — финализация 402‑ФЗ/54‑ФЗ, запреты по оплатам, интеграция с Orders.
-- Далее: Inventory — подмодули и доводка:
-  - stock‑movements — ГОТОВО (Tech‑Hardened); финализация E2E/индексы/check‑constraints, опционально DB‑блокировки.
-  - suppliers — PII‑маскирование контактных данных, XSS, RBAC, whitelist сортировок/пагинации.
-  - inventory‑alerts — E2E (superadmin‑правило, идемпотентность test/batch, XSS в DTO), мониторинг.
-- Appointments — финализация: интеграция AuditService, DB EXCLUDE для пересечений, перфоманс smart‑schedule/check‑availability, E2E по RBAC/PII/статусам, ретеншн‑cron.
-- Work‑Schedules — финализация: аудит‑вызовы (если не везде), no-store заголовки, ретеншн для исключений (dataRetentionUntil + cron), E2E/индексы/check‑constraints.
-- Customers — финализация E2E и документации (152‑ФЗ), мониторинг ретеншн‑cron.
+### ✅ Реализовано (технически)
+- RBAC:
+  - Write: только 'superadmin','platform_admin'; legacy 'admin' исключён (ранее алиасился в 'company_admin').
+  - @AuthWithOwnership используется, но CompanyOwnershipGuard для каталога пропускает (глобальный словарь).
+- DTO/Validation/XSS:
+  - Transform‑trim/collapse для строковых полей (name/country/class).
+  - sanitize‑html для свободного текста (type.description).
+  - Query‑параметры: добавлены page/limit, верхние лимиты (по конфигу).
+- Аудит:
+  - Добавлены AuditAction CATALOGUE_* (BRAND/MODEL/TYPE: CREATED/UPDATED/DELETED/VIEWED/LISTED).
+  - Вызовы аудита в бизнес‑методах create/update/delete и в сервисе для list/view.
+- Data‑layer:
+  - Регистронезависимая уникальность через поля nameNormalized и unique индексы (partial WHERE is_deleted=false).
+  - Поиск с ILIKE и нормализацией; отказ от подгрузки больших коллекций vehicles в листингах.
+- Entities/DB:
+  - Добавлены поля nameNormalized; все даты → timestamptz; индексы по normalized именам и soft‑delete.
+- Конфиг:
+  - Добавлен catalogueConfig (sanitizeTextsEnabled, pagination.default/max, cacheTtlSec) + Joi‑валидация.
+
+### 🟡 Юридическая база (light)
+- 152‑ФЗ/242‑ФЗ: ПДн не обрабатываются (N/A). Санитизация свободных текстов включена. 
+- 1119‑ПП/ФСТЭК (организационно): аудит админских изменений включён (CATALOGUE_*).
+
+### 🧪 Короткий чеклист дальнейшей доводки Vehicles‑Catalogue
+- [ ] Перфоманс: заменить leftJoinAndSelect моделей в листинге брендов на COUNT (relation count без загрузки коллекций).
+- [ ] Кэш: внедрить Redis/HTTP‑кэш + ETag для GET /brands, /models?brandId, /types с инвалидацией при изменениях.
+- [ ] Документация: ADR по глобальным словарям и платформенным правам (write только платформенные роли).
+
+---
+
+## Services — детальное состояние (Tech Near‑Ready)
+
+✅ Реализовано (технически)
+- Guards/RBAC/Ownership:
+  - @AuthWithOwnership + @ServiceResource на ресурсных эндпоинтах.
+  - Roles: декоратор Roles нормализует legacy-алиасы owner/admin → company_owner/company_admin (совместимость).
+- Контроллер/валидация:
+  - Добавлены ParseUUIDPipe/ParseIntPipe для :id/:categoryId/maxDuration/minPrice/maxPrice.
+  - Добавлен DTO BulkUpdateServicesDto (валидируется размеры/UUID, whitelist на структуру).
+- Бизнес-слой/целостность:
+  - Убраны прямые обращения фасада к data‑слою на изменяющих операциях: все write‑операции теперь проходят через ServicesBusinessService + ServicesValidationService.
+  - Массовые обновления: mass‑assignment защита (whitelist полей).
+- Data‑layer/SQL:
+  - Фильтрация по companyId обязательна во всех запросах.
+  - Исправлен price‑range (price BETWEEN :min AND :max).
+  - Сортировки: введён whitelist полей/направления (валидация на уровне бизнес‑валидации + нормализация фильтра).
+- Типы/интерфейсы:
+  - Приведены сигнатуры фасада/интерфейсов к user‑aware методам (update/remove/toggle теперь принимают user).
+- Компиляция/стабильность:
+  - Исправлены ошибки сборки (несогласованные сигнатуры, отсутствующие методы).
+
+🟡 Юридическая база (light)
+- 152‑ФЗ/242‑ФЗ: ПДн напрямую не обрабатываются; свободные тексты (name/description) могут потенциально включать ПДн — требуется санитизация (см. TODO).
+- 1119‑ПП/ФСТЭК: требуется аудит админских операций (см. TODO).
+- 402‑ФЗ: запрет удаления справочников, влияющих на первичку — требуется доработка политики удаления/деактивации (см. TODO).
+
+🧪 Короткий чеклист доводки Services
+- [ ] Audit: добавить события SERVICE_* в AuditAction и вызывать AuditService во всех операциях (LISTED/VIEWED/CREATED/UPDATED/STATUS_CHANGED/DELETED/BULK_UPDATED/SEARCHED/STATS_VIEWED) с маскированием метаданных.
+- [ ] Superadmin‑policy: для листингов/статистики — требовать явный ?companyId у superadmin (без него — 400), для остальных всегда использовать user.companyId.
+- [ ] Throttling: добавить @Throttle для read/write эндпоинтов (унифицированный формат).
+- [ ] Sanitize/XSS: опциональная санитизация name/description (SANITIZE_SERVICE_TEXTS) + trim/collapse в DTO.
+- [ ] Config/ENV: ввести servicesConfig и Joi‑валидацию (SERVICES_DEFAULT_PAGE_SIZE, SERVICES_MAX_PAGE_SIZE, SERVICES_MAX_DURATION_MINUTES, SERVICES_MAX_SERVICE_PRICE, SERVICES_SEARCH_LIMIT, SANITIZE_SERVICE_TEXTS, SERVICES_IDEMPOTENCY_TTL_MS).
+- [ ] Идемпотентность: X‑Idempotency‑Key для bulk‑update (Redis NX + TTL, кэш результата, гонка → 409).
+- [ ] БД/миграции: индексы (companyId, companyId+isActive, companyId+categoryId, createdAt), CHECK (price ≥0; durationMinutes >0), timestamptz дат; уникальность (companyId, LOWER(name)) — если бизнес‑правило требует; политика удаления (soft‑delete/запрет при ссылках на order_services).
+- [ ] Поиск: ограничить количество результатов (SERVICES_SEARCH_LIMIT) и add rate‑limit.
+- [ ] E2E: RBAC/ownership, сортировки (whitelist), фильтры, статус/удаление, поиск (≥2 символов), bulk (идемпотентность).
+
+---
+
+Services/Categories — детальное состояние (Tech Near‑Ready)
+
+✅ Реализовано (технически)
+- Guards/RBAC/Ownership:
+  - @AuthWithOwnership + @ServiceCategoryResource; запрет на правки/удаление глобальных категорий — через валидацию.
+- Контроллер/валидация:
+  - ParseUUIDPipe на :id; нормализация фильтров; методы требуют user, сигнатуры приведены к ICategoriesService.
+- Бизнес-слой/целостность:
+  - Фасад больше не обходит валидацию; все write‑операции через CategoriesBusinessService/ValidationService.
+- Data‑layer/SQL:
+  - Фильтрация по companyId или глобальные (companyId IS NULL) — корректна во всех выборках.
+  - Сортировки: введён whitelist/валидация; статистика и withServicesCount — стабильные алиасы.
+- Инициализация глобальных категорий:
+  - Реализована, но требует идемпотентности (см. TODO).
+
+🟡 Юридическая база (light)
+- ПДн не обрабатываются; sanitize свободных текстов рекомендован.
+
+🧪 Короткий чеклист доводки Categories
+- [ ] Audit: SERVICE_CATEGORY_* события + вызовы (LISTED/VIEWED/CREATED/UPDATED/DELETED/STATS_VIEWED/SEARCHED/INITIALIZED_GLOBAL).
+- [ ] Throttling: @Throttle для read/write.
+- [ ] Sanitize/XSS: SANITIZE_CATEGORY_TEXTS + sanitize‑html/trim в DTO.
+- [ ] Config/ENV: categoriesConfig (pagination.max, sanitize flag).
+- [ ] Идемпотентность initialize‑global: upsert/ON CONFLICT DO NOTHING.
+- [ ] БД/миграции: timestamptz дат, индексы (companyId, createdAt), уникальность (companyId, LOWER(name)) c учётом глобальных (companyId IS NULL).
+- [ ] E2E: глобальные категории read‑only; удаление запрещено при связях с services.
+
+Что ещё стоит править (итог)
+- Аудит: расширить AuditAction (SERVICE_*, SERVICE_CATEGORY_*) и внедрить вызовы AuditService для всех операций. Сейчас console.log удалён/не используется — централизованный аудит пока не добавлен.
+- Throttling: добавить на key‑эндпоинты Services/Categories.
+- Sanitize: включить опционально sanitize‑html на name/description (с флагом в конфиге).
+- Идемпотентность: внедрить для bulk‑операций (сейчас нет).
+- Superadmin‑policy: унифицировать с остальными модулями — требование явного ?companyId.
+- БД: подготовить миграции (индексы/CHECK/timestamptz/уникальность/политика удаления).
+- Config/ENV: добавить services/categories секции в configuration.ts + validation.schema.ts и переменные в .env.example.
+- Поиск: ограничить результаты и rate‑limit.
+- Тесты: E2E/интеграционные под новые правила.
+
+---
+## 🧩 Service‑History — детальное состояние (Tech Near‑Ready)
+
+✅ Реализовано (технически)
+- Guards/RBAC/Ownership:
+  - @AuthWithOwnership на всех эндпоинтах; @ServiceHistoryResource на ресурсных.
+  - CompanyOwnershipGuard: добавлен кейс 'service-history' → validateServiceHistoryOwnership (аудит PERMISSION_GRANTED/ACCESS_DENIED).
+  - Superadmin‑policy: для листингов/статистики требуется явный ?companyId (иначе 400); для остальных companyId берётся из user.
+- Контроллер/валидация:
+  - ParseUUIDPipe для :id/:vehicleId; ParseBoolPipe для hasNextService; ParseIntPipe для mileageFrom/mileageTo/page/limit.
+  - @Throttle в унифицированном формате на read/write эндпоинтах.
+  - Swagger: объявлены поля sortField/sortOrder с whitelist значений; добавлен query ?companyId (только для superadmin).
+- DTO/XSS:
+  - Create/Update — sanitize‑html для description/notes (Transform), строгие MaxLength/форматы дат (IsDateString).
+- Data‑layer/SQL:
+  - Обязательная фильтрация по companyId (без него — ValidationDataException).
+  - Безопасные сортировки по whitelist (date, mileage, createdAt, nextServiceDate); пагинация с верхним лимитом.
+  - Поиск по ILIKE (description/notes); выборки upcoming/overdue; агрегаты для dashboard.
+- Бизнес‑слой:
+  - create/update/softDelete вызывают пересчёт дат ТО у автомобиля (updateVehicleServiceDates).
+  - Логгирование переведено на AuditService (SERVICE_HISTORY_*).
+- Mapper/минимизация ПДн:
+  - Маскирование VIN (*** + last6) и госномера (A••77) в vehicleInfo; расчёт дней до/после обслуживания.
+- Entity/DB:
+  - VehicleServiceHistory: createdAt/updatedAt/deletedAt → timestamptz; индексы companyId/vehicleId/date/nextServiceDate/isDeleted.
+- Конфиг/ENV:
+  - Добавлен serviceHistoryConfig: SANITIZE_SERVICE_HISTORY_TEXTS, SERVICE_HISTORY_DEFAULT_PAGE_SIZE, SERVICE_HISTORY_MAX_PAGE_SIZE, SERVICE_HISTORY_SEARCH_LIMIT, SERVICE_HISTORY_NOTIFICATIONS_ENABLED.
+  - Валидация в validation.schema + ключи добавлены в .env.example.
+
+🟡 Юридическая база (light)
+- 152‑ФЗ: косвенно затрагиваются ПДн (customerName в связанных данных, свободные тексты).
+  - Реализовано: санитизация текстов, маскирование VIN/номера, строгая ownership‑проверка, аудит.
+  - Требуется: регламенты хранения (опционально dataRetentionUntil + cron анонимизации), no‑store заголовки для детальных PII‑ответов.
+
+🧪 Короткий чеклист доводки Service‑History
+- [ ] Транзакционность: объединить create/update/softDelete истории и обновление vehicle в одну транзакцию (manager.transaction).
+- [ ] Security headers: no-store/pragma no-cache на детальном GET :id (если в ответе присутствуют customerName/PII).
+- [ ] Перфоманс: облегчённый листинг без тяжёлых relations; лимит на текстовый поиск (SERVICE_HISTORY_SEARCH_LIMIT).
+- [ ] Аналитика: заменить заглушку averageServiceInterval на реальный расчёт (по разнице дат); метрики по overdue/upcoming.
+- [ ] E2E/интеграция: superadmin‑policy (?companyId), ownership, XSS‑санитизация, сортировки/пагинация, аудит.
+
+---
+
+Раздел: Tariffs — детальное состояние (Tech‑Hardened, Completed Tech)
+
+### ✅ Реализовано (технически)
+- Guards/RBAC:
+  - Убран @AuthWithOwnership (тарифы — глобальный словарь, не company‑scoped).
+  - Write‑эндпоинты защищены связкой JwtAuthGuard + RolesGuard; доступ только для платформенных ролей: 'superadmin','platform_admin'.
+  - Легаси‑алиасы ролей больше не используются на тарифах.
+- Контроллер/валидация:
+  - Нормализация query:
+    - isActive — ParseBoolPipe.
+    - minPrice/maxPrice — ParseFloatPipe (цены в рублях).
+    - sortOrder — нормализован в 'asc'|'desc' с whitelist.
+  - compareTariffs — корректный BadRequestException при ids.length > 5.
+  - Throttle унифицирован.
+- DTO/XSS:
+  - Санитизация свободных текстов (name/description) через sanitize‑html + trim/collapse в Create/Update DTO.
+  - Примеры и описания цен приведены к «рублям» (без копеек).
+- Data‑layer/SQL:
+  - Единицы измерения цен унифицированы на «рубли» (decimal(10,2)): фильтры minPrice/maxPrice без умножений на 100.
+  - Case‑insensitive уникальность имени тарифа:
+    - Добавлено поле nameNormalized (LOWER(name));
+    - findByName работает по nameNormalized;
+    - create/update заполняют nameNormalized.
+- Entity/DB:
+  - Tariff: добавлено nameNormalized + уникальный индекс uq_tariffs_name_normalized.
+  - Индексы: idx_tariffs_active (is_active), idx_tariffs_created_at (created_at).
+  - Сохраняются CHECK‑ограничения по ценам и лимитам.
+- Mapper:
+  - Форматирование цен — без деления на 100 (рубли).
+  - Функции сравнения/статистики/селект‑опций адаптированы под рубли.
+- Аудит:
+  - Расширены события: TARIFF_VIEWED, TARIFFS_LISTED, TARIFFS_COMPARED, TARIFFS_POPULAR_VIEWED, TARIFF_STATS_VIEWED, TARIFF_SELECT_OPTIONS_VIEWED.
+  - TariffsService логирует read‑операции; бизнес‑слой сохраняет create/update/status/delete.
+  - Глобально: AuditLoggingInterceptor исправлен — по умолчанию успешные запросы → PERMISSION_GRANTED (раньше ошибочно API_ERROR).
+- Config/ENV:
+  - Добавлен tariffsConfig: sanitizeTextsEnabled, pagination.maxPageSize, cacheTtlSec.
+  - Валидация: SANITIZE_TARIFF_TEXTS, TARIFFS_MAX_PAGE_SIZE, TARIFFS_CACHE_TTL_SEC в validation.schema.ts.
+  - В .env добавлены SANITIZE_TARIFF_TEXTS, TARIFFS_MAX_PAGE_SIZE, TARIFFS_CACHE_TTL_SEC.
+
+### 🟡 Юридическая база (light)
+- 152‑ФЗ/242‑ФЗ: ПДн не обрабатываются (N/A).
+- Безопасность: минимизация XSS через санитизацию текстов; строгие RBAC; аудит read/write операций без утечки ПДн.
+
+### ⚠️ Важные совместимые изменения
+- Цены в API и БД — в рублях (decimal), не в копейках. Все примеры и фильтры скорректированы. Интеграции, ожидающие «копейки», нужно синхронизировать.
+
+### 🧪 Короткий чеклист доводки Tariffs
+- [ ] Redis‑кэш для findAll/active (ключи и TTL заданы в константах, реализация опциональна).
+- [ ] Идемпотентность create (X‑Idempotency‑Key) — по аналогии с inventory.
+- [ ] Блок удаления при активных подписках — включить реальную проверку после интеграции с Subscriptions (сейчас логика удаления доступна только платформенным ролям и предполагает деактивацию тарифа перед удалением).
+- [ ] E2E/интеграция: RBAC платформенных ролей, нормализация query, фильтры цен в рублях, аудит read/write.
 
 ---
 
@@ -668,7 +877,12 @@
 - [x] Транзакционная безопасность — РЕАЛИЗОВАНО
 - [x] Performance optimization — РЕАЛИЗОВАНО
 
-**Companies модуль готов к production!**
+---
+
+## 🚀 Очередь модулей
+
+
+---
 
 🔐 Топ-уровень доступа (DriveCare Platform)
 

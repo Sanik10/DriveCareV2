@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/constants/services.constants.ts
 export const SERVICES_CONSTANTS = {
   DEFAULT_PAGE_SIZE: 20,
   MAX_PAGE_SIZE: 100,

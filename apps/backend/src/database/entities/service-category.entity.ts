@@ -1,3 +1,4 @@
+// path: apps/backend/src/database/entities/service-category.entity.ts
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('service_categories')

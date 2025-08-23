@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/tariffs/dto/response/tariff-response.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class TariffResponseDto {

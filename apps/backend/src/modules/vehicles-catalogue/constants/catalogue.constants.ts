@@ -11,6 +11,12 @@ export const CATALOGUE_CONSTANTS = {
     MAX_YEAR: new Date().getFullYear() + 5,
   },
 
+  PAGINATION: {
+    DEFAULT_PAGE: 1,
+    DEFAULT_LIMIT: 50,
+    MAX_PAGE_SIZE: 200,
+  },
+
   FEATURES: {
     BRAND_LOGO_VALIDATION: true,
     MODEL_YEAR_VALIDATION: true,

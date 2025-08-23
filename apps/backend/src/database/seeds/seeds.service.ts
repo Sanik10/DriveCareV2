@@ -1,3 +1,4 @@
+// path: apps/backend/src/database/seeds/seeds.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';

@@ -1,11 +1,10 @@
+// path: apps/backend/src/modules/tariffs/services/tariffs-mapper.service.ts
 import { Injectable } from '@nestjs/common';
 import { Tariff } from '../../../database/entities';
 import { TariffResponseDto } from '../dto/response/tariff-response.dto';
-import { TARIFFS_CONSTANTS } from '../constants/tariffs.constants';
 
 @Injectable()
 export class TariffsMapperService {
-  
   /**
    * Основной маппинг Entity → ResponseDto
    */
@@ -36,7 +35,7 @@ export class TariffsMapperService {
    * Маппинг для списков (массив Entity → массив ResponseDto)
    */
   mapArrayToResponseDto(tariffs: Tariff[], subscriptionsCounts: Record<string, number> = {}): TariffResponseDto[] {
-    return tariffs.map(tariff => this.mapToResponseDto(tariff, subscriptionsCounts[tariff.id] || 0));
+    return tariffs.map((tariff) => this.mapToResponseDto(tariff, subscriptionsCounts[tariff.id] || 0));
   }
 
   /**
@@ -121,7 +120,10 @@ export class TariffsMapperService {
   /**
    * Статистическая информация о тарифе
    */
-  mapToStatsInfo(tariff: Tariff, subscriptionsCount: number = 0): {
+  mapToStatsInfo(
+    tariff: Tariff,
+    subscriptionsCount: number = 0,
+  ): {
     id: string;
     name: string;
     priceMonthly: number;
@@ -152,88 +154,10 @@ export class TariffsMapperService {
   }
 
   /**
-   * 🔥 НОВОЕ: Маппинг для создания подписки (минимальные данные)
+   * Форматирование цены для отображения (рубли)
    */
-  mapForSubscriptionCreation(tariff: Tariff): {
-    tariffId: string;
-    tariffName: string;
-    priceMonthly: number;
-    priceYearly: number;
-    limits: {
-      maxUsers: number | null;
-      maxCustomers: number | null;
-      maxVehicles: number | null;
-      maxOrders: number | null;
-    };
-  } {
-    return {
-      tariffId: tariff.id,
-      tariffName: tariff.name,
-      priceMonthly: tariff.priceMonthly,
-      priceYearly: tariff.priceYearly,
-      limits: {
-        maxUsers: tariff.maxUsers,
-        maxCustomers: tariff.maxCustomers,
-        maxVehicles: tariff.maxVehicles,
-        maxOrders: tariff.maxOrders,
-      },
-    };
-  }
-
-  /**
-   * 🔥 НОВОЕ: Маппинг для audit логирования
-   */
-  mapToAuditData(tariff: Tariff): {
-    id: string;
-    name: string;
-    priceMonthly: number;
-    priceYearly: number;
-    isActive: boolean;
-    maxUsers: number | null;
-    maxCustomers: number | null;
-  } {
-    return {
-      id: tariff.id,
-      name: tariff.name,
-      priceMonthly: tariff.priceMonthly,
-      priceYearly: tariff.priceYearly,
-      isActive: tariff.isActive,
-      maxUsers: tariff.maxUsers,
-      maxCustomers: tariff.maxCustomers,
-    };
-  }
-
-  /**
-   * Расчет скидки при годовой оплате
-   */
-  private calculateYearlyDiscount(monthlyPrice: number, yearlyPrice: number): number {
-    if (!monthlyPrice || !yearlyPrice) return 0;
-    
-    const monthlyTotal = monthlyPrice * 12;
-    if (monthlyTotal <= yearlyPrice) return 0;
-    
-    const discount = ((monthlyTotal - yearlyPrice) / monthlyTotal) * 100;
-    return Math.round(discount * 100) / 100; // Округляем до 2 знаков
-  }
-
-  /**
-   * Определение рекомендуемого тарифа
-   */
-  private isRecommendedTariff(tariff: Tariff): boolean {
-    // Логика определения рекомендуемого тарифа
-    const name = tariff.name.toLowerCase();
-    
-    // Рекомендуем средние тарифы (Стандарт, Professional, etc.)
-    const recommendedKeywords = ['стандарт', 'standard', 'professional', 'про', 'business'];
-    
-    return recommendedKeywords.some(keyword => name.includes(keyword));
-  }
-
-  /**
-   * 🔥 НОВОЕ: Форматирование цены для отображения
-   */
-  formatPrice(priceInCents: number): string {
-    const price = priceInCents / 100;
+  formatPrice(priceInRubles: number): string {
+    const price = priceInRubles;
     return new Intl.NumberFormat('ru-RU', {
       style: 'currency',
       currency: 'RUB',
@@ -243,16 +167,20 @@ export class TariffsMapperService {
   }
 
   /**
-   * 🔥 НОВОЕ: Проверка ограничений тарифа
+   * Проверка ограничений тарифа
    */
-  checkLimit(tariff: Tariff, limitType: 'users' | 'customers' | 'vehicles' | 'orders', currentCount: number): {
+  checkLimit(
+    tariff: Tariff,
+    limitType: 'users' | 'customers' | 'vehicles' | 'orders',
+    currentCount: number,
+  ): {
     isExceeded: boolean;
     limit: number | null;
     remaining: number | null;
     percentage: number | null;
   } {
     let limit: number | null;
-    
+
     switch (limitType) {
       case 'users':
         limit = tariff.maxUsers;
@@ -271,7 +199,6 @@ export class TariffsMapperService {
     }
 
     if (limit === null) {
-      // Безлимитный тариф
       return {
         isExceeded: false,
         limit: null,
@@ -290,4 +217,20 @@ export class TariffsMapperService {
       percentage: Math.round(percentage * 100) / 100,
     };
   }
+
+  private calculateYearlyDiscount(monthlyPrice: number, yearlyPrice: number): number {
+    if (!monthlyPrice || !yearlyPrice) return 0;
+
+    const monthlyTotal = monthlyPrice * 12;
+    if (monthlyTotal <= yearlyPrice) return 0;
+
+    const discount = ((monthlyTotal - yearlyPrice) / monthlyTotal) * 100;
+    return Math.round(discount * 100) / 100;
+  }
+
+  private isRecommendedTariff(tariff: Tariff): boolean {
+    const name = (tariff.name || '').toLowerCase();
+    const recommendedKeywords = ['стандарт', 'standard', 'professional', 'про', 'business'];
+    return recommendedKeywords.some((keyword) => name.includes(keyword));
+    }
 }

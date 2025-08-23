@@ -7,7 +7,6 @@ import { TypeResponseDto } from '../dto/types/type-response.dto';
 
 @Injectable()
 export class CatalogueMapperService {
-
   // ====== BRANDS MAPPING ======
 
   mapBrandToResponseDto(brand: VehicleBrand): BrandResponseDto {
@@ -19,12 +18,12 @@ export class CatalogueMapperService {
       isActive: brand.isActive,
       createdAt: brand.createdAt,
       updatedAt: brand.updatedAt,
-      modelsCount: brand.models?.length || 0,
+      modelsCount: Array.isArray((brand as any).models) ? (brand as any).models.length : undefined,
     };
   }
 
   mapBrandsArrayToResponseDto(brands: VehicleBrand[]): BrandResponseDto[] {
-    return brands.map(brand => this.mapBrandToResponseDto(brand));
+    return brands.map((brand) => this.mapBrandToResponseDto(brand));
   }
 
   // ====== MODELS MAPPING ======
@@ -40,10 +39,9 @@ export class CatalogueMapperService {
       isActive: model.isActive,
       createdAt: model.createdAt,
       updatedAt: model.updatedAt,
-      vehiclesCount: model.vehicles?.length || 0,
+      vehiclesCount: Array.isArray((model as any).vehicles) ? (model as any).vehicles.length : undefined,
     };
 
-    // Добавляем информацию о бренде если она есть
     if (model.brand) {
       dto.brand = this.mapBrandToResponseDto(model.brand);
       dto.fullName = `${model.brand.name} ${model.name}`;
@@ -53,7 +51,7 @@ export class CatalogueMapperService {
   }
 
   mapModelsArrayToResponseDto(models: VehicleModel[]): ModelResponseDto[] {
-    return models.map(model => this.mapModelToResponseDto(model));
+    return models.map((model) => this.mapModelToResponseDto(model));
   }
 
   // ====== TYPES MAPPING ======
@@ -66,12 +64,12 @@ export class CatalogueMapperService {
       isActive: type.isActive,
       createdAt: type.createdAt,
       updatedAt: type.updatedAt,
-      vehiclesCount: type.vehicles?.length || 0,
+      vehiclesCount: Array.isArray((type as any).vehicles) ? (type as any).vehicles.length : undefined,
     };
   }
 
   mapTypesArrayToResponseDto(types: VehicleType[]): TypeResponseDto[] {
-    return types.map(type => this.mapTypeToResponseDto(type));
+    return types.map((type) => this.mapTypeToResponseDto(type));
   }
 
   // ====== UTILITY MAPPING ======

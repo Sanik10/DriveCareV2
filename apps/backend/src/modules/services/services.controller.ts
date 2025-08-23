@@ -1,13 +1,16 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Patch, 
-  Delete, 
-  Body, 
-  Param, 
+// path: apps/backend/src/modules/services/services.controller.ts
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
   Query,
-  Req 
+  Req,
+  ParseUUIDPipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { AuthWithOwnership, ServiceResource } from '../../common';
@@ -16,6 +19,7 @@ import { RequestWithUser } from '../auth/interfaces/request-with-user.interface'
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/request/create-service.dto';
 import { UpdateServiceDto } from './dto/request/update-service.dto';
+import { BulkUpdateServicesDto } from './dto/request/bulk-update-services.dto';
 import { ServiceResponseDto } from './dto/response/service-response.dto';
 import { PaginatedServicesResponseDto } from './dto/response/paginated-services-response.dto';
 import { ServicesFilter } from './types/services.types';
@@ -26,7 +30,7 @@ export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
   @Get()
-  @AuthWithOwnership() // 🛡️ Security: JWT + Roles + Ownership
+  @AuthWithOwnership()
   @ApiOperation({ summary: 'Получить список услуг компании' })
   @ApiResponse({ type: PaginatedServicesResponseDto })
   @ApiQuery({ name: 'page', required: false, description: 'Номер страницы' })
@@ -34,11 +38,7 @@ export class ServicesController {
   @ApiQuery({ name: 'search', required: false, description: 'Поиск по названию или описанию' })
   @ApiQuery({ name: 'categoryId', required: false, description: 'Фильтр по категории' })
   @ApiQuery({ name: 'isActive', required: false, description: 'Фильтр по статусу активности' })
-  async findAll(
-    @Req() req: RequestWithUser,
-    @Query() filter: ServicesFilter
-  ): Promise<PaginatedServicesResponseDto> {
-    // 🔒 КРИТИЧНО: фильтрация по принадлежности компании
+  async findAll(@Req() req: RequestWithUser, @Query() filter: ServicesFilter): Promise<PaginatedServicesResponseDto> {
     return this.servicesService.findAllForUser(req.user, filter);
   }
 
@@ -53,34 +53,25 @@ export class ServicesController {
   @AuthWithOwnership()
   @ApiOperation({ summary: 'Поиск услуг по названию' })
   @ApiQuery({ name: 'q', required: true, description: 'Поисковый запрос' })
-  async search(
-    @Query('q') query: string,
-    @Req() req: RequestWithUser
-  ): Promise<ServiceResponseDto[]> {
+  async search(@Query('q') query: string, @Req() req: RequestWithUser): Promise<ServiceResponseDto[]> {
     return this.servicesService.search(query, req.user);
   }
 
   @Get('quick')
   @AuthWithOwnership()
   @ApiOperation({ summary: 'Получить активные услуги для быстрого доступа' })
-  async getActiveQuick(@Req() req: RequestWithUser): Promise<Array<{
-    id: string;
-    name: string;
-    price: number;
-    duration: number;
-  }>> {
+  async getActiveQuick(
+    @Req() req: RequestWithUser,
+  ): Promise<Array<{ id: string; name: string; price: number; duration: number }>> {
     return this.servicesService.getActiveQuick(req.user);
   }
 
   @Get('for-select')
   @AuthWithOwnership()
   @ApiOperation({ summary: 'Получить услуги для dropdown/select компонентов' })
-  async getForSelect(@Req() req: RequestWithUser): Promise<Array<{
-    value: string;
-    label: string;
-    disabled?: boolean;
-    meta?: any;
-  }>> {
+  async getForSelect(
+    @Req() req: RequestWithUser,
+  ): Promise<Array<{ value: string; label: string; disabled?: boolean; meta?: any }>> {
     return this.servicesService.getForSelect(req.user);
   }
 
@@ -89,8 +80,8 @@ export class ServicesController {
   @ApiOperation({ summary: 'Получить услуги по категории' })
   @ApiResponse({ type: [ServiceResponseDto] })
   async findByCategory(
-    @Param('categoryId') categoryId: string,
-    @Req() req: RequestWithUser
+    @Param('categoryId', new ParseUUIDPipe({ version: '4' })) categoryId: string,
+    @Req() req: RequestWithUser,
   ): Promise<ServiceResponseDto[]> {
     return this.servicesService.findByCategory(categoryId, req.user);
   }
@@ -101,10 +92,12 @@ export class ServicesController {
   @ApiQuery({ name: 'minPrice', required: true, description: 'Минимальная цена' })
   @ApiQuery({ name: 'maxPrice', required: true, description: 'Максимальная цена' })
   async findByPriceRange(
-    @Query('minPrice') minPrice: number,
-    @Query('maxPrice') maxPrice: number,
-    @Req() req: RequestWithUser
+    @Query('minPrice') minPriceStr: string,
+    @Query('maxPrice') maxPriceStr: string,
+    @Req() req: RequestWithUser,
   ): Promise<ServiceResponseDto[]> {
+    const minPrice = Number(minPriceStr);
+    const maxPrice = Number(maxPriceStr);
     return this.servicesService.findByPriceRange(minPrice, maxPrice, req.user);
   }
 
@@ -113,18 +106,18 @@ export class ServicesController {
   @ApiOperation({ summary: 'Получить быстрые услуги (до указанного времени)' })
   @ApiQuery({ name: 'maxDuration', required: true, description: 'Максимальная длительность в минутах' })
   async findQuickServices(
-    @Query('maxDuration') maxDuration: number,
-    @Req() req: RequestWithUser
+    @Query('maxDuration', ParseIntPipe) maxDuration: number,
+    @Req() req: RequestWithUser,
   ): Promise<ServiceResponseDto[]> {
     return this.servicesService.findQuickServices(maxDuration, req.user);
   }
 
   @Get(':id')
   @AuthWithOwnership()
-  @ServiceResource() // 🛡️ Проверка: service.companyId === user.companyId
+  @ServiceResource()
   @ApiOperation({ summary: 'Получить услугу по ID' })
   @ApiResponse({ type: ServiceResponseDto })
-  async findOne(@Param('id') id: string): Promise<ServiceResponseDto> {
+  async findOne(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<ServiceResponseDto> {
     return this.servicesService.findOne(id);
   }
 
@@ -133,21 +126,18 @@ export class ServicesController {
   @ServiceResource()
   @ApiOperation({ summary: 'Проверить доступность услуги' })
   async checkAvailability(
-    @Param('id') id: string,
-    @Req() req: RequestWithUser
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Req() req: RequestWithUser,
   ): Promise<{ available: boolean; service?: ServiceResponseDto; reason?: string }> {
     return this.servicesService.checkAvailability(id, req.user);
   }
 
   @Post()
   @AuthWithOwnership()
-  @Roles('owner', 'admin', 'manager') // 🔒 Только admin+ могут создавать услуги
+  @Roles('owner', 'admin', 'manager')
   @ApiOperation({ summary: 'Создать новую услугу' })
   @ApiResponse({ type: ServiceResponseDto })
-  async create(
-    @Body() dto: CreateServiceDto,
-    @Req() req: RequestWithUser
-  ): Promise<ServiceResponseDto> {
+  async create(@Body() dto: CreateServiceDto, @Req() req: RequestWithUser): Promise<ServiceResponseDto> {
     return this.servicesService.createForUser(dto, req.user);
   }
 
@@ -156,23 +146,24 @@ export class ServicesController {
   @Roles('owner', 'admin')
   @ApiOperation({ summary: 'Массовое обновление услуг' })
   async bulkUpdate(
-    @Body() dto: { serviceIds: string[]; updates: UpdateServiceDto },
-    @Req() req: RequestWithUser
+    @Body() dto: BulkUpdateServicesDto,
+    @Req() req: RequestWithUser,
   ): Promise<{ updated: number; failed: number; message: string }> {
     return this.servicesService.bulkUpdate(dto.serviceIds, dto.updates, req.user);
   }
 
   @Patch(':id')
   @AuthWithOwnership()
-  @ServiceResource() // 🛡️ Нельзя редактировать чужие услуги
+  @ServiceResource()
   @Roles('owner', 'admin', 'manager')
   @ApiOperation({ summary: 'Обновить услугу' })
   @ApiResponse({ type: ServiceResponseDto })
   async update(
-    @Param('id') id: string,
-    @Body() dto: UpdateServiceDto
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: UpdateServiceDto,
+    @Req() req: RequestWithUser,
   ): Promise<ServiceResponseDto> {
-    return this.servicesService.update(id, dto);
+    return this.servicesService.update(id, dto, req.user);
   }
 
   @Post(':id/toggle-status')
@@ -180,17 +171,23 @@ export class ServicesController {
   @ServiceResource()
   @Roles('owner', 'admin', 'manager')
   @ApiOperation({ summary: 'Переключить статус активности услуги' })
-  async toggleStatus(@Param('id') id: string): Promise<ServiceResponseDto> {
-    return this.servicesService.toggleStatus(id);
+  async toggleStatus(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<ServiceResponseDto> {
+    return this.servicesService.toggleStatus(id, req.user);
   }
 
   @Delete(':id')
   @AuthWithOwnership()
-  @ServiceResource() // 🛡️ Нельзя удалять чужие услуги
-  @Roles('owner', 'admin') // 🔒 Только admin+ могут удалять
+  @ServiceResource()
+  @Roles('owner', 'admin')
   @ApiOperation({ summary: 'Удалить услугу' })
-  async remove(@Param('id') id: string): Promise<{ message: string }> {
-    await this.servicesService.remove(id);
+  async remove(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<{ message: string }> {
+    await this.servicesService.remove(id, req.user);
     return { message: 'Услуга успешно удалена' };
   }
 }

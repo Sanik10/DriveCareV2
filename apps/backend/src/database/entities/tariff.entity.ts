@@ -7,6 +7,7 @@ import {
   UpdateDateColumn,
   Check,
   Index,
+  Unique,
 } from 'typeorm';
 
 const decimalToNumber = {
@@ -20,6 +21,7 @@ const decimalToNumber = {
 @Check(`"max_customers" IS NULL OR "max_customers" >= -1`)
 @Check(`"max_vehicles" IS NULL OR "max_vehicles" >= -1`)
 @Check(`"max_orders" IS NULL OR "max_orders" >= -1`)
+@Unique('uq_tariffs_name_normalized', ['nameNormalized'])
 export class Tariff {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -27,6 +29,9 @@ export class Tariff {
   @Index('idx_tariffs_name')
   @Column({ type: 'varchar', length: 100 })
   name: string;
+
+  @Column({ name: 'name_normalized', type: 'varchar', length: 100 })
+  nameNormalized: string;
 
   @Column({ type: 'text', nullable: true })
   description: string;
@@ -68,6 +73,7 @@ export class Tariff {
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 
+  @Index('idx_tariffs_created_at')
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

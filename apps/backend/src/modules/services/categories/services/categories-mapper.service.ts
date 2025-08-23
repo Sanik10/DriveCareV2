@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/categories/services/categories-mapper.service.ts
 import { Injectable } from '@nestjs/common';
 import { ServiceCategory } from '../../../../database/entities';
 import { CategoryResponseDto } from '../dto/response/category-response.dto';

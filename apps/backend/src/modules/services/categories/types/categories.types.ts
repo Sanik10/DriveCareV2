@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/categories/types/categories.types.ts
 import { RequestWithUser } from '../../../auth/interfaces/request-with-user.interface';
 
 export interface CategoriesFilter {

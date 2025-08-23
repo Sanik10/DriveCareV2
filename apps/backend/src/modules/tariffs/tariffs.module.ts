@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/tariffs/tariffs.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TariffsController } from './tariffs.controller';

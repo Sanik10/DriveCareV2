@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/categories/dto/request/create-category.dto.ts
 import { IsString, IsOptional, Length } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CATEGORY_VALIDATION_MESSAGES } from '../../constants/categories.constants';

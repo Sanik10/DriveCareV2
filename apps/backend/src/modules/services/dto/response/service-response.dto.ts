@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/dto/response/service-response.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ServiceResponseDto {

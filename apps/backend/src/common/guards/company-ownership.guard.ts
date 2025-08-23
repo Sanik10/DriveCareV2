@@ -1,3 +1,4 @@
+// path: apps/backend/src/common/guards/company-ownership.guard.ts
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException, Logger } from '@nestjs/common';
 import { Reflector, ModuleRef } from '@nestjs/core';
 import { RequestWithUser } from '../../modules/auth/interfaces/request-with-user.interface';
@@ -425,13 +426,32 @@ export class CompanyOwnershipGuard implements CanActivate {
     return true;
   }
 
-  private async checkServiceHistoryOwnership(user: RequestWithUser['user'], _historyId: string, _request: any): Promise<boolean> {
-    if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании для доступа к истории обслуживания');
+  private async checkServiceHistoryOwnership(user: RequestWithUser['user'], historyId: string, request: any): Promise<boolean> {
+    if (!user.companyId) {
+      throw new ForbiddenException('Пользователь не принадлежит к компании для доступа к истории обслуживания');
+    }
+    const { ServiceHistoryValidationService } = await import('../../modules/service-history/services/service-history-validation.service');
+    const validationService = this.moduleRef.get(ServiceHistoryValidationService, { strict: false });
+    if (!validationService) throw new ForbiddenException('Доступ к истории обслуживания временно недоступен');
+
+    await validationService.validateServiceHistoryOwnership(historyId, user.companyId);
+
+    await this.auditService.log(AuditAction.PERMISSION_GRANTED, {
+      userId: user.id,
+      companyId: user.companyId,
+      level: AuditLevel.INFO,
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent'],
+      details: { reason: 'Service-history ownership validated', historyId },
+      status: 'granted',
+    });
     return true;
   }
+
   private async checkVehicleCatalogAccess(_user: RequestWithUser['user'], _request: any): Promise<boolean> {
     return true;
   }
+
   private async checkServiceOwnership(user: RequestWithUser['user'], serviceId: string, _request: any): Promise<boolean> {
     if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
     const { ServicesValidationService } = await import('../../modules/services/services/services-validation.service');
@@ -439,6 +459,7 @@ export class CompanyOwnershipGuard implements CanActivate {
     if (validationService) await validationService.validateServiceOwnership(serviceId, user.companyId);
     return true;
   }
+
   private async checkServiceCategoryOwnership(user: RequestWithUser['user'], categoryId: string, _request: any): Promise<boolean> {
     if (!user.companyId) throw new ForbiddenException('Пользователь не принадлежит к компании');
     const { ServicesValidationService } = await import('../../modules/services/services/services-validation.service');

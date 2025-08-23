@@ -10,15 +10,15 @@ import { CompanyOwnershipGuard } from './company-ownership.guard';
  * 1. JwtAuthGuard - проверка JWT токена
  * 2. RolesGuard - проверка ролей пользователя
  * 3. CompanyOwnershipGuard - проверка принадлежности ресурсов
- * 
+ *
  * Использование:
  * @AuthWithOwnership()
  * @CompanyResource()
- * @Roles('owner', 'admin')
+ * @Roles('company_owner', 'company_admin')
  * async updateCompany() { ... }
  */
-export const AuthWithOwnership = () => 
+export const AuthWithOwnership = () =>
   applyDecorators(
     UseGuards(JwtAuthGuard, RolesGuard, CompanyOwnershipGuard),
-    ApiBearerAuth('JWT-auth')
+    ApiBearerAuth('JWT-auth'),
   );

@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/service-history/service-history.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ServiceHistoryController } from './service-history.controller';

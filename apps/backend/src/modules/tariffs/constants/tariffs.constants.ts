@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/tariffs/constants/tariffs.constants.ts
 import { AuditAction } from '../../../common/audit/audit.service';
 
 export const TARIFFS_CONSTANTS = {
@@ -7,7 +8,7 @@ export const TARIFFS_CONSTANTS = {
     MIN_PRICE: 0,
     MAX_PRICE: 999999.99,
     DEFAULT_IS_ACTIVE: true,
-    UNLIMITED_VALUE: -1, // Значение для безлимитных тарифов
+    UNLIMITED_VALUE: -1, // Техническое значение для безлимитных тарифов (также допускается null)
   },
   VALIDATION: {
     NAME_MAX_LENGTH: 100,
@@ -24,9 +25,9 @@ export const TARIFFS_CONSTANTS = {
     ALL_TARIFFS: 'tariffs:all',
   },
   CACHE_TTL: {
-    TARIFF: 7200,       // 2 часа (тарифы редко меняются)
+    TARIFF: 7200, // 2 часа
     ACTIVE_TARIFFS: 3600, // 1 час
-    ALL_TARIFFS: 1800,   // 30 минут
+    ALL_TARIFFS: 1800, // 30 минут
   },
   FEATURES: {
     BASIC: {
@@ -56,5 +57,11 @@ export const TARIFFS_CONSTANTS = {
     TARIFF_UPDATED: AuditAction.TARIFF_UPDATED,
     TARIFF_STATUS_CHANGED: AuditAction.TARIFF_STATUS_CHANGED,
     TARIFF_DELETED: AuditAction.TARIFF_DELETED,
+    TARIFF_VIEWED: AuditAction.TARIFF_VIEWED,
+    TARIFFS_LISTED: AuditAction.TARIFFS_LISTED,
+    TARIFFS_COMPARED: AuditAction.TARIFFS_COMPARED,
+    TARIFFS_POPULAR_VIEWED: AuditAction.TARIFFS_POPULAR_VIEWED,
+    TARIFF_STATS_VIEWED: AuditAction.TARIFF_STATS_VIEWED,
+    TARIFF_SELECT_OPTIONS_VIEWED: AuditAction.TARIFF_SELECT_OPTIONS_VIEWED,
   },
 } as const;

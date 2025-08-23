@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/service-history/dto/response/service-history-response.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ServiceHistoryResponseDto {

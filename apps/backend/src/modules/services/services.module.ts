@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/services.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Service, ServiceCategory } from '../../database/entities';

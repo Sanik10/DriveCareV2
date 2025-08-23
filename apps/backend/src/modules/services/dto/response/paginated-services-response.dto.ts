@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/dto/response/paginated-services-response.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import { ServiceResponseDto } from './service-response.dto';
 

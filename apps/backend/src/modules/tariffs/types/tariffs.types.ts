@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/tariffs/types/tariffs.types.ts
 export type TariffStatus = 'active' | 'inactive';
 export type SortOrder = 'asc' | 'desc';
 export type TariffSortField = 'name' | 'priceMonthly' | 'priceYearly' | 'createdAt';

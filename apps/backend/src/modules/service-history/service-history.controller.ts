@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/service-history/service-history.controller.ts
 import {
   Controller,
   Get,
@@ -12,7 +13,9 @@ import {
   DefaultValuePipe,
   ParseIntPipe,
   ParseBoolPipe,
+  ParseUUIDPipe,
   Req,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -24,7 +27,6 @@ import {
   ApiUnauthorizedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
-  ApiConflictResponse,
   ApiBadRequestResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -47,9 +49,9 @@ export class ServiceHistoryController {
   @Post()
   @AuthWithOwnership()
   @Roles('owner', 'admin', 'manager', 'mechanic')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Создание записи обслуживания',
-    description: 'Создание новой записи истории обслуживания автомобиля. Автомобиль должен принадлежать компании пользователя.'
+    description: 'Создание новой записи истории обслуживания автомобиля. Автомобиль должен принадлежать компании пользователя.',
   })
   @ApiBody({ type: CreateServiceHistoryDto })
   @ApiResponse({ status: HttpStatus.CREATED, type: ServiceHistoryResponseDto })
@@ -57,18 +59,15 @@ export class ServiceHistoryController {
   @ApiUnauthorizedResponse({ description: 'Требуется авторизация' })
   @ApiForbiddenResponse({ description: 'Недостаточно прав доступа' })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  async create(
-    @Body() createServiceHistoryDto: CreateServiceHistoryDto,
-    @Req() req: RequestWithUser,
-  ): Promise<ServiceHistoryResponseDto> {
+  async create(@Body() createServiceHistoryDto: CreateServiceHistoryDto, @Req() req: RequestWithUser): Promise<ServiceHistoryResponseDto> {
     return this.serviceHistoryService.createForUser(createServiceHistoryDto, req.user);
   }
 
   @Get()
   @AuthWithOwnership()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Получение истории обслуживания',
-    description: 'Получение списка записей обслуживания с фильтрацией. Пользователи видят только записи своей компании.'
+    description: 'Получение списка записей обслуживания с фильтрацией. Пользователи видят только записи своей компании.',
   })
   @ApiQuery({ name: 'search', required: false, description: 'Поиск по описанию работ' })
   @ApiQuery({ name: 'vehicleId', required: false, description: 'ID автомобиля для фильтрации' })
@@ -80,6 +79,9 @@ export class ServiceHistoryController {
   @ApiQuery({ name: 'hasNextService', required: false, description: 'Есть ли запланированное следующее ТО' })
   @ApiQuery({ name: 'page', required: false, description: 'Номер страницы' })
   @ApiQuery({ name: 'limit', required: false, description: 'Размер страницы' })
+  @ApiQuery({ name: 'sortField', required: false, description: 'Поле сортировки', enum: ['date', 'mileage', 'createdAt', 'nextServiceDate'] })
+  @ApiQuery({ name: 'sortOrder', required: false, description: 'Направление сортировки', enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'companyId', required: false, description: 'ID компании (только для superadmin)' })
   @ApiResponse({ status: HttpStatus.OK, type: PaginatedServiceHistoryResponseDto })
   @ApiUnauthorizedResponse({ description: 'Требуется авторизация' })
   @Throttle({ default: { limit: 50, ttl: 60000 } })
@@ -90,18 +92,26 @@ export class ServiceHistoryController {
     @Query('customerId') customerId?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
-    @Query('mileageFrom', new DefaultValuePipe(null)) mileageFrom?: number,
-    @Query('mileageTo', new DefaultValuePipe(null)) mileageTo?: number,
-    @Query('hasNextService', new DefaultValuePipe(null)) hasNextService?: boolean,
+    @Query('mileageFrom', new DefaultValuePipe(undefined), ParseIntPipe) mileageFrom?: number,
+    @Query('mileageTo', new DefaultValuePipe(undefined), ParseIntPipe) mileageTo?: number,
+    @Query('hasNextService', new DefaultValuePipe(undefined), ParseBoolPipe) hasNextService?: boolean,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query('limit', new DefaultValuePipe(SERVICE_HISTORY_CONSTANTS.DEFAULTS.PAGE_SIZE), ParseIntPipe) limit: number = SERVICE_HISTORY_CONSTANTS.DEFAULTS.PAGE_SIZE,
-    @Query('sortField', new DefaultValuePipe('date')) sortField: string = 'date',
+    @Query('limit', new DefaultValuePipe(SERVICE_HISTORY_CONSTANTS.DEFAULTS.PAGE_SIZE), ParseIntPipe)
+    limit: number = SERVICE_HISTORY_CONSTANTS.DEFAULTS.PAGE_SIZE,
+    @Query('sortField', new DefaultValuePipe('date')) sortField: 'date' | 'mileage' | 'createdAt' | 'nextServiceDate' = 'date',
     @Query('sortOrder', new DefaultValuePipe('desc')) sortOrder: 'asc' | 'desc' = 'desc',
+    @Query('companyId') companyId?: string,
   ): Promise<PaginatedServiceHistoryResponseDto> {
+    // Superadmin-policy: требуем явный companyId
+    if (req.user.role === 'superadmin' && !companyId) {
+      throw new BadRequestException('Для superadmin параметр companyId обязателен');
+    }
+
     const filter: ServiceHistoryFilter = {
       search,
       vehicleId,
       customerId,
+      companyId, // будет проигнорирован для не-superadmin в сервисе
       dateFrom: dateFrom ? new Date(dateFrom) : undefined,
       dateTo: dateTo ? new Date(dateTo) : undefined,
       mileageFrom,
@@ -109,7 +119,7 @@ export class ServiceHistoryController {
       hasNextService,
       page,
       limit: Math.min(limit, SERVICE_HISTORY_CONSTANTS.DEFAULTS.MAX_ITEMS),
-      sortField: sortField as any,
+      sortField,
       sortOrder,
     };
 
@@ -118,16 +128,16 @@ export class ServiceHistoryController {
 
   @Get('vehicle/:vehicleId')
   @AuthWithOwnership()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'История обслуживания автомобиля',
-    description: 'Получение всей истории обслуживания конкретного автомобиля с проверкой принадлежности.'
+    description: 'Получение всей истории обслуживания конкретного автомобиля с проверкой принадлежности.',
   })
   @ApiParam({ name: 'vehicleId', description: 'ID автомобиля' })
   @ApiResponse({ status: HttpStatus.OK, type: [ServiceHistoryResponseDto] })
   @ApiNotFoundResponse({ description: 'Автомобиль не найден или нет доступа' })
   @Throttle({ default: { limit: 50, ttl: 60000 } })
   async findByVehicle(
-    @Param('vehicleId') vehicleId: string,
+    @Param('vehicleId', new ParseUUIDPipe({ version: '4' })) vehicleId: string,
     @Req() req: RequestWithUser,
   ): Promise<ServiceHistoryResponseDto[]> {
     return this.serviceHistoryService.getServiceHistoryByVehicle(vehicleId, req.user);
@@ -136,9 +146,9 @@ export class ServiceHistoryController {
   @Get('stats/dashboard')
   @AuthWithOwnership()
   @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Статистика по обслуживанию',
-    description: 'Получение статистики по обслуживанию для дашборда.'
+    description: 'Получение статистики по обслуживанию для дашборда.',
   })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async getStats(@Req() req: RequestWithUser): Promise<any> {
@@ -148,9 +158,9 @@ export class ServiceHistoryController {
   @Get(':id')
   @AuthWithOwnership()
   @ServiceHistoryResource()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Получение записи обслуживания по ID',
-    description: 'Получение детальной информации о записи обслуживания с проверкой принадлежности.'
+    description: 'Получение детальной информации о записи обслуживания с проверкой принадлежности.',
   })
   @ApiParam({ name: 'id', description: 'ID записи обслуживания' })
   @ApiResponse({ status: HttpStatus.OK, type: ServiceHistoryResponseDto })
@@ -158,7 +168,7 @@ export class ServiceHistoryController {
   @ApiUnauthorizedResponse({ description: 'Требуется авторизация' })
   @ApiForbiddenResponse({ description: 'Нет доступа к записи' })
   @Throttle({ default: { limit: 50, ttl: 60000 } })
-  async findOne(@Param('id') id: string): Promise<ServiceHistoryResponseDto> {
+  async findOne(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<ServiceHistoryResponseDto> {
     return this.serviceHistoryService.findOne(id);
   }
 
@@ -166,9 +176,9 @@ export class ServiceHistoryController {
   @AuthWithOwnership()
   @ServiceHistoryResource()
   @Roles('owner', 'admin', 'manager', 'mechanic')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Обновление записи обслуживания',
-    description: 'Обновление информации о записи обслуживания с проверкой принадлежности.'
+    description: 'Обновление информации о записи обслуживания с проверкой принадлежности.',
   })
   @ApiParam({ name: 'id', description: 'ID записи обслуживания' })
   @ApiBody({ type: UpdateServiceHistoryDto })
@@ -178,10 +188,7 @@ export class ServiceHistoryController {
   @ApiUnauthorizedResponse({ description: 'Требуется авторизация' })
   @ApiForbiddenResponse({ description: 'Недостаточно прав или нет доступа к записи' })
   @Throttle({ default: { limit: 30, ttl: 60000 } })
-  async update(
-    @Param('id') id: string,
-    @Body() updateServiceHistoryDto: UpdateServiceHistoryDto,
-  ): Promise<ServiceHistoryResponseDto> {
+  async update(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @Body() updateServiceHistoryDto: UpdateServiceHistoryDto): Promise<ServiceHistoryResponseDto> {
     return this.serviceHistoryService.update(id, updateServiceHistoryDto);
   }
 
@@ -190,9 +197,9 @@ export class ServiceHistoryController {
   @AuthWithOwnership()
   @ServiceHistoryResource()
   @Roles('owner', 'admin')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Удаление записи обслуживания',
-    description: 'Мягкое удаление записи обслуживания. Доступно владельцам и админам.'
+    description: 'Мягкое удаление записи обслуживания. Доступно владельцам и админам.',
   })
   @ApiParam({ name: 'id', description: 'ID записи обслуживания' })
   @ApiResponse({ status: HttpStatus.NO_CONTENT })
@@ -200,7 +207,7 @@ export class ServiceHistoryController {
   @ApiUnauthorizedResponse({ description: 'Требуется авторизация' })
   @ApiForbiddenResponse({ description: 'Недостаточно прав доступа' })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  async remove(@Param('id') id: string): Promise<void> {
+  async remove(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<void> {
     return this.serviceHistoryService.remove(id);
   }
 
@@ -209,14 +216,14 @@ export class ServiceHistoryController {
   @AuthWithOwnership()
   @ServiceHistoryResource()
   @Roles('superadmin')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Полное удаление записи (только суперадмин)',
-    description: 'ОПАСНАЯ ОПЕРАЦИЯ! Полное удаление записи из базы данных.'
+    description: 'ОПАСНАЯ ОПЕРАЦИЯ! Полное удаление записи из базы данных.',
   })
   @ApiParam({ name: 'id', description: 'ID записи обслуживания' })
   @ApiResponse({ status: HttpStatus.NO_CONTENT })
   @Throttle({ default: { limit: 5, ttl: 60000 } })
-  async hardRemove(@Param('id') id: string): Promise<void> {
+  async hardRemove(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<void> {
     return this.serviceHistoryService.hardRemove(id);
   }
 }

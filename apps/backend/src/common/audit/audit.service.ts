@@ -1,3 +1,4 @@
+// path: apps/backend/src/common/audit/audit.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { createHmac } from 'crypto';
 import { ConfigService } from '@nestjs/config';
@@ -58,6 +59,12 @@ export enum AuditAction {
   TARIFF_UPDATED = 'TARIFF_UPDATED',
   TARIFF_STATUS_CHANGED = 'TARIFF_STATUS_CHANGED',
   TARIFF_DELETED = 'TARIFF_DELETED',
+  TARIFF_VIEWED = 'TARIFF_VIEWED',
+  TARIFFS_LISTED = 'TARIFFS_LISTED',
+  TARIFFS_COMPARED = 'TARIFFS_COMPARED',
+  TARIFFS_POPULAR_VIEWED = 'TARIFFS_POPULAR_VIEWED',
+  TARIFF_STATS_VIEWED = 'TARIFF_STATS_VIEWED',
+  TARIFF_SELECT_OPTIONS_VIEWED = 'TARIFF_SELECT_OPTIONS_VIEWED',
 
   SUBSCRIPTION_CREATED = 'SUBSCRIPTION_CREATED',
   SUBSCRIPTION_UPDATED = 'SUBSCRIPTION_UPDATED',
@@ -200,6 +207,35 @@ export enum AuditAction {
   SCHEDULE_EXCEPTION_CREATED = 'SCHEDULE_EXCEPTION_CREATED',
   SCHEDULE_EXCEPTION_STATUS_CHANGED = 'SCHEDULE_EXCEPTION_STATUS_CHANGED',
   SCHEDULE_EXCEPTION_DELETED = 'SCHEDULE_EXCEPTION_DELETED',
+
+  // ====== VEHICLES CATALOGUE ======
+  CATALOGUE_BRAND_CREATED = 'CATALOGUE_BRAND_CREATED',
+  CATALOGUE_BRAND_UPDATED = 'CATALOGUE_BRAND_UPDATED',
+  CATALOGUE_BRAND_DELETED = 'CATALOGUE_BRAND_DELETED',
+  CATALOGUE_BRAND_VIEWED = 'CATALOGUE_BRAND_VIEWED',
+  CATALOGUE_BRANDS_LISTED = 'CATALOGUE_BRANDS_LISTED',
+
+  CATALOGUE_MODEL_CREATED = 'CATALOGUE_MODEL_CREATED',
+  CATALOGUE_MODEL_UPDATED = 'CATALOGUE_MODEL_UPDATED',
+  CATALOGUE_MODEL_DELETED = 'CATALOGUE_MODEL_DELETED',
+  CATALOGUE_MODEL_VIEWED = 'CATALOGUE_MODEL_VIEWED',
+  CATALOGUE_MODELS_LISTED = 'CATALOGUE_MODELS_LISTED',
+
+  CATALOGUE_TYPE_CREATED = 'CATALOGUE_TYPE_CREATED',
+  CATALOGUE_TYPE_UPDATED = 'CATALOGUE_TYPE_UPDATED',
+  CATALOGUE_TYPE_DELETED = 'CATALOGUE_TYPE_DELETED',
+  CATALOGUE_TYPE_VIEWED = 'CATALOGUE_TYPE_VIEWED',
+  CATALOGUE_TYPES_LISTED = 'CATALOGUE_TYPES_LISTED',
+
+  // ====== SERVICE HISTORY ======
+  SERVICE_HISTORY_CREATED = 'SERVICE_HISTORY_CREATED',
+  SERVICE_HISTORY_UPDATED = 'SERVICE_HISTORY_UPDATED',
+  SERVICE_HISTORY_DEACTIVATED = 'SERVICE_HISTORY_DEACTIVATED',
+  SERVICE_HISTORY_DELETED = 'SERVICE_HISTORY_DELETED',
+  SERVICE_HISTORY_VIEWED = 'SERVICE_HISTORY_VIEWED',
+  SERVICE_HISTORY_LISTED = 'SERVICE_HISTORY_LISTED',
+  SERVICE_HISTORY_STATS_VIEWED = 'SERVICE_HISTORY_STATS_VIEWED',
+  VEHICLE_HISTORY_VIEWED = 'VEHICLE_HISTORY_VIEWED',
 }
 
 export enum AuditLevel {
@@ -236,14 +272,9 @@ export class AuditService {
   private readonly chainKey: string;
   private readonly isProduction: boolean;
 
-  constructor(
-    private readonly config: ConfigService,
-    @InjectDataSource() private readonly dataSource: DataSource,
-  ) {
+  constructor(private readonly config: ConfigService, @InjectDataSource() private readonly dataSource: DataSource) {
     this.chainKey =
-      this.config.get<string>('AUDIT_CHAIN_KEY') ||
-      this.config.get<string>('security.audit.chainKey') ||
-      '';
+      this.config.get<string>('AUDIT_CHAIN_KEY') || this.config.get<string>('security.audit.chainKey') || '';
     this.isProduction = this.config.get('NODE_ENV') === 'production';
     if (this.isProduction && !this.chainKey) {
       throw new Error('AUDIT_CHAIN_KEY is required in production');
@@ -349,6 +380,9 @@ export class AuditService {
     return clone;
   }
 
+  // ===== Convenience wrappers (kept for backwards compatibility across modules) =====
+
+  // Access/security
   async logAccessDenied(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.ACCESS_DENIED, { ...data, level: data.level || AuditLevel.WARNING });
   }
@@ -361,6 +395,8 @@ export class AuditService {
   async logSecurityViolation(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.SECURITY_VIOLATION, { ...data, level: AuditLevel.ERROR });
   }
+
+  // Auth/session
   async logLogin(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.USER_LOGIN, data);
   }
@@ -386,6 +422,7 @@ export class AuditService {
     await this.log(AuditAction.USER_ALL_DEVICES_LOGOUT, data);
   }
 
+  // Companies
   async logCompanyCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.COMPANY_CREATED, data);
   }
@@ -399,6 +436,7 @@ export class AuditService {
     await this.log(AuditAction.COMPANY_STATUS_CHANGED, data);
   }
 
+  // Tariffs
   async logTariffCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.TARIFF_CREATED, data);
   }
@@ -411,7 +449,26 @@ export class AuditService {
   async logTariffStatusChanged(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.TARIFF_STATUS_CHANGED, data);
   }
+  async logTariffsListed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.TARIFFS_LISTED, data);
+  }
+  async logTariffViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.TARIFF_VIEWED, data);
+  }
+  async logTariffsCompared(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.TARIFFS_COMPARED, data);
+  }
+  async logTariffsPopularViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.TARIFFS_POPULAR_VIEWED, data);
+  }
+  async logTariffStatsViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.TARIFF_STATS_VIEWED, data);
+  }
+  async logTariffSelectOptionsViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.TARIFF_SELECT_OPTIONS_VIEWED, data);
+  }
 
+  // Subscriptions
   async logSubscriptionCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.SUBSCRIPTION_CREATED, data);
   }
@@ -428,6 +485,7 @@ export class AuditService {
     await this.log(AuditAction.SUBSCRIPTION_RENEWED, data);
   }
 
+  // Customers
   async logCustomerCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.CUSTOMER_CREATED, data);
   }
@@ -447,12 +505,13 @@ export class AuditService {
     await this.log(AuditAction.CUSTOMER_DATA_EXPORTED, data);
   }
   async logCustomerConsentRevoked(data: AuditLogData): Promise<void> {
-    await this.log(AuditAction.CUSTOMER_CONSENT_REVOKED, { ...data, level: AuditLevel.INFO });
+    await this.log(AuditAction.CUSTOMER_CONSENT_REVOKED, { ...data, level: data.level || AuditLevel.INFO });
   }
   async logCustomerAnonymized(data: AuditLogData): Promise<void> {
-    await this.log(AuditAction.CUSTOMER_ANONYMIZED, { ...data, level: AuditLevel.INFO });
+    await this.log(AuditAction.CUSTOMER_ANONYMIZED, { ...data, level: data.level || AuditLevel.INFO });
   }
 
+  // Vehicles
   async logVehicleCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.VEHICLE_CREATED, data);
   }
@@ -478,6 +537,7 @@ export class AuditService {
     await this.log(AuditAction.VEHICLES_LISTED, data);
   }
 
+  // Orders
   async logOrderCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.ORDER_CREATED, data);
   }
@@ -500,13 +560,15 @@ export class AuditService {
     await this.log(AuditAction.ORDER_FINANCIALS_RECALCULATED, data);
   }
 
+  // Limits
   async logLimitCheckFailed(data: AuditLogData): Promise<void> {
-    await this.log(AuditAction.LIMIT_CHECK_FAILED, { ...data, level: AuditLevel.ERROR });
+    await this.log(AuditAction.LIMIT_CHECK_FAILED, { ...data, level: data.level || AuditLevel.ERROR });
   }
   async logLimitExceeded(data: AuditLogData): Promise<void> {
-    await this.log(AuditAction.LIMIT_EXCEEDED, { ...data, level: AuditLevel.WARNING });
+    await this.log(AuditAction.LIMIT_EXCEEDED, { ...data, level: data.level || AuditLevel.WARNING });
   }
 
+  // Payments
   async logPaymentCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.PAYMENT_CREATED, data);
   }
@@ -532,16 +594,16 @@ export class AuditService {
     await this.log(AuditAction.PAYMENT_PARTIALLY_REFUNDED, data);
   }
   async logPaymentDisputed(data: AuditLogData): Promise<void> {
-    await this.log(AuditAction.PAYMENT_DISPUTED, { ...data, level: AuditLevel.WARNING });
+    await this.log(AuditAction.PAYMENT_DISPUTED, { ...data, level: data.level || AuditLevel.WARNING });
   }
   async logPaymentExpired(data: AuditLogData): Promise<void> {
-    await this.log(AuditAction.PAYMENT_EXPIRED, { ...data, level: AuditLevel.WARNING });
+    await this.log(AuditAction.PAYMENT_EXPIRED, { ...data, level: data.level || AuditLevel.WARNING });
   }
   async logPaymentViewed(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.PAYMENT_VIEWED, data);
   }
   async logPaymentDeleted(data: AuditLogData): Promise<void> {
-    await this.log(AuditAction.PAYMENT_DELETED, { ...data, level: AuditLevel.WARNING });
+    await this.log(AuditAction.PAYMENT_DELETED, { ...data, level: data.level || AuditLevel.WARNING });
   }
   async logPaymentBalanceCalculated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.PAYMENT_BALANCE_CALCULATED, data);
@@ -553,6 +615,36 @@ export class AuditService {
     await this.log(AuditAction.PAYMENT_OVERDUE_PROCESSED, data);
   }
 
+  // Invoices
+  async logInvoiceCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVOICE_CREATED, data);
+  }
+  async logInvoiceUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVOICE_UPDATED, data);
+  }
+  async logInvoiceStatusChanged(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVOICE_STATUS_CHANGED, data);
+  }
+  async logInvoiceCanceled(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVOICE_CANCELED, { ...data, level: data.level || AuditLevel.WARNING });
+  }
+  async logInvoicePaid(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVOICE_PAID, data);
+  }
+  async logInvoiceOverdueDetected(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVOICE_OVERDUE_DETECTED, data);
+  }
+  async logInvoicePaymentReceived(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVOICE_PAYMENT_RECEIVED, data);
+  }
+  async logInvoiceAutoGeneratedFromOrder(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVOICE_AUTO_GENERATED_FROM_ORDER, data);
+  }
+  async logInvoiceViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVOICE_VIEWED, data);
+  }
+
+  // Appointments
   async logAppointmentCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.APPOINTMENT_CREATED, data);
   }
@@ -590,6 +682,7 @@ export class AuditService {
     await this.log(AuditAction.APPOINTMENT_CHECK_AVAILABILITY, data);
   }
 
+  // Work schedules
   async logWorkScheduleCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.WORK_SCHEDULE_CREATED, data);
   }
@@ -606,6 +699,7 @@ export class AuditService {
     await this.log(AuditAction.WORK_SCHEDULES_LISTED, data);
   }
 
+  // Schedule exceptions
   async logScheduleExceptionCreated(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.SCHEDULE_EXCEPTION_CREATED, data);
   }
@@ -614,5 +708,144 @@ export class AuditService {
   }
   async logScheduleExceptionDeleted(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.SCHEDULE_EXCEPTION_DELETED, { ...data, level: data.level || AuditLevel.WARNING });
+  }
+
+  // Inventory alerts
+  async logInventoryAlertCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVENTORY_ALERT_CREATED, data);
+  }
+  async logInventoryAlertUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVENTORY_ALERT_UPDATED, data);
+  }
+  async logInventoryAlertDismissed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVENTORY_ALERT_DISMISSED, data);
+  }
+  async logInventoryAlertsAutoDismissed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVENTORY_ALERTS_AUTO_DISMISSED, data);
+  }
+  async logInventoryAlertsCleanup(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVENTORY_ALERTS_CLEANUP, data);
+  }
+  async logInventoryAlertSettingsUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVENTORY_ALERT_SETTINGS_UPDATED, data);
+  }
+  async logInventoryAlertTestNotification(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.INVENTORY_ALERT_TEST_NOTIFICATION, data);
+  }
+
+  // Stock movements
+  async logStockMovementCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.STOCK_MOVEMENT_CREATED, data);
+  }
+  async logStockMovementUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.STOCK_MOVEMENT_UPDATED, data);
+  }
+  async logStockMovementReversed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.STOCK_MOVEMENT_REVERSED, data);
+  }
+  async logBulkStockMovementsCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.BULK_STOCK_MOVEMENTS_CREATED, data);
+  }
+  async logBarcodeScanMovement(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.BARCODE_SCAN_MOVEMENT, data);
+  }
+  async logStockAdjustmentCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.STOCK_ADJUSTMENT_CREATED, data);
+  }
+  async logStockReceiptCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.STOCK_RECEIPT_CREATED, data);
+  }
+  async logStockIssueCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.STOCK_ISSUE_CREATED, data);
+  }
+
+  // Parts
+  async logPartCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.PART_CREATED, data);
+  }
+  async logPartUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.PART_UPDATED, data);
+  }
+  async logPartDeleted(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.PART_DELETED, data);
+  }
+  async logPartPriceChanged(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.PART_PRICE_CHANGED, data);
+  }
+  async logPartStatusChanged(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.PART_STATUS_CHANGED, data);
+  }
+  async logPartViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.PART_VIEWED, data);
+  }
+  async logPartsSearched(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.PARTS_SEARCHED, data);
+  }
+  async logPartsBulkUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.PARTS_BULK_UPDATED, data);
+  }
+
+  // Suppliers
+  async logSupplierCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SUPPLIER_CREATED, data);
+  }
+  async logSupplierUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SUPPLIER_UPDATED, data);
+  }
+  async logSupplierDeactivated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SUPPLIER_DEACTIVATED, data);
+  }
+  async logSupplierActivated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SUPPLIER_ACTIVATED, data);
+  }
+  async logSupplierContactUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SUPPLIER_CONTACT_UPDATED, data);
+  }
+  async logSupplierAddressUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SUPPLIER_ADDRESS_UPDATED, data);
+  }
+  async logSupplierRated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SUPPLIER_RATED, data);
+  }
+  async logSupplierPriceComparison(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SUPPLIER_PRICE_COMPARISON, data);
+  }
+  async logSupplierAnalyticsViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SUPPLIER_ANALYTICS_VIEWED, data);
+  }
+  async logSuppliersBulkOperation(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SUPPLIERS_BULK_OPERATION, data);
+  }
+  async logBestSupplierSearch(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.BEST_SUPPLIER_SEARCH, data);
+  }
+  async logTopSuppliersViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.TOP_SUPPLIERS_VIEWED, data);
+  }
+
+  // ===== Service History =====
+  async logServiceHistoryCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_HISTORY_CREATED, data);
+  }
+  async logServiceHistoryUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_HISTORY_UPDATED, data);
+  }
+  async logServiceHistoryDeactivated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_HISTORY_DEACTIVATED, data);
+  }
+  async logServiceHistoryDeleted(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_HISTORY_DELETED, { ...data, level: data.level || AuditLevel.WARNING });
+  }
+  async logServiceHistoryViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_HISTORY_VIEWED, data);
+  }
+  async logServiceHistoriesListed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_HISTORY_LISTED, data);
+  }
+  async logServiceHistoryStatsViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_HISTORY_STATS_VIEWED, data);
+  }
+  async logVehicleHistoryViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.VEHICLE_HISTORY_VIEWED, data);
   }
 }

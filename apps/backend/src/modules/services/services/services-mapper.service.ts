@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/services/services-mapper.service.ts
 import { Injectable } from '@nestjs/common';
 import { Service } from '../../../database/entities';
 import { ServiceResponseDto } from '../dto/response/service-response.dto';

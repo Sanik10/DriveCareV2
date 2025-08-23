@@ -1,4 +1,4 @@
-// path: src/database/entities/order-service.entity.ts
+// path: apps/backend/src/database/entities/order-service.entity.ts
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { Order } from './order.entity';
 import { Service } from './service.entity';

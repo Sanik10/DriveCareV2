@@ -1,22 +1,22 @@
 // path: apps/backend/src/database/entities/vehicle-model.entity.ts
-import { 
-  Entity, 
-  Column, 
-  PrimaryGeneratedColumn, 
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
   OneToMany,
-  Index
+  Index,
 } from 'typeorm';
 import { VehicleBrand } from './vehicle-brand.entity';
 import { Vehicle } from './vehicle.entity';
 
 @Entity('vehicle_models')
-@Index(['brandId']) // 🔥 ДОБАВЛЕНО: Индекс для фильтрации по бренду
-@Index(['name', 'brandId'], { unique: true, where: 'is_deleted = false' }) // 🔥 ДОБАВЛЕНО: Уникальность модели в рамках бренда
-@Index(['isDeleted']) // 🔥 ДОБАВЛЕНО: Soft delete индекс
+@Index(['brandId'])
+@Index(['brandId', 'nameNormalized'], { unique: true, where: 'is_deleted = false' }) // Уникальность модели в рамках бренда (нормализованное имя)
+@Index(['isDeleted'])
 export class VehicleModel {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -26,6 +26,9 @@ export class VehicleModel {
 
   @Column({ type: 'varchar', length: 100 })
   name: string;
+
+  @Column({ name: 'name_normalized', type: 'varchar', length: 110 })
+  nameNormalized: string;
 
   @Column({ name: 'year_from', type: 'integer', nullable: true })
   yearFrom: number;
@@ -39,25 +42,22 @@ export class VehicleModel {
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 
-  // 🔥 ДОБАВЛЕНО: Soft Delete поддержка
   @Column({ name: 'is_deleted', type: 'boolean', default: false })
   isDeleted: boolean;
 
-  @Column({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
   deletedAt: Date | null;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  // 🔥 ДОБАВЛЕНО: UpdateDateColumn
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 
-  // Отношения
-  @ManyToOne(() => VehicleBrand, brand => brand.models)
+  @ManyToOne(() => VehicleBrand, (brand) => brand.models)
   @JoinColumn({ name: 'brand_id' })
   brand: VehicleBrand;
 
-  @OneToMany(() => Vehicle, vehicle => vehicle.model)
+  @OneToMany(() => Vehicle, (vehicle) => vehicle.model)
   vehicles: Vehicle[];
 }

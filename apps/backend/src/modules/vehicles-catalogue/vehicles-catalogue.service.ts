@@ -16,6 +16,7 @@ import { CreateTypeDto } from './dto/types/create-type.dto';
 import { UpdateTypeDto } from './dto/types/update-type.dto';
 import { TypeResponseDto } from './dto/types/type-response.dto';
 import { BrandFilter, ModelFilter, TypeFilter } from './types/catalogue.types';
+import { AuditService, AuditAction } from '../../common/audit/audit.service';
 
 @Injectable()
 export class VehiclesCatalogueService {
@@ -28,6 +29,7 @@ export class VehiclesCatalogueService {
     private readonly catalogueBusinessService: CatalogueBusinessService,
     private readonly catalogueValidationService: CatalogueValidationService,
     private readonly catalogueMapperService: CatalogueMapperService,
+    private readonly auditService: AuditService,
   ) {}
 
   // 🏭 ========== BRANDS ==========
@@ -38,12 +40,20 @@ export class VehiclesCatalogueService {
   }
 
   async getBrands(filter: Partial<BrandFilter> = {}): Promise<BrandResponseDto[]> {
-    const brands = await this.brandsDataService.findWithFilters(filter);
+    const brands = await this.brandsDataService.findWithFilters(filter as BrandFilter);
+    await this.auditService.log(AuditAction.CATALOGUE_BRANDS_LISTED, {
+      resourceType: 'VEHICLE_CATALOGUE',
+      details: { filter },
+    });
     return this.catalogueMapperService.mapBrandsArrayToResponseDto(brands);
   }
 
   async getBrand(id: string): Promise<BrandResponseDto> {
     const brand = await this.catalogueValidationService.validateBrandExists(id);
+    await this.auditService.log(AuditAction.CATALOGUE_BRAND_VIEWED, {
+      resourceType: 'VEHICLE_BRAND',
+      entityId: id,
+    });
     return this.catalogueMapperService.mapBrandToResponseDto(brand);
   }
 
@@ -64,12 +74,20 @@ export class VehiclesCatalogueService {
   }
 
   async getModels(filter: Partial<ModelFilter> = {}): Promise<ModelResponseDto[]> {
-    const models = await this.modelsDataService.findWithFilters(filter);
+    const models = await this.modelsDataService.findWithFilters(filter as ModelFilter);
+    await this.auditService.log(AuditAction.CATALOGUE_MODELS_LISTED, {
+      resourceType: 'VEHICLE_CATALOGUE',
+      details: { filter },
+    });
     return this.catalogueMapperService.mapModelsArrayToResponseDto(models);
   }
 
   async getModel(id: string): Promise<ModelResponseDto> {
     const model = await this.catalogueValidationService.validateModelExists(id);
+    await this.auditService.log(AuditAction.CATALOGUE_MODEL_VIEWED, {
+      resourceType: 'VEHICLE_MODEL',
+      entityId: id,
+    });
     return this.catalogueMapperService.mapModelToResponseDto(model);
   }
 
@@ -90,12 +108,20 @@ export class VehiclesCatalogueService {
   }
 
   async getTypes(filter: Partial<TypeFilter> = {}): Promise<TypeResponseDto[]> {
-    const types = await this.typesDataService.findWithFilters(filter);
+    const types = await this.typesDataService.findWithFilters(filter as TypeFilter);
+    await this.auditService.log(AuditAction.CATALOGUE_TYPES_LISTED, {
+      resourceType: 'VEHICLE_CATALOGUE',
+      details: { filter },
+    });
     return this.catalogueMapperService.mapTypesArrayToResponseDto(types);
   }
 
   async getType(id: string): Promise<TypeResponseDto> {
     const type = await this.catalogueValidationService.validateTypeExists(id);
+    await this.auditService.log(AuditAction.CATALOGUE_TYPE_VIEWED, {
+      resourceType: 'VEHICLE_TYPE',
+      entityId: id,
+    });
     return this.catalogueMapperService.mapTypeToResponseDto(type);
   }
 

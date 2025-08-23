@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/service-history/interfaces/service-history.interface.ts
 import { VehicleServiceHistory } from '../../../database/entities/service-history.entity';
 import { 
   CreateServiceHistoryData, 

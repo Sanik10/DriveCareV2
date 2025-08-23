@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/categories/interfaces/categories.interface.ts
 import { CategoriesFilter, CategoryStats, UserWithCompany } from '../types/categories.types';
 import { ServiceCategory } from '../../../../database/entities';
 import { CreateCategoryDto } from '../dto/request/create-category.dto';
@@ -9,9 +10,9 @@ export interface ICategoriesService {
   findAllForUser(user: UserWithCompany, filter: CategoriesFilter): Promise<PaginatedCategoriesResponseDto>;
   findOne(id: string): Promise<CategoryResponseDto>;
   createForUser(dto: CreateCategoryDto, user: UserWithCompany): Promise<CategoryResponseDto>;
-  update(id: string, dto: UpdateCategoryDto): Promise<CategoryResponseDto>;
-  remove(id: string): Promise<void>;
-  getStats(user: UserWithCompany): Promise<CategoryStats>;
+  update(id: string, dto: UpdateCategoryDto, user: UserWithCompany): Promise<CategoryResponseDto>;
+  remove(id: string, user: UserWithCompany): Promise<void>;
+  getStats(user: UserWithCompany): Promise<any>;
 }
 
 export interface ICategoriesDataService {
@@ -30,10 +31,4 @@ export interface ICategoriesValidationService {
   validateCreateCategoryData(dto: CreateCategoryDto, companyId: string): Promise<void>;
   validateUpdateCategoryData(categoryId: string, dto: UpdateCategoryDto, companyId: string): Promise<ServiceCategory>;
   validateCategoryDeletion(categoryId: string, companyId: string): Promise<void>;
-}
-
-export interface ICategoriesMapperService {
-  mapToResponseDto(category: ServiceCategory): CategoryResponseDto;
-  mapArrayToResponseDto(categories: ServiceCategory[]): CategoryResponseDto[];
-  mapToPaginatedResponse(categories: ServiceCategory[], total: number, page: number, limit: number): PaginatedCategoriesResponseDto;
 }

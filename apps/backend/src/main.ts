@@ -65,7 +65,6 @@ function configureWebhookRawBody(app: any, configService: ConfigService, apiPref
     app.use(path, (req: Request, res: Response, next: NextFunction) => {
       express.raw({ type: '*/*', limit: '256kb' })(req, res, (err) => {
         if (err) return next(err);
-        // Важно: сохраняем сырой буфер для подписи, и оставляем body как Buffer
         (req as any).rawBody = req.body;
         return next();
       });
@@ -75,7 +74,6 @@ function configureWebhookRawBody(app: any, configService: ConfigService, apiPref
   attachRaw(ykFull);
   attachRaw(tkFull);
 
-  // Стандартные парсеры — не трогаем вебхуки
   const jsonParser = express.json({ limit: '1mb' });
   const urlencodedParser = express.urlencoded({ extended: true, limit: '1mb' });
   const isWebhook = (url: string) => url.startsWith(ykFull) || url.startsWith(tkFull);
@@ -147,7 +145,16 @@ async function configureCORS(app: any, configService: ConfigService, environment
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'X-API-Key', 'X-Request-ID'],
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'X-API-Key',
+      'X-Request-ID',
+      'X-Idempotency-Key',
+    ],
     exposedHeaders: ['X-Total-Count', 'X-Request-ID', 'X-API-Version'],
     maxAge: 86400,
   };
@@ -196,13 +203,10 @@ async function bootstrap() {
   app.use(cookieParser(cookieSecret));
   app.use(compression());
 
-  // Raw body для вебхуков — до стандартных парсеров
   configureWebhookRawBody(app, configService, apiPrefix);
 
-  // Глобальные пайпы (security-aware)
   app.useGlobalPipes(new EnhancedValidationPipe(configService));
 
-  // Глобальные фильтры/интерсепторы безопасности
   const auditService = app.get(AuditService);
   app.useGlobalFilters(new GlobalExceptionFilter(configService, auditService));
   app.useGlobalInterceptors(

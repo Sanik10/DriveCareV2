@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/tariffs/interfaces/tariffs.interface.ts
 import { Tariff } from '../../../database/entities';
 import { 
   CreateTariffData, 

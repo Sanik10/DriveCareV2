@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/service-history/types/service-history.types.ts
 export type ServiceHistorySortField = 'date' | 'mileage' | 'createdAt' | 'nextServiceDate';
 export type SortOrder = 'asc' | 'desc';
 

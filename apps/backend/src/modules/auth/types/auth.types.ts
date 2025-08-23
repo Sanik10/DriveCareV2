@@ -1,4 +1,4 @@
-// ✅ ИСПРАВЛЕНО: Полная совместимость с constants.ts
+// path: apps/backend/src/modules/auth/types/auth.types.ts
 export type AuthRole = 
   // Platform level
   | 'superadmin' 

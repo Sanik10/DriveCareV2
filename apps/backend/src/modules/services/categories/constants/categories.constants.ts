@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/categories/constants/categories.constants.ts
 export const CATEGORIES_CONSTANTS = {
   DEFAULT_PAGE_SIZE: 20,
   MAX_PAGE_SIZE: 100,

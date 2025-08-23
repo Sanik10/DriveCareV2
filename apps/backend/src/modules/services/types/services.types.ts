@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/types/services.types.ts
 import { RequestWithUser } from '../../auth/interfaces/request-with-user.interface';
 
 export interface ServicesFilter {

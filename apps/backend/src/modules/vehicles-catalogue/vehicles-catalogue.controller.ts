@@ -1,12 +1,24 @@
 // path: apps/backend/src/modules/vehicles-catalogue/vehicles-catalogue.controller.ts
 import {
-  Controller, Get, Post, Body, Patch, Param, Delete,
-  HttpCode, HttpStatus, Query, DefaultValuePipe, ParseIntPipe,
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  HttpCode,
+  HttpStatus,
+  Query,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import {
-  ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery,
-  ApiUnauthorizedResponse, ApiForbiddenResponse, ApiNotFoundResponse,
-  ApiBody, ApiBadRequestResponse,
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiQuery,
+  ApiBadRequestResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { VehiclesCatalogueService } from './vehicles-catalogue.service';
@@ -31,12 +43,11 @@ export class VehiclesCatalogueController {
 
   @Post('brands')
   @AuthWithOwnership()
-  @Roles('superadmin', 'admin') // 🔒 Только админы могут создавать бренды
-  @ApiOperation({ 
+  @Roles('superadmin', 'platform_admin') // 🔒 Только платформенные роли могут создавать бренды
+  @ApiOperation({
     summary: 'Создание нового бренда',
-    description: 'Создание бренда автомобиля. Доступно только администраторам.'
+    description: 'Создание бренда автомобиля. Доступно только платформенным администраторам.',
   })
-  @ApiBody({ type: CreateBrandDto })
   @ApiResponse({ status: HttpStatus.CREATED, type: BrandResponseDto })
   @ApiBadRequestResponse({ description: 'Бренд с таким названием уже существует' })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
@@ -45,20 +56,29 @@ export class VehiclesCatalogueController {
   }
 
   @Get('brands')
-  @AuthWithOwnership() // 🔒 Авторизация обязательна, но все видят одни бренды
-  @ApiOperation({ 
+  @AuthWithOwnership() // 🔒 Авторизация обязательна, но каталог глобальный
+  @ApiOperation({
     summary: 'Получение списка брендов',
-    description: 'Получение списка всех активных брендов автомобилей.'
+    description: 'Получение списка всех активных брендов автомобилей.',
   })
   @ApiQuery({ name: 'search', required: false, description: 'Поиск по названию бренда' })
   @ApiQuery({ name: 'country', required: false, description: 'Фильтр по стране' })
+  @ApiQuery({ name: 'page', required: false, description: 'Страница (>=1)', schema: { default: 1 } })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Размер страницы (по умолчанию 50, максимум ограничен конфигом)',
+    schema: { default: 50 },
+  })
   @ApiResponse({ status: HttpStatus.OK, type: [BrandResponseDto] })
   @Throttle({ default: { limit: 50, ttl: 60000 } })
   async getBrands(
     @Query('search') search?: string,
     @Query('country') country?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit?: number,
   ): Promise<BrandResponseDto[]> {
-    return this.service.getBrands({ search, country });
+    return this.service.getBrands({ search, country, page, limit });
   }
 
   @Get('brands/:id')
@@ -72,14 +92,11 @@ export class VehiclesCatalogueController {
 
   @Patch('brands/:id')
   @AuthWithOwnership()
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'platform_admin')
   @ApiOperation({ summary: 'Обновление бренда' })
   @ApiResponse({ status: HttpStatus.OK, type: BrandResponseDto })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  async updateBrand(
-    @Param('id') id: string,
-    @Body() updateBrandDto: UpdateBrandDto,
-  ): Promise<BrandResponseDto> {
+  async updateBrand(@Param('id') id: string, @Body() updateBrandDto: UpdateBrandDto): Promise<BrandResponseDto> {
     return this.service.updateBrand(id, updateBrandDto);
   }
 
@@ -99,9 +116,8 @@ export class VehiclesCatalogueController {
 
   @Post('models')
   @AuthWithOwnership()
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'platform_admin')
   @ApiOperation({ summary: 'Создание новой модели автомобиля' })
-  @ApiBody({ type: CreateModelDto })
   @ApiResponse({ status: HttpStatus.CREATED, type: ModelResponseDto })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async createModel(@Body() createModelDto: CreateModelDto): Promise<ModelResponseDto> {
@@ -113,13 +129,22 @@ export class VehiclesCatalogueController {
   @ApiOperation({ summary: 'Получение списка моделей' })
   @ApiQuery({ name: 'brandId', required: false, description: 'Фильтр по бренду' })
   @ApiQuery({ name: 'search', required: false, description: 'Поиск по названию модели' })
+  @ApiQuery({ name: 'page', required: false, description: 'Страница (>=1)', schema: { default: 1 } })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Размер страницы (по умолчанию 50, максимум ограничен конфигом)',
+    schema: { default: 50 },
+  })
   @ApiResponse({ status: HttpStatus.OK, type: [ModelResponseDto] })
   @Throttle({ default: { limit: 50, ttl: 60000 } })
   async getModels(
     @Query('brandId') brandId?: string,
     @Query('search') search?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit?: number,
   ): Promise<ModelResponseDto[]> {
-    return this.service.getModels({ brandId, search });
+    return this.service.getModels({ brandId, search, page, limit });
   }
 
   @Get('models/:id')
@@ -133,14 +158,11 @@ export class VehiclesCatalogueController {
 
   @Patch('models/:id')
   @AuthWithOwnership()
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'platform_admin')
   @ApiOperation({ summary: 'Обновление модели' })
   @ApiResponse({ status: HttpStatus.OK, type: ModelResponseDto })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  async updateModel(
-    @Param('id') id: string,
-    @Body() updateModelDto: UpdateModelDto,
-  ): Promise<ModelResponseDto> {
+  async updateModel(@Param('id') id: string, @Body() updateModelDto: UpdateModelDto): Promise<ModelResponseDto> {
     return this.service.updateModel(id, updateModelDto);
   }
 
@@ -159,9 +181,8 @@ export class VehiclesCatalogueController {
 
   @Post('types')
   @AuthWithOwnership()
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'platform_admin')
   @ApiOperation({ summary: 'Создание нового типа ТС' })
-  @ApiBody({ type: CreateTypeDto })
   @ApiResponse({ status: HttpStatus.CREATED, type: TypeResponseDto })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async createType(@Body() createTypeDto: CreateTypeDto): Promise<TypeResponseDto> {
@@ -172,10 +193,21 @@ export class VehiclesCatalogueController {
   @AuthWithOwnership()
   @ApiOperation({ summary: 'Получение списка типов ТС' })
   @ApiQuery({ name: 'search', required: false, description: 'Поиск по названию типа' })
+  @ApiQuery({ name: 'page', required: false, description: 'Страница (>=1)', schema: { default: 1 } })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Размер страницы (по умолчанию 50, максимум ограничен конфигом)',
+    schema: { default: 50 },
+  })
   @ApiResponse({ status: HttpStatus.OK, type: [TypeResponseDto] })
   @Throttle({ default: { limit: 50, ttl: 60000 } })
-  async getTypes(@Query('search') search?: string): Promise<TypeResponseDto[]> {
-    return this.service.getTypes({ search });
+  async getTypes(
+    @Query('search') search?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit?: number,
+  ): Promise<TypeResponseDto[]> {
+    return this.service.getTypes({ search, page, limit });
   }
 
   @Get('types/:id')
@@ -189,14 +221,11 @@ export class VehiclesCatalogueController {
 
   @Patch('types/:id')
   @AuthWithOwnership()
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'platform_admin')
   @ApiOperation({ summary: 'Обновление типа ТС' })
   @ApiResponse({ status: HttpStatus.OK, type: TypeResponseDto })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  async updateType(
-    @Param('id') id: string,
-    @Body() updateTypeDto: UpdateTypeDto,
-  ): Promise<TypeResponseDto> {
+  async updateType(@Param('id') id: string, @Body() updateTypeDto: UpdateTypeDto): Promise<TypeResponseDto> {
     return this.service.updateType(id, updateTypeDto);
   }
 

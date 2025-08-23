@@ -4,6 +4,8 @@ export interface BrandFilter {
   country?: string;
   isActive?: boolean;
   includeDeleted?: boolean;
+  page?: number;
+  limit?: number;
 }
 
 export interface ModelFilter {
@@ -14,12 +16,16 @@ export interface ModelFilter {
   class?: string;
   isActive?: boolean;
   includeDeleted?: boolean;
+  page?: number;
+  limit?: number;
 }
 
 export interface TypeFilter {
   search?: string;
   isActive?: boolean;
   includeDeleted?: boolean;
+  page?: number;
+  limit?: number;
 }
 
 export interface CreateBrandData {

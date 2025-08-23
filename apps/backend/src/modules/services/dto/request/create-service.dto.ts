@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/dto/request/create-service.dto.ts
 import { IsString, IsUUID, IsNumber, IsOptional, IsBoolean, Min, Max, Length } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { SERVICES_CONSTANTS, SERVICE_VALIDATION_MESSAGES } from '../../constants/services.constants';

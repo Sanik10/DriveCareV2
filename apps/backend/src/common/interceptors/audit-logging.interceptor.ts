@@ -1,13 +1,7 @@
 // path: apps/backend/src/common/interceptors/audit-logging.interceptor.ts
-import {
-  Injectable,
-  NestInterceptor,
-  ExecutionContext,
-  CallHandler,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
 import { Observable } from 'rxjs';
-  import { tap, catchError } from 'rxjs/operators';
+import { tap, catchError } from 'rxjs/operators';
 import { Request, Response } from 'express';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction, AuditLevel } from '../audit/audit.service';
@@ -110,12 +104,7 @@ export class AuditLoggingInterceptor implements NestInterceptor {
     });
   }
 
-  private async logSuccessfulResponse(
-    requestInfo: any,
-    response: Response,
-    duration: number,
-    responseData: any,
-  ): Promise<void> {
+  private async logSuccessfulResponse(requestInfo: any, response: Response, duration: number, responseData: any): Promise<void> {
     const auditAction = this.determineAuditAction(requestInfo, response.statusCode, true);
 
     await this.auditService.log(auditAction, {
@@ -138,18 +127,11 @@ export class AuditLoggingInterceptor implements NestInterceptor {
     });
 
     if (duration > 5000) {
-      this.logger.warn(
-        `Slow request detected: ${requestInfo.method} ${requestInfo.url} - ${duration}ms [${requestInfo.correlationId}]`,
-      );
+      this.logger.warn(`Slow request detected: ${requestInfo.method} ${requestInfo.url} - ${duration}ms [${requestInfo.correlationId}]`);
     }
   }
 
-  private async logErrorResponse(
-    requestInfo: any,
-    _response: Response,
-    duration: number,
-    error: any,
-  ): Promise<void> {
+  private async logErrorResponse(requestInfo: any, _response: Response, duration: number, error: any): Promise<void> {
     const status = error?.status || 500;
     const auditAction = this.determineAuditAction(requestInfo, status, false);
 
@@ -197,7 +179,8 @@ export class AuditLoggingInterceptor implements NestInterceptor {
       return isSuccess ? AuditAction.SUBSCRIPTION_UPDATED : AuditAction.API_ERROR;
     }
 
-    return isSuccess ? AuditAction.API_ERROR : AuditAction.API_ERROR;
+    // По умолчанию: успешные запросы отмечаем как PERMISSION_GRANTED (без шума), ошибки — API_ERROR
+    return isSuccess ? AuditAction.PERMISSION_GRANTED : AuditAction.API_ERROR;
   }
 
   private getErrorLevel(statusCode: number): AuditLevel {
@@ -226,7 +209,7 @@ export class AuditLoggingInterceptor implements NestInterceptor {
       if (sensitiveHeaders.includes(key.toLowerCase())) {
         sanitized[key] = '***';
       } else if (key.toLowerCase().startsWith('x-')) {
-        sanitized[key] = Array.isArray(headers[key]) ? (headers[key] as any[]).join(',') : headers[key];
+        sanitized[key] = Array.isArray(headers[key]) ? (headers[key] as any[]).join(',') : (headers[key] as any);
       }
     });
     return sanitized;

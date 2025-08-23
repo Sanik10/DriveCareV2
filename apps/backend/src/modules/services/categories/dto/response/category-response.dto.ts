@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/categories/dto/response/category-response.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CategoryResponseDto {

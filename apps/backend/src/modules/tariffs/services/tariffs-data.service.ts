@@ -1,6 +1,7 @@
+// path: apps/backend/src/modules/tariffs/services/tariffs-data.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DeepPartial } from 'typeorm';
 import { Tariff } from '../../../database/entities';
 import { CreateTariffData, UpdateTariffData, TariffFilter } from '../types/tariffs.types';
 import { ITariffsDataService } from '../interfaces/tariffs.interface';
@@ -17,12 +18,22 @@ export class TariffsDataService implements ITariffsDataService {
    * Создание нового тарифа
    */
   async create(data: CreateTariffData): Promise<Tariff> {
-    const tariff = this.tariffsRepository.create({
+    const name = (data.name || '').trim();
+    const nameNormalized = name.toLowerCase();
+
+    const dataToCreate: DeepPartial<Tariff> = {
       ...data,
+      name,
+      // рубли (decimal), без умножения на 100
+      priceMonthly: data.priceMonthly,
+      priceYearly: data.priceYearly,
       features: data.features || {},
       isActive: data.isActive ?? TARIFFS_CONSTANTS.DEFAULTS.DEFAULT_IS_ACTIVE,
-    });
+      // нормализованное имя для case-insensitive уникальности
+      nameNormalized,
+    };
 
+    const tariff = this.tariffsRepository.create(dataToCreate);
     return this.tariffsRepository.save(tariff);
   }
 
@@ -31,13 +42,13 @@ export class TariffsDataService implements ITariffsDataService {
    */
   async findAll(onlyActive: boolean = false): Promise<Tariff[]> {
     const query = this.tariffsRepository.createQueryBuilder('tariff');
-    
+
     if (onlyActive) {
       query.where('tariff.isActive = :isActive', { isActive: true });
     }
-    
+
     query.orderBy('tariff.priceMonthly', 'ASC');
-    
+
     return query.getMany();
   }
 
@@ -51,11 +62,12 @@ export class TariffsDataService implements ITariffsDataService {
   }
 
   /**
-   * Поиск тарифа по названию
+   * Поиск тарифа по названию (case-insensitive)
    */
   async findByName(name: string): Promise<Tariff | null> {
+    const nameNormalized = (name || '').trim().toLowerCase();
     return this.tariffsRepository.findOne({
-      where: { name },
+      where: { nameNormalized },
     });
   }
 
@@ -71,36 +83,35 @@ export class TariffsDataService implements ITariffsDataService {
       page = 1,
       limit = TARIFFS_CONSTANTS.DEFAULTS.PAGE_SIZE,
       sortField = 'priceMonthly',
-      sortOrder = 'asc'
+      sortOrder = 'asc',
     } = filter;
 
     const query = this.tariffsRepository.createQueryBuilder('tariff');
 
     // Фильтр по поиску
     if (search) {
-      query.where(
-        '(tariff.name ILIKE :search OR tariff.description ILIKE :search)',
-        { search: `%${search}%` }
-      );
+      query.where('(tariff.name ILIKE :search OR tariff.description ILIKE :search)', {
+        search: `%${search}%`,
+      });
     }
 
     // Фильтр по статусу активности
-    if (isActive !== undefined) {
+    if (typeof isActive === 'boolean') {
       query.andWhere('tariff.isActive = :isActive', { isActive });
     }
 
-    // Фильтр по цене (используем месячную цену для фильтрации)
-    if (minPrice !== undefined) {
-      query.andWhere('tariff.priceMonthly >= :minPrice', { minPrice: minPrice * 100 });
+    // Фильтр по цене (рубли)
+    if (typeof minPrice === 'number') {
+      query.andWhere('tariff.priceMonthly >= :minPrice', { minPrice });
     }
 
-    if (maxPrice !== undefined) {
-      query.andWhere('tariff.priceMonthly <= :maxPrice', { maxPrice: maxPrice * 100 });
+    if (typeof maxPrice === 'number') {
+      query.andWhere('tariff.priceMonthly <= :maxPrice', { maxPrice });
     }
 
     // Сортировка
     const sortColumn = this.mapSortField(sortField);
-    query.orderBy(sortColumn, sortOrder.toUpperCase() as 'ASC' | 'DESC');
+    query.orderBy(sortColumn, (sortOrder || 'asc').toUpperCase() as 'ASC' | 'DESC');
 
     // Пагинация
     const offset = (page - 1) * limit;
@@ -113,10 +124,13 @@ export class TariffsDataService implements ITariffsDataService {
    * Обновление тарифа
    */
   async update(id: string, data: UpdateTariffData): Promise<Tariff> {
-    // Создаем объект для обновления, правильно типизированный для TypeORM
-    const updateData: Partial<Tariff> = {};
-    
-    if (data.name !== undefined) updateData.name = data.name;
+    const updateData: DeepPartial<Tariff> = {};
+
+    if (data.name !== undefined) {
+      const name = (data.name || '').trim();
+      updateData.name = name;
+      (updateData as any).nameNormalized = name.toLowerCase();
+    }
     if (data.description !== undefined) updateData.description = data.description;
     if (data.priceMonthly !== undefined) updateData.priceMonthly = data.priceMonthly;
     if (data.priceYearly !== undefined) updateData.priceYearly = data.priceYearly;
@@ -128,12 +142,12 @@ export class TariffsDataService implements ITariffsDataService {
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
 
     await this.tariffsRepository.update(id, updateData);
-    
+
     const updatedTariff = await this.findById(id);
     if (!updatedTariff) {
       throw new Error(`Tariff with id ${id} not found after update`);
     }
-    
+
     return updatedTariff;
   }
 
@@ -149,12 +163,12 @@ export class TariffsDataService implements ITariffsDataService {
    */
   async setActive(id: string, isActive: boolean): Promise<Tariff> {
     await this.tariffsRepository.update(id, { isActive });
-    
+
     const updatedTariff = await this.findById(id);
     if (!updatedTariff) {
       throw new Error(`Tariff with id ${id} not found after status update`);
     }
-    
+
     return updatedTariff;
   }
 
@@ -162,8 +176,7 @@ export class TariffsDataService implements ITariffsDataService {
    * Получение популярных тарифов (по количеству подписок)
    */
   async getPopularTariffs(limit: number = 5): Promise<Tariff[]> {
-    // TODO: Добавить запрос с подсчетом активных подписок когда будут связи
-    // Пока возвращаем просто активные тарифы, отсортированные по цене
+    // TODO: заменить на реальный подсчёт по подпискам
     return this.tariffsRepository.find({
       where: { isActive: true },
       order: { priceMonthly: 'ASC' },

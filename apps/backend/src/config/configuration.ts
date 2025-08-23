@@ -83,7 +83,7 @@ export const corsConfig = registerAs('cors', () => ({
     'Authorization',
     'X-API-Key',
     'X-Request-ID',
-    'X-Idempotency-Key', // allow idempotency header for safe retries
+    'X-Idempotency-Key',
   ],
   exposedHeaders: ['X-Total-Count', 'X-Request-ID', 'X-API-Version'],
   maxAge: 86400,
@@ -93,9 +93,7 @@ export const corsConfig = registerAs('cors', () => ({
 export const swaggerConfig = registerAs('swagger', () => ({
   path: process.env.SWAGGER_PATH || 'docs',
   title: process.env.SWAGGER_TITLE || 'DriveCare API',
-  description:
-    process.env.SWAGGER_DESCRIPTION ||
-    'Система управления автосервисом - API документация',
+  description: process.env.SWAGGER_DESCRIPTION || 'Система управления автосервисом - API документация',
   version: process.env.APP_VERSION || '2.0',
   enabled: process.env.NODE_ENV !== 'production',
 }));
@@ -147,17 +145,31 @@ export const uploadConfig = registerAs('upload', () => ({
   destination: process.env.UPLOAD_DEST || './uploads',
 }));
 
-// 📧 Email Configuration (future)
-export const emailConfig = registerAs('email', () => ({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASSWORD,
-  },
-  from: process.env.SMTP_FROM || 'noreply@drivecare.com',
-}));
+// 📧 Email Configuration (optional)
+export const emailConfig = registerAs('email', () => {
+  const enabled = (process.env.EMAIL_ENABLED || 'false') === 'true';
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
+  const secure =
+    process.env.SMTP_SECURE === 'true' || ['465', '2465', '994'].includes(String(process.env.SMTP_PORT));
+
+  return {
+    enabled,
+    host: process.env.SMTP_HOST,
+    port,
+    secure,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASSWORD,
+    },
+    from: process.env.SMTP_FROM || 'noreply@drivecare.com',
+    // Helper flag for consumers
+    shouldSend:
+      enabled &&
+      !!process.env.SMTP_HOST &&
+      !!process.env.SMTP_USER &&
+      !!process.env.SMTP_PASSWORD,
+  };
+});
 
 // 🔔 Notification Configuration (future)
 export const notificationConfig = registerAs('notification', () => ({
@@ -235,7 +247,7 @@ export const customersConfig = registerAs('customers', () => ({
 export const appointmentsConfig = registerAs('appointments', () => ({
   sanitizeTextsEnabled: (process.env.SANITIZE_APPOINTMENT_TEXTS || 'true') === 'true',
   pagination: { maxPageSize: parseInt(process.env.APPOINTMENTS_MAX_PAGE_SIZE || '100', 10) },
-  idempotencyTtlMs: parseInt(process.env.APPOINTMENTS_IDEMPOTENCY_TTL_MS || '600000', 10), // 10 min
+  idempotencyTtlMs: parseInt(process.env.APPOINTMENTS_IDEMPOTENCY_TTL_MS || '600000', 10),
   allowOverlap: (process.env.APPOINTMENTS_ALLOW_OVERLAP || 'false') === 'true',
   timezoneDefault: process.env.APPOINTMENTS_TIMEZONE_DEFAULT || 'Europe/Moscow',
   retentionYears: parseInt(process.env.APPOINTMENT_DATA_RETENTION_YEARS || '5', 10),
@@ -251,17 +263,49 @@ export const inventoryConfig = registerAs('inventory', () => ({
   pagination: { maxPageSize: parseInt(process.env.INVENTORY_MAX_PAGE_SIZE || '100', 10) },
   alerts: {
     enabled: (process.env.INVENTORY_ALERTS_ENABLED || 'true') === 'true',
-    cron: process.env.INVENTORY_ALERTS_CRON || '0 * * * *', // ежечасно по умолчанию
+    cron: process.env.INVENTORY_ALERTS_CRON || '0 * * * *',
     lowStockDefault: parseInt(process.env.INVENTORY_LOW_STOCK_THRESHOLD_DEFAULT || '5', 10),
   },
-  // unified default 6h if env missing
   idempotencyTtlMs: parseInt(process.env.INVENTORY_IDEMPOTENCY_TTL_MS || '21600000', 10),
+}));
+
+// 🏭 Vehicles Catalogue Configuration
+export const catalogueConfig = registerAs('catalogue', () => ({
+  sanitizeTextsEnabled: (process.env.SANITIZE_CATALOGUE_TEXTS || 'true') === 'true',
+  pagination: {
+    defaultPage: 1,
+    defaultLimit: 50,
+    maxPageSize: parseInt(process.env.CATALOGUE_MAX_PAGE_SIZE || '200', 10),
+  },
+  cacheTtlSec: parseInt(process.env.CATALOGUE_CACHE_TTL_SEC || '3600', 10),
 }));
 
 // 🧮 Payments/KKT Configuration
 export const paymentsConfig = registerAs('payments', () => ({
   enableFiscalization: (process.env.ENABLE_FISCALIZATION || 'false') === 'true',
   kktSerialNumber: process.env.KKT_SERIAL_NUMBER || null,
+}));
+
+// 📝 Service History Configuration
+export const serviceHistoryConfig = registerAs('serviceHistory', () => ({
+  sanitizeTextsEnabled: (process.env.SANITIZE_SERVICE_HISTORY_TEXTS || 'true') === 'true',
+  pagination: {
+    defaultPageSize: parseInt(process.env.SERVICE_HISTORY_DEFAULT_PAGE_SIZE || '20', 10),
+    maxPageSize: parseInt(process.env.SERVICE_HISTORY_MAX_PAGE_SIZE || '100', 10),
+  },
+  searchLimit: parseInt(process.env.SERVICE_HISTORY_SEARCH_LIMIT || '50', 10),
+  notifications: {
+    enabled: (process.env.SERVICE_HISTORY_NOTIFICATIONS_ENABLED || 'false') === 'true',
+  },
+}));
+
+// 💰 Tariffs Configuration
+export const tariffsConfig = registerAs('tariffs', () => ({
+  sanitizeTextsEnabled: (process.env.SANITIZE_TARIFF_TEXTS || 'true') === 'true',
+  pagination: {
+    maxPageSize: parseInt(process.env.TARIFFS_MAX_PAGE_SIZE || '100', 10),
+  },
+  cacheTtlSec: parseInt(process.env.TARIFFS_CACHE_TTL_SEC || '3600', 10),
 }));
 
 // 🎯 Export all configurations
@@ -284,5 +328,8 @@ export default [
   customersConfig,
   appointmentsConfig,
   inventoryConfig,
+  catalogueConfig,
   paymentsConfig,
+  serviceHistoryConfig,
+  tariffsConfig,
 ];

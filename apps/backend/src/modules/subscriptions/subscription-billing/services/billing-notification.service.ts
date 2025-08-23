@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/subscriptions/subscription-billing/services/billing-notification.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 
 @Injectable()

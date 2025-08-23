@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/services/categories/services/categories-data.service.ts
 import { Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
