@@ -11,6 +11,8 @@ import { tap } from 'rxjs/operators';
 import { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
+import { Reflector } from '@nestjs/core';
+import { CACHE_POLICY_KEY } from '../decorators/cache-policy.decorator';
 
 /**
  * 🛡️ SECURITY HEADERS INTERCEPTOR
@@ -19,7 +21,7 @@ import { v4 as uuidv4 } from 'uuid';
  * - CSP / HSTS / X-Frame-Options / X-Content-Type-Options
  * - Referrer-Policy / Permissions-Policy
  * - Request correlation ID
- * - Cache-Control: no-store для API по умолчанию
+ * - Cache-Control: по умолчанию строгий no-store (можно переопределить декоратором @CachePolicy/@AllowCache/@NoStore)
  *
  * Важно: не дублировать заголовки, уже выставленные Helmet/CORS.
  */
@@ -28,6 +30,7 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
   private readonly logger = new Logger(SecurityHeadersInterceptor.name);
   private readonly isDevelopment: boolean;
   private readonly isProduction: boolean;
+  private readonly reflector = new Reflector();
 
   constructor(private readonly configService: ConfigService) {
     const environment = this.configService.get('NODE_ENV', 'development');
@@ -40,30 +43,69 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
     const response = context.switchToHttp().getResponse<Response>();
 
     // Correlation ID: использовать входящий или сгенерировать
-    const correlationId = (request.headers['x-request-id'] as string) || request.correlationId || uuidv4();
+    const correlationId =
+      (request.headers['x-request-id'] as string) ||
+      request.correlationId ||
+      uuidv4();
     (request as any).correlationId = correlationId;
 
     // Базовые заголовки
     this.addBasicSecurityHeaders(response, correlationId);
 
+    // Применяем политику кеширования (может быть переопределена декораторами)
+    this.applyCachePolicy(context, response, request);
+
     return next.handle().pipe(
       tap(() => {
         this.addAdvancedSecurityHeaders(response, request);
         if (this.isDevelopment) {
-          this.logger.debug(`Security headers applied for ${request.method} ${request.url} [${correlationId}]`);
+          this.logger.debug(
+            `Security headers applied for ${request.method} ${request.url} [${correlationId}]`,
+          );
         }
       }),
     );
   }
 
   private addBasicSecurityHeaders(response: Response, correlationId: string): void {
-    if (!response.getHeader('X-Request-ID')) response.setHeader('X-Request-ID', correlationId);
-    if (!response.getHeader('X-Content-Type-Options')) response.setHeader('X-Content-Type-Options', 'nosniff');
-    if (!response.getHeader('X-Frame-Options')) response.setHeader('X-Frame-Options', 'DENY');
-    if (!response.getHeader('X-Permitted-Cross-Domain-Policies')) response.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+    if (!response.getHeader('X-Request-ID'))
+      response.setHeader('X-Request-ID', correlationId);
+    if (!response.getHeader('X-Content-Type-Options'))
+      response.setHeader('X-Content-Type-Options', 'nosniff');
+    if (!response.getHeader('X-Frame-Options'))
+      response.setHeader('X-Frame-Options', 'DENY');
+    if (!response.getHeader('X-Permitted-Cross-Domain-Policies'))
+      response.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+  }
 
-    // По умолчанию для API — no-store
-    if (!response.getHeader('Cache-Control')) response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, private');
+  /**
+   * По умолчанию ставим строгий no-store для всего API.
+   * Если на методе/классе указан декоратор @CachePolicy/@AllowCache/@NoStore — применяем его.
+   */
+  private applyCachePolicy(
+    context: ExecutionContext,
+    response: Response,
+    request: any,
+  ): void {
+    // Если уже выставлен заголовок где-то выше — не переопределяем
+    if (response.getHeader('Cache-Control')) return;
+
+    const handler = context.getHandler();
+    const cls = context.getClass();
+
+    const policyFromHandler =
+      this.reflector.get<string>(CACHE_POLICY_KEY, handler) || null;
+    const policyFromClass =
+      this.reflector.get<string>(CACHE_POLICY_KEY, cls) || null;
+
+    const effectivePolicy =
+      policyFromHandler ||
+      policyFromClass ||
+      (this.isApiRequest(request)
+        ? 'no-cache, no-store, must-revalidate, private'
+        : 'no-cache, no-store, must-revalidate');
+
+    response.setHeader('Cache-Control', effectivePolicy);
     if (!response.getHeader('Pragma')) response.setHeader('Pragma', 'no-cache');
     if (!response.getHeader('Expires')) response.setHeader('Expires', '0');
   }
@@ -77,7 +119,10 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
 
     // HSTS (только production)
     if (this.isProduction && !response.getHeader('Strict-Transport-Security')) {
-      response.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+      response.setHeader(
+        'Strict-Transport-Security',
+        'max-age=31536000; includeSubDomains; preload',
+      );
     }
 
     if (!response.getHeader('Referrer-Policy')) {
@@ -85,7 +130,10 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
     }
 
     if (!response.getHeader('Permissions-Policy')) {
-      response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+      response.setHeader(
+        'Permissions-Policy',
+        'camera=(), microphone=(), geolocation=(), payment=()',
+      );
     }
 
     if (this.isApiRequest(request)) {
@@ -136,7 +184,10 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
 
   private addApiSecurityHeaders(response: Response): void {
     if (!response.getHeader('X-API-Version')) {
-      response.setHeader('X-API-Version', this.configService.get('APP_VERSION', '2.0'));
+      response.setHeader(
+        'X-API-Version',
+        this.configService.get('APP_VERSION', '2.0'),
+      );
     }
     if (!response.getHeader('X-Download-Options')) {
       response.setHeader('X-Download-Options', 'noopen');
@@ -146,7 +197,10 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
   // Не переопределяем заголовки, выставленные CORS-модулем
   private enhanceCorsHeaders(response: Response, request: any): void {
     const origin = request.headers.origin as string | undefined;
-    const allowedOrigins = (this.configService.get('CORS_ORIGINS', 'http://localhost:3000,http://localhost:5173') as string)
+    const allowedOrigins = (this.configService.get(
+      'CORS_ORIGINS',
+      'http://localhost:3000,http://localhost:5173',
+    ) as string)
       .split(',')
       .map((o) => o.trim());
 
@@ -160,19 +214,25 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
       response.setHeader('Access-Control-Allow-Credentials', 'true');
     }
     if (!response.getHeader('Access-Control-Allow-Methods')) {
-      response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      response.setHeader(
+        'Access-Control-Allow-Methods',
+        'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+      );
     }
     if (!response.getHeader('Access-Control-Allow-Headers')) {
       response.setHeader(
         'Access-Control-Allow-Headers',
-        'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-API-Key, X-Request-ID',
+        'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-API-Key, X-Request-ID, X-Idempotency-Key',
       );
     }
     if (!response.getHeader('Access-Control-Max-Age')) {
       response.setHeader('Access-Control-Max-Age', '86400');
     }
     if (!response.getHeader('Access-Control-Expose-Headers')) {
-      response.setHeader('Access-Control-Expose-Headers', 'X-Total-Count, X-Request-ID, X-API-Version');
+      response.setHeader(
+        'Access-Control-Expose-Headers',
+        'X-Total-Count, X-Request-ID, X-API-Version',
+      );
     }
   }
 }

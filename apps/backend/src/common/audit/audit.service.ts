@@ -37,6 +37,10 @@ export enum AuditAction {
   SECURITY_VIOLATION = 'SECURITY_VIOLATION',
   UNAUTHORIZED_ACCESS_ATTEMPT = 'UNAUTHORIZED_ACCESS_ATTEMPT',
 
+  // Generic API lifecycle
+  API_REQUEST_STARTED = 'API_REQUEST_STARTED',
+  API_REQUEST_COMPLETED = 'API_REQUEST_COMPLETED',
+
   HEALTH_CHECK_REQUESTED = 'HEALTH_CHECK_REQUESTED',
   SUPERADMIN_INFO_BLOCKED_PRODUCTION = 'SUPERADMIN_INFO_BLOCKED_PRODUCTION',
   SUPERADMIN_INFO_ACCESSED = 'SUPERADMIN_INFO_ACCESSED',
@@ -236,6 +240,27 @@ export enum AuditAction {
   SERVICE_HISTORY_LISTED = 'SERVICE_HISTORY_LISTED',
   SERVICE_HISTORY_STATS_VIEWED = 'SERVICE_HISTORY_STATS_VIEWED',
   VEHICLE_HISTORY_VIEWED = 'VEHICLE_HISTORY_VIEWED',
+
+  // ====== SERVICES ======
+  SERVICE_CREATED = 'SERVICE_CREATED',
+  SERVICE_UPDATED = 'SERVICE_UPDATED',
+  SERVICE_DELETED = 'SERVICE_DELETED',
+  SERVICE_STATUS_CHANGED = 'SERVICE_STATUS_CHANGED',
+  SERVICES_LISTED = 'SERVICES_LISTED',
+  SERVICE_VIEWED = 'SERVICE_VIEWED',
+  SERVICES_SEARCHED = 'SERVICES_SEARCHED',
+  SERVICE_BULK_UPDATED = 'SERVICE_BULK_UPDATED',
+  SERVICE_STATS_VIEWED = 'SERVICE_STATS_VIEWED',
+
+  // ====== SERVICE CATEGORIES ======
+  SERVICE_CATEGORY_CREATED = 'SERVICE_CATEGORY_CREATED',
+  SERVICE_CATEGORY_UPDATED = 'SERVICE_CATEGORY_UPDATED',
+  SERVICE_CATEGORY_DELETED = 'SERVICE_CATEGORY_DELETED',
+  SERVICE_CATEGORIES_LISTED = 'SERVICE_CATEGORIES_LISTED',
+  SERVICE_CATEGORY_VIEWED = 'SERVICE_CATEGORY_VIEWED',
+  SERVICE_CATEGORIES_SEARCHED = 'SERVICE_CATEGORIES_SEARCHED',
+  SERVICE_CATEGORY_STATS_VIEWED = 'SERVICE_CATEGORY_STATS_VIEWED',
+  SERVICE_CATEGORY_INITIALIZED_GLOBAL = 'SERVICE_CATEGORY_INITIALIZED_GLOBAL',
 }
 
 export enum AuditLevel {
@@ -271,17 +296,29 @@ export class AuditService {
   private readonly logger = new Logger(AuditService.name);
   private readonly chainKey: string;
   private readonly isProduction: boolean;
+  private readonly logToDb: boolean;
 
   constructor(private readonly config: ConfigService, @InjectDataSource() private readonly dataSource: DataSource) {
+    this.logToDb =
+      (this.config.get<boolean>('AUDIT_LOG_TO_DB') ??
+        this.config.get<boolean>('security.audit.logToDb')) === true;
+
     this.chainKey =
       this.config.get<string>('AUDIT_CHAIN_KEY') || this.config.get<string>('security.audit.chainKey') || '';
     this.isProduction = this.config.get('NODE_ENV') === 'production';
-    if (this.isProduction && !this.chainKey) {
-      throw new Error('AUDIT_CHAIN_KEY is required in production');
+
+    // В проде требуем ключ только если запись в БД включена
+    if (this.isProduction && this.logToDb && !this.chainKey) {
+      throw new Error('AUDIT_CHAIN_KEY is required in production when AUDIT_LOG_TO_DB=true');
     }
   }
 
   async log(action: AuditAction, data: AuditLogData): Promise<void> {
+    // В dev/test можно отключить запись аудита в БД для снижения шума
+    if (!this.logToDb) {
+      return;
+    }
+
     const repo = this.dataSource.getRepository(AuditLog);
     const nowIso = new Date().toISOString();
     const level = data.level || AuditLevel.INFO;
@@ -394,6 +431,12 @@ export class AuditService {
   }
   async logSecurityViolation(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.SECURITY_VIOLATION, { ...data, level: AuditLevel.ERROR });
+  }
+  async logApiRequestStarted(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.API_REQUEST_STARTED, { ...data, level: data.level || AuditLevel.INFO });
+  }
+  async logApiRequestCompleted(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.API_REQUEST_COMPLETED, { ...data, level: data.level || AuditLevel.INFO });
   }
 
   // Auth/session
@@ -821,6 +864,61 @@ export class AuditService {
   }
   async logTopSuppliersViewed(data: AuditLogData): Promise<void> {
     await this.log(AuditAction.TOP_SUPPLIERS_VIEWED, data);
+  }
+
+  // ===== Services =====
+  async logServiceCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_CREATED, data);
+  }
+  async logServiceUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_UPDATED, data);
+  }
+  async logServiceDeleted(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_DELETED, { ...data, level: data.level || AuditLevel.WARNING });
+  }
+  async logServiceStatusChanged(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_STATUS_CHANGED, data);
+  }
+  async logServicesListed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICES_LISTED, data);
+  }
+  async logServiceViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_VIEWED, data);
+  }
+  async logServicesSearched(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICES_SEARCHED, data);
+  }
+  async logServiceBulkUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_BULK_UPDATED, data);
+  }
+  async logServiceStatsViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_STATS_VIEWED, data);
+  }
+
+  // ===== Service Categories =====
+  async logServiceCategoryCreated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_CATEGORY_CREATED, data);
+  }
+  async logServiceCategoryUpdated(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_CATEGORY_UPDATED, data);
+  }
+  async logServiceCategoryDeleted(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_CATEGORY_DELETED, { ...data, level: data.level || AuditLevel.WARNING });
+  }
+  async logServiceCategoriesListed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_CATEGORIES_LISTED, data);
+  }
+  async logServiceCategoryViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_CATEGORY_VIEWED, data);
+  }
+  async logServiceCategoriesSearched(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_CATEGORIES_SEARCHED, data);
+  }
+  async logServiceCategoryStatsViewed(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_CATEGORY_STATS_VIEWED, data);
+  }
+  async logServiceCategoryInitializedGlobal(data: AuditLogData): Promise<void> {
+    await this.log(AuditAction.SERVICE_CATEGORY_INITIALIZED_GLOBAL, data);
   }
 
   // ===== Service History =====

@@ -18,6 +18,8 @@ export function validateConfig(config: Record<string, unknown>) {
     POSTGRES_USERNAME: Joi.string().default('postgres'),
     POSTGRES_PASSWORD: Joi.string().allow('', null),
     POSTGRES_DATABASE: Joi.string().default('drivecare'),
+    DB_LOG_QUERIES: Joi.boolean().truthy('true').falsy('false').default(false),
+    DB_SLOW_QUERY_THRESHOLD_MS: Joi.number().min(0).default(0),
 
     // Redis
     REDIS_URL: Joi.string().uri().allow('', null),

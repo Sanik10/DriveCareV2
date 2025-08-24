@@ -51,16 +51,14 @@ import { AppConfigService } from './config/config.service';
       inject: [AppConfigService],
       useFactory: (appConfig: AppConfigService) => {
         const isDev = appConfig.app.isDevelopment === true;
-        // Если синхронизация не задана в конфиге, в dev включаем её по умолчанию
-        const synchronize =
-          typeof appConfig.database.synchronize === 'boolean'
-            ? appConfig.database.synchronize
-            : isDev;
 
-        const migrationsRun =
-          typeof appConfig.database.autoMigrate === 'boolean'
-            ? appConfig.database.autoMigrate
-            : false;
+        // Управление логами: по умолчанию без 'query' даже в dev.
+        // Включить можно через ENV DB_LOG_QUERIES=true.
+        const enableQueryLogs = (process.env.DB_LOG_QUERIES || '').toLowerCase() === 'true';
+        const logging: ('query' | 'error' | 'warn')[] = enableQueryLogs ? ['query', 'error', 'warn'] : ['error', 'warn'];
+
+        const slowThresholdStr = process.env.DB_SLOW_QUERY_THRESHOLD_MS;
+        const slowThreshold = slowThresholdStr ? parseInt(slowThresholdStr, 10) : 0;
 
         return {
           type: 'postgres',
@@ -74,7 +72,8 @@ import { AppConfigService } from './config/config.service';
           migrationsTableName: 'migrations_history',
           migrationsRun: appConfig.database.autoMigrate === true,
           synchronize: false,
-          logging: isDev ? ['query', 'error', 'warn'] : ['error'],
+          logging,
+          maxQueryExecutionTime: slowThreshold > 0 ? slowThreshold : undefined,
           extra: {
             max: appConfig.database.maxConnections,
             min: appConfig.database.minConnections,
@@ -105,9 +104,11 @@ import { AppConfigService } from './config/config.service';
         const isProduction = appConfig.app.isProduction;
         const baseTtl = appConfig.security.rateLimiting.ttl;
         const baseLimit = appConfig.security.rateLimiting.limit;
+        // @nestjs/throttler v6 — поддерживает именованные «лимитеры».
+        // Использование: @Throttle('auth') | @Throttle('read') | @Throttle('write')
         return [
           { name: 'global', ttl: baseTtl, limit: isProduction ? Math.floor(baseLimit * 0.6) : baseLimit },
-          { name: 'auth', ttl: 900000, limit: 5 },
+          { name: 'auth', ttl: 900_000, limit: 5 },
           { name: 'read', ttl: baseTtl, limit: isProduction ? Math.floor(baseLimit * 1.2) : baseLimit * 2 },
           { name: 'write', ttl: baseTtl, limit: isProduction ? Math.floor(baseLimit * 0.3) : Math.floor(baseLimit * 0.5) },
         ];

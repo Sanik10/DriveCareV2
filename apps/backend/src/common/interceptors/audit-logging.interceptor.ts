@@ -87,7 +87,7 @@ export class AuditLoggingInterceptor implements NestInterceptor {
   }
 
   private async logRequestStart(requestInfo: any): Promise<void> {
-    await this.auditService.log(AuditAction.USER_LOGIN, {
+    await this.auditService.log(AuditAction.API_REQUEST_STARTED, {
       level: AuditLevel.INFO,
       userId: requestInfo.userId,
       companyId: requestInfo.companyId,
@@ -122,6 +122,7 @@ export class AuditLoggingInterceptor implements NestInterceptor {
         correlationId: requestInfo.correlationId,
         responseSize: this.getResponseSize(responseData),
         hasResponseData: !!responseData,
+        headers: requestInfo.safeHeaders,
       },
       status: 'success',
     });
@@ -150,6 +151,7 @@ export class AuditLoggingInterceptor implements NestInterceptor {
         correlationId: requestInfo.correlationId,
         errorType: error?.constructor?.name,
         errorMessage: error?.message,
+        headers: requestInfo.safeHeaders,
       },
       status: 'error',
     });
@@ -179,8 +181,8 @@ export class AuditLoggingInterceptor implements NestInterceptor {
       return isSuccess ? AuditAction.SUBSCRIPTION_UPDATED : AuditAction.API_ERROR;
     }
 
-    // По умолчанию: успешные запросы отмечаем как PERMISSION_GRANTED (без шума), ошибки — API_ERROR
-    return isSuccess ? AuditAction.PERMISSION_GRANTED : AuditAction.API_ERROR;
+    // По умолчанию: успешные запросы — API_REQUEST_COMPLETED, ошибки — API_ERROR
+    return isSuccess ? AuditAction.API_REQUEST_COMPLETED : AuditAction.API_ERROR;
   }
 
   private getErrorLevel(statusCode: number): AuditLevel {
@@ -212,6 +214,9 @@ export class AuditLoggingInterceptor implements NestInterceptor {
         sanitized[key] = Array.isArray(headers[key]) ? (headers[key] as any[]).join(',') : (headers[key] as any);
       }
     });
+    // Явно оставляем безопасные служебные X-* заголовки
+    if (headers['x-request-id']) sanitized['x-request-id'] = headers['x-request-id'] as string;
+    if (headers['x-idempotency-key']) sanitized['x-idempotency-key'] = headers['x-idempotency-key'] as string;
     return sanitized;
   }
 }

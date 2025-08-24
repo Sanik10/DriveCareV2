@@ -137,12 +137,11 @@ async function configureCORS(app: any, configService: ConfigService, environment
 
   const corsConfig = {
     origin: (origin: string, callback: Function) => {
-      if (!origin && environment !== 'production') return callback(null, true);
-      if (corsOrigins.includes(origin)) callback(null, true);
-      else {
-        console.warn(`🚫 CORS blocked origin: ${origin}`);
-        callback(new Error('Not allowed by CORS policy'));
-      }
+      // Разрешаем отсутствие Origin для серверного трафика/вебхуков/health во всех средах
+      if (!origin) return callback(null, true);
+      if (corsOrigins.includes(origin)) return callback(null, true);
+      console.warn(`🚫 CORS blocked origin: ${origin}`);
+      return callback(new Error('Not allowed by CORS policy'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
