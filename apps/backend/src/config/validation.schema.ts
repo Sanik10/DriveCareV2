@@ -78,6 +78,8 @@ export function validateConfig(config: Record<string, unknown>) {
     PM_ENC_KEY: Joi.string().allow('', null), // AES-256-GCM key (base64); optional in dev
     ENABLE_FISCALIZATION: Joi.boolean().truthy('true').falsy('false').default(false),
     KKT_SERIAL_NUMBER: Joi.string().allow('', null),
+    YOOKASSA_WEBHOOK_PATH: Joi.string().default('subscription-billing/webhooks/yookassa'),
+    TINKOFF_WEBHOOK_PATH: Joi.string().default('subscription-billing/webhooks/tinkoff'),
 
     // Inventory
     INVENTORY_IDEMPOTENCY_TTL_MS: Joi.number().default(6 * 60 * 60 * 1000),
@@ -144,8 +146,16 @@ export function validateConfig(config: Record<string, unknown>) {
     SMTP_FROM: Joi.string().allow('', null).default('noreply@drivecare.local'),
     SMTP_SECURE: Joi.boolean().truthy('true').falsy('false').default(false),
 
-    // Misc
-    COOKIE_SECRET: Joi.string().allow('', null),
+    // Seeds / Misc
+    COOKIE_SECRET: Joi.alternatives().conditional('NODE_ENV', {
+      is: 'production',
+      then: Joi.string().min(16).required(),
+      otherwise: Joi.string().allow('', null),
+    }),
+    SEEDS_ENABLED: Joi.boolean().truthy('true').falsy('false').default(true),
+    DB_AUTO_SYNC_ON_SEEDS: Joi.boolean().truthy('true').falsy('false').default(false),
+    ALLOW_STAGING_SEEDS: Joi.boolean().truthy('true').falsy('false').default(false),
+
     SWAGGER_PATH: Joi.string().default('docs'),
     SWAGGER_TITLE: Joi.string().default('DriveCare API'),
     SWAGGER_DESCRIPTION: Joi.string().default('Система управления автосервисом - API документация'),

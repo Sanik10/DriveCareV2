@@ -1,7 +1,7 @@
 # 📋 DRIVECARE V2 — SECURITY & COMPLIANCE AUDIT TRACKER (RESET)
 
 Дата создания: 06.08.2025  
-Последнее обновление: 23.08.2025  
+Последнее обновление: 24.08.2025  
 Статус: 🔄 ONGOING SECURITY AUDIT (ре-аудит с учётом ФЗ РФ)  
 Методология: Enterprise Security Review + РФ-комплаенс (152‑ФЗ, 242‑ФЗ, 1119‑ПП, Приказ ФСТЭК №21)
 

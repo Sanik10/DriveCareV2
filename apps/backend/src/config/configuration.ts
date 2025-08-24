@@ -132,6 +132,10 @@ export const securityConfig = registerAs('security', () => ({
 export const seedsConfig = registerAs('seeds', () => ({
   allowInStaging: process.env.ALLOW_STAGING_SEEDS === 'true',
   autoRun: process.env.NODE_ENV === 'development',
+  enabled:
+    (process.env.SEEDS_ENABLED ??
+      (process.env.NODE_ENV === 'development' ? 'true' : 'false')) === 'true',
+  autoSyncOnSeeds: process.env.DB_AUTO_SYNC_ON_SEEDS === 'true',
 }));
 
 // 📁 Upload Configuration

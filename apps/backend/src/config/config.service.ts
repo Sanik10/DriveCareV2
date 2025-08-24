@@ -1,4 +1,4 @@
-// apps/backend/src/config/config.service.ts
+// path: apps/backend/src/config/config.service.ts
 import { Injectable } from '@nestjs/common';
 import { ConfigService as NestConfigService } from '@nestjs/config';
 
@@ -146,6 +146,8 @@ export class AppConfigService {
     return {
       allowInStaging: this.configService.get<boolean>('seeds.allowInStaging'),
       autoRun: this.configService.get<boolean>('seeds.autoRun'),
+      enabled: this.configService.get<boolean>('seeds.enabled'),
+      autoSyncOnSeeds: this.configService.get<boolean>('seeds.autoSyncOnSeeds'),
     };
   }
 

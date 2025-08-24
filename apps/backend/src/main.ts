@@ -212,6 +212,9 @@ async function bootstrap() {
   );
 
   const cookieSecret = configService.get<string>('COOKIE_SECRET');
+  if (!cookieSecret && isProduction) {
+    console.warn('⚠️ COOKIE_SECRET is not set; cookies will not be signed. Set COOKIE_SECRET in production.');
+  }
   app.use(cookieParser(cookieSecret));
   app.use(compression());
 
@@ -229,7 +232,8 @@ async function bootstrap() {
   await configureSwagger(app, configService, environment);
   await configureCORS(app, configService, environment);
 
-  app.enableShutdownHooks();
+  // Убираем enableShutdownHooks, чтобы избежать двойного закрытия ресурсов
+  // app.enableShutdownHooks();
 
   const port = configService.get('PORT', 3001);
   const host = isProduction ? '0.0.0.0' : 'localhost';

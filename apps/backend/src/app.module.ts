@@ -72,8 +72,8 @@ import { AppConfigService } from './config/config.service';
           entities: [__dirname + '/database/entities/*.entity{.ts,.js}'],
           migrations: [__dirname + '/database/migrations/*.{ts,js}'],
           migrationsTableName: 'migrations_history',
-          migrationsRun,
-          synchronize,
+          migrationsRun: appConfig.database.autoMigrate === true,
+          synchronize: false,
           logging: isDev ? ['query', 'error', 'warn'] : ['error'],
           extra: {
             max: appConfig.database.maxConnections,
@@ -149,16 +149,20 @@ export class AppModule implements OnModuleInit {
     const environment = this.appConfig.app.environment;
 
     if (environment === 'development') {
-      console.log('🌱 Running database seeds in development environment...');
-      await this.seedsService.runAllSeeds();
+      if (this.appConfig.seeds.autoRun || this.appConfig.seeds.enabled) {
+        console.log('🌱 Running database seeds in development environment...');
+        await this.seedsService.runAllSeeds();
+      } else {
+        console.log('🔒 Database seeds disabled in development (SEEDS_ENABLED=false)');
+      }
       return;
     }
     if (environment === 'staging') {
-      if (this.appConfig.seeds.allowInStaging) {
+      if (this.appConfig.seeds.allowInStaging && this.appConfig.seeds.enabled) {
         console.log('🌱 Running database seeds in staging environment (explicitly enabled)...');
         await this.seedsService.runAllSeeds();
       } else {
-        console.log('🔒 Database seeds disabled in staging (set ALLOW_STAGING_SEEDS=true to enable)');
+        console.log('🔒 Database seeds disabled in staging (set ALLOW_STAGING_SEEDS=true and SEEDS_ENABLED=true to enable)');
       }
       return;
     }
