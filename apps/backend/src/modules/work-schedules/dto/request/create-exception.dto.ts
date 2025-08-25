@@ -1,3 +1,4 @@
+// apps/backend/src/modules/work-schedules/dto/request/create-exception.dto.ts
 import { IsString, IsUUID, IsOptional, IsBoolean, IsEnum, IsDateString, MaxLength, ValidateIf, Matches } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ExceptionType } from '../../../../database/entities/schedule-exception.entity';

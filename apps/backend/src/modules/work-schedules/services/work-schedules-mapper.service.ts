@@ -1,9 +1,11 @@
+// path: apps/backend/src/modules/work-schedules/services/work-schedules-mapper.service.ts
 import { Injectable } from '@nestjs/common';
 import { WorkSchedule, ScheduleException } from '../../../database/entities';
 import { ScheduleResponseDto } from '../dto/response/schedule-response.dto';
 import { IWorkSchedulesMapperService } from '../interfaces/work-schedules.interface';
 import { DAY_NAMES } from '../constants/work-schedules.constants';
 import { ExceptionResponseDto } from '../dto/response/exception-response.dto';
+import { UserWithCompany } from '../types/work-schedules.types';
 
 @Injectable()
 export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
@@ -39,7 +41,9 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
     return schedules.map((schedule) => this.mapScheduleToResponseDto(schedule));
   }
 
-  mapExceptionToResponseDto(exception: ScheduleException): ExceptionResponseDto {
+  mapExceptionToResponseDto(exception: ScheduleException, currentUser?: UserWithCompany): ExceptionResponseDto {
+    const mask = this.shouldMaskExceptionText(exception, currentUser);
+
     return {
       id: exception.id,
       companyId: exception.companyId,
@@ -50,19 +54,19 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
       isFullDay: exception.isFullDay,
       startTime: exception.startTime || undefined,
       endTime: exception.endTime || undefined,
-      reason: exception.reason || undefined,
+      reason: mask ? undefined : exception.reason || undefined,
       status: exception.status,
       approvedBy: exception.approvedBy || undefined,
       approvedAt: exception.approvedAt || undefined,
-      rejectionReason: exception.rejectionReason || undefined,
+      rejectionReason: mask ? undefined : exception.rejectionReason || undefined,
       affectedAppointments: this.safeNormalizeArray<string>(exception.affectedAppointments, []),
       createdAt: exception.createdAt,
       updatedAt: exception.updatedAt,
     };
   }
 
-  mapExceptionArrayToResponseDto(exceptions: ScheduleException[]): ExceptionResponseDto[] {
-    return exceptions.map((exception) => this.mapExceptionToResponseDto(exception));
+  mapExceptionArrayToResponseDto(exceptions: ScheduleException[], currentUser?: UserWithCompany): ExceptionResponseDto[] {
+    return exceptions.map((e) => this.mapExceptionToResponseDto(e, currentUser));
   }
 
   mapScheduleWithUserInfo(schedule: WorkSchedule, userInfo?: any): ScheduleResponseDto {
@@ -159,5 +163,34 @@ export class WorkSchedulesMapperService implements IWorkSchedulesMapperService {
     if (typeof eff === 'number') return eff;
     const n = Number(eff);
     return Number.isFinite(n) && !Number.isNaN(n) ? n : 1;
+  }
+
+  private shouldMaskExceptionText(exception: ScheduleException, currentUser?: UserWithCompany): boolean {
+    // Если уже анонимизировано по ретеншну — маскируем всегда
+    if (exception.piiAnonymized) return true;
+
+    if (!currentUser) return true;
+
+    // Разрешённые роли, которые могут видеть тексты: админские и менеджерские
+    const privilegedRoles = new Set([
+      'superadmin',
+      'owner',
+      'admin',
+      'manager',
+      'company_owner',
+      'company_admin',
+    ]);
+
+    if (privilegedRoles.has((currentUser.role || '').toLowerCase())) {
+      return false;
     }
+
+    // Механик может видеть только свои собственные исключения
+    if ((currentUser.role || '').toLowerCase() === 'mechanic') {
+      return currentUser.id !== exception.userId;
+    }
+
+    // По умолчанию — маскируем
+    return true;
+  }
 }

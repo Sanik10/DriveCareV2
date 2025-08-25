@@ -1,6 +1,7 @@
+// path: apps/backend/src/modules/work-schedules/services/work-schedules-data.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { WorkSchedule, ScheduleException, User } from '../../../database/entities';
 import { CreateScheduleDto } from '../dto/request/create-schedule.dto';
 import { UpdateScheduleDto } from '../dto/request/update-schedule.dto';
@@ -9,6 +10,7 @@ import { WorkSchedulesFilter } from '../types/work-schedules.types';
 import { IWorkSchedulesDataService } from '../interfaces/work-schedules.interface';
 import { WORK_SCHEDULES_CONSTANTS } from '../constants/work-schedules.constants';
 import { ExceptionStatus, ExceptionType } from '../../../database/entities/schedule-exception.entity';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class WorkSchedulesDataService implements IWorkSchedulesDataService {
@@ -17,6 +19,7 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
     private readonly workScheduleRepository: Repository<WorkSchedule>,
     @InjectRepository(ScheduleException)
     private readonly scheduleExceptionRepository: Repository<ScheduleException>,
+    private readonly configService: ConfigService,
   ) {}
 
   async create(data: CreateScheduleDto & { companyId: string }): Promise<WorkSchedule> {
@@ -213,6 +216,15 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
   }
 
   async createException(data: CreateExceptionDto & { companyId: string }): Promise<ScheduleException> {
+    // Рассчитать дату ретеншна: endDate + N лет (по конфигу)
+    const retentionYears =
+      this.configService.get<number>('workSchedules.exceptionsRetentionYears') ??
+      parseInt(process.env.WORK_SCHEDULE_EXCEPTIONS_RETENTION_YEARS || '5', 10);
+    const end = new Date(data.endDate as any);
+    const dataRetentionUntil = isNaN(end.getTime())
+      ? null
+      : new Date(new Date(end).setFullYear(end.getFullYear() + Math.max(1, retentionYears)));
+
     const entity = this.scheduleExceptionRepository.create({
       companyId: data.companyId,
       userId: data.userId,
@@ -229,6 +241,10 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
       rejectionReason: null,
       affectedAppointments: [], // список ID затронутых записей (jsonb)
       coverageAnalysis: null,
+      dataRetentionUntil,
+      anonymizedAt: null,
+      anonymizedBy: null,
+      piiAnonymized: false,
     } as Partial<ScheduleException>);
     return this.scheduleExceptionRepository.save(entity);
   }
@@ -331,8 +347,49 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
     return exception;
   }
 
+  // Политика удаления: анонимизация содержимого (историчность сохраняется)
   async deleteException(id: string): Promise<void> {
-    await this.scheduleExceptionRepository.delete(id);
+    await this.scheduleExceptionRepository.update(
+      { id },
+      {
+        reason: null,
+        rejectionReason: null,
+        anonymizedAt: new Date() as any,
+        piiAnonymized: true,
+      } as Partial<ScheduleException>,
+    );
+  }
+
+  // Анонимизация просроченных по ретеншну исключений (для Cron)
+  async anonymizeExpiredExceptions(companyId: string): Promise<number> {
+    const res = await this.scheduleExceptionRepository
+      .createQueryBuilder()
+      .update(ScheduleException)
+      .set({
+        reason: () => 'NULL',
+        rejectionReason: () => 'NULL',
+        anonymizedAt: () => 'CURRENT_TIMESTAMP',
+        piiAnonymized: () => 'TRUE',
+      })
+      .where('companyId = :companyId', { companyId })
+      .andWhere('piiAnonymized = FALSE')
+      .andWhere('dataRetentionUntil IS NOT NULL')
+      .andWhere('dataRetentionUntil <= NOW()')
+      .execute();
+
+    return res.affected || 0;
+  }
+
+  async getCompaniesWithDueAnonymization(limit = 200): Promise<string[]> {
+    const rows = await this.scheduleExceptionRepository
+      .createQueryBuilder('e')
+      .select('DISTINCT e.companyId', 'companyId')
+      .where('e.piiAnonymized = FALSE')
+      .andWhere('e.dataRetentionUntil IS NOT NULL')
+      .andWhere('e.dataRetentionUntil <= NOW()')
+      .limit(limit)
+      .getRawMany<{ companyId: string }>();
+    return rows.map((r) => r.companyId);
   }
 
   private mapSortField(sortField: string): string {
@@ -350,9 +407,9 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
   async userBelongsToCompany(userId: string, companyId: string): Promise<boolean> {
     if (!userId || !companyId) return false;
     const repo = this.workScheduleRepository.manager.getRepository(User);
+    // В User entity используется свойство company_id (snake_case)
     const user = await repo.findOne({
-      select: ['id', 'company_id'],
-      where: { id: userId, company_id: companyId as any },
+      where: { id: userId, company_id: companyId } as any,
     });
     return !!user;
   }

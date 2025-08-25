@@ -9,15 +9,17 @@ import { WorkSchedulesBusinessService } from './services/work-schedules-business
 import { WorkSchedulesDataService } from './services/work-schedules-data.service';
 import { WorkSchedulesMapperService } from './services/work-schedules-mapper.service';
 import { WorkSchedulesValidationService } from './services/work-schedules-validation.service';
+import { WorkSchedulesRetentionScheduler } from './services/work-schedules-retention.scheduler';
 
 // Entities
 import { WorkSchedule, ScheduleException, User, Company, Service } from '../../database/entities';
 
-// Общие сервисы (если понадобится аудит — подключим по сигнатуре)
+// Общие сервисы
 import { AuditService } from '../../common/audit/audit.service';
+import { RedisModule } from '../../common/redis/redis.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([WorkSchedule, ScheduleException, User, Company, Service])],
+  imports: [TypeOrmModule.forFeature([WorkSchedule, ScheduleException, User, Company, Service]), RedisModule],
   controllers: [WorkSchedulesController],
   providers: [
     WorkSchedulesService,
@@ -25,8 +27,14 @@ import { AuditService } from '../../common/audit/audit.service';
     WorkSchedulesDataService,
     WorkSchedulesMapperService,
     WorkSchedulesValidationService,
+    WorkSchedulesRetentionScheduler,
     AuditService,
   ],
-  exports: [WorkSchedulesService, WorkSchedulesDataService, WorkSchedulesMapperService, WorkSchedulesBusinessService],
+  exports: [
+    WorkSchedulesService,
+    WorkSchedulesDataService,
+    WorkSchedulesMapperService,
+    WorkSchedulesBusinessService,
+  ],
 })
 export class WorkSchedulesModule {}

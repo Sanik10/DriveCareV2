@@ -13,6 +13,8 @@ import { WorkSchedulesFilter, UserWithCompany } from './types/work-schedules.typ
 import { WORK_SCHEDULES_CONSTANTS } from './constants/work-schedules.constants';
 import { AuditService, AuditAction, AuditLevel } from '../../common/audit/audit.service';
 import { ExceptionResponseDto } from './dto/response/exception-response.dto';
+import { ExceptionStatus } from '../../database/entities/schedule-exception.entity';
+import { WorkScheduleConflictException } from '../../common/exceptions/domain.exceptions';
 
 @Injectable()
 export class WorkSchedulesService {
@@ -36,27 +38,35 @@ export class WorkSchedulesService {
     await this.validationService.validateScheduleData(createDto);
     await this.validationService.validateScheduleConflicts(createDto.userId, createDto.dayOfWeek, user.companyId);
 
-    // Создание
-    const schedule = await this.dataService.create({
-      ...createDto,
-      companyId: user.companyId,
-    });
+    try {
+      const schedule = await this.dataService.create({
+        ...createDto,
+        companyId: user.companyId,
+      });
 
-    await this.audit.log(AuditAction.WORK_SCHEDULE_CREATED, {
-      userId: user.id,
-      companyId: user.companyId,
-      level: AuditLevel.INFO,
-      resourceType: 'work-schedule',
-      resourceId: schedule.id,
-      details: {
-        userId: schedule.userId,
-        dayOfWeek: schedule.dayOfWeek,
-        isActive: schedule.isActive,
-      },
-    });
+      await this.audit.log(AuditAction.WORK_SCHEDULE_CREATED, {
+        userId: user.id,
+        companyId: user.companyId,
+        level: AuditLevel.INFO,
+        resourceType: 'work-schedule',
+        resourceId: schedule.id,
+        details: {
+          userId: schedule.userId,
+          dayOfWeek: schedule.dayOfWeek,
+          isActive: schedule.isActive,
+        },
+      });
 
-    this.logger.log(`Расписание успешно создано: ${schedule.id}`);
-    return this.mapperService.mapScheduleToResponseDto(schedule);
+      this.logger.log(`Расписание успешно создано: ${schedule.id}`);
+      return this.mapperService.mapScheduleToResponseDto(schedule);
+    } catch (e: any) {
+      // Ловим уникальный конфликт companyId+userId+dayOfWeek → 409
+      const msg = String(e?.message || '');
+      if (e?.code === '23505' || msg.includes('uq_work_schedule_company_user_day')) {
+        throw new WorkScheduleConflictException(createDto.userId, createDto.dayOfWeek);
+      }
+      throw e;
+    }
   }
 
   async findAll(filter: WorkSchedulesFilter): Promise<PaginatedSchedulesResponseDto> {
@@ -124,7 +134,7 @@ export class WorkSchedulesService {
     } as unknown as CreateScheduleDto | UpdateScheduleDto;
     await this.validationService.validateScheduleData(merged);
 
-    // При изменении дня недели — проверка конфликта (у пользователя может быть только одно расписание на день)
+    // При изменении дня недели — проверка конфликта
     const nextDay = updateDto.dayOfWeek ?? existing.dayOfWeek;
     if (nextDay !== existing.dayOfWeek) {
       await this.validationService.validateScheduleConflicts(existing.userId, nextDay, existing.companyId, id);
@@ -202,6 +212,36 @@ export class WorkSchedulesService {
     });
 
     this.logger.log(`Исключение успешно создано: ${exception.id}`);
-    return this.mapperService.mapExceptionToResponseDto(exception);
+    // Маскирование reason — по ролям/владению
+    return this.mapperService.mapExceptionToResponseDto(exception, user);
+  }
+
+  async updateExceptionStatus(id: string, status: ExceptionStatus, actor: UserWithCompany): Promise<ExceptionResponseDto> {
+    const updated = await this.dataService.updateExceptionStatus(id, status, actor?.id);
+    await this.audit.log(AuditAction.SCHEDULE_EXCEPTION_STATUS_CHANGED, {
+      userId: actor?.id,
+      companyId: actor?.companyId || updated.companyId,
+      level: AuditLevel.INFO,
+      resourceType: 'schedule-exception',
+      resourceId: id,
+      details: {
+        status,
+        userId: updated.userId,
+        type: updated.type,
+      },
+    });
+    return this.mapperService.mapExceptionToResponseDto(updated, actor);
+  }
+
+  async deleteException(id: string, actor: UserWithCompany): Promise<void> {
+    await this.dataService.deleteException(id);
+    await this.audit.log(AuditAction.SCHEDULE_EXCEPTION_DELETED, {
+      userId: actor?.id,
+      companyId: actor?.companyId,
+      level: AuditLevel.WARNING,
+      resourceType: 'schedule-exception',
+      resourceId: id,
+      details: { anonymized: true },
+    });
   }
 }

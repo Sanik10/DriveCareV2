@@ -1,3 +1,4 @@
+// apps/backend/src/modules/work-schedules/dto/request/create-schedule.dto.ts
 import { IsString, IsUUID, IsNumber, IsOptional, IsBoolean, IsArray, Min, Max, Matches, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { WORK_SCHEDULES_CONSTANTS, WORK_SCHEDULES_VALIDATION_MESSAGES, SHIFT_TYPES } from '../../constants/work-schedules.constants';

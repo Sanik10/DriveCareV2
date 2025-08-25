@@ -28,6 +28,7 @@ export enum ExceptionStatus {
 @Index('idx_se_company_user', ['companyId', 'userId'])
 @Index('idx_se_company_status', ['companyId', 'status'])
 @Index('idx_se_company_start_end', ['companyId', 'startDate', 'endDate'])
+@Index('idx_se_company_retention', ['companyId', 'dataRetentionUntil'])
 @Check('chk_se_date_range', '("endDate" >= "startDate")')
 @Check(
   'chk_se_partial_time_valid',
@@ -89,6 +90,19 @@ export class ScheduleException {
 
   @Column({ type: 'jsonb', nullable: true })
   coverageAnalysis: Record<string, any> | null;
+
+  // Ретеншн/анонимизация (152-ФЗ)
+  @Column({ type: 'timestamptz', nullable: true })
+  dataRetentionUntil: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  anonymizedAt: Date | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  anonymizedBy: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  piiAnonymized: boolean;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

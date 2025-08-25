@@ -312,6 +312,12 @@ export const tariffsConfig = registerAs('tariffs', () => ({
   cacheTtlSec: parseInt(process.env.TARIFFS_CACHE_TTL_SEC || '3600', 10),
 }));
 
+// 📅 Work Schedules Configuration
+export const workSchedulesConfig = registerAs('workSchedules', () => ({
+  exceptionsRetentionYears: parseInt(process.env.WORK_SCHEDULE_EXCEPTIONS_RETENTION_YEARS || '5', 10),
+  exceptionsAnonymizeCron: process.env.WORK_SCHEDULE_EXCEPTIONS_ANON_CRON || '0 4 * * *',
+}));
+
 // 🎯 Export all configurations
 export default [
   databaseConfig,
@@ -336,4 +342,5 @@ export default [
   paymentsConfig,
   serviceHistoryConfig,
   tariffsConfig,
+  workSchedulesConfig,
 ];

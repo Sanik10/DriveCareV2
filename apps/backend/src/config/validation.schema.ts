@@ -125,6 +125,10 @@ export function validateConfig(config: Record<string, unknown>) {
     APPOINTMENTS_REMINDERS_ENABLED: Joi.boolean().truthy('true').falsy('false').default(false),
     APPOINTMENTS_REMINDERS_CRON: Joi.string().default('0 9 * * *'),
 
+    // Work Schedules (exceptions retention/cron)
+    WORK_SCHEDULE_EXCEPTIONS_RETENTION_YEARS: Joi.number().min(1).max(50).default(5),
+    WORK_SCHEDULE_EXCEPTIONS_ANON_CRON: Joi.string().default('0 4 * * *'),
+
     // Email (optional; enable via EMAIL_ENABLED)
     EMAIL_ENABLED: Joi.boolean().truthy('true').falsy('false').default(false),
     SMTP_HOST: Joi.alternatives().conditional('EMAIL_ENABLED', {

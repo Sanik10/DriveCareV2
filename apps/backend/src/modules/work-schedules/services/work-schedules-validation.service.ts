@@ -1,3 +1,4 @@
+// apps/backend/src/modules/work-schedules/services/work-schedules-validation.service.ts
 import { Injectable } from '@nestjs/common';
 import { WorkSchedulesDataService } from './work-schedules-data.service';
 import { CreateScheduleDto } from '../dto/request/create-schedule.dto';
