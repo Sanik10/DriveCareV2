@@ -1,4 +1,4 @@
-// src/modules/invoices/constants/invoices.constants.ts
+// apps/backend/src/modules/invoices/constants/invoices.constants.ts
 import { InvoiceStatus } from '../../../database/entities/invoice.entity';
 import { AuditAction } from '../../../common/audit/audit.service';
 

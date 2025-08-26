@@ -1,4 +1,4 @@
-// src/modules/payments/payments.service.ts
+// apps/backend/src/modules/payments/payments.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { PaymentsDataService } from './services/payments-data.service';
 import { PaymentsBusinessService } from './services/payments-business.service';

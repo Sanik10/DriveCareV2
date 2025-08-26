@@ -1,4 +1,4 @@
-// src/modules/invoices/invoices.service.ts
+// apps/backend/src/modules/invoices/invoices.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { InvoicesDataService } from './services/invoices-data.service';
 import { InvoicesBusinessService } from './services/invoices-business.service';

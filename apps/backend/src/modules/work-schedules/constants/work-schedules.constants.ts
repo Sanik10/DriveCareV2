@@ -1,4 +1,4 @@
-// src/modules/work-schedules/constants/work-schedules.constants.ts
+// apps/backend/src/modules/work-schedules/constants/work-schedules.constants.ts
 export const WORK_SCHEDULES_CONSTANTS = {
   DEFAULT_PAGE_SIZE: 20,
   MAX_PAGE_SIZE: 100,

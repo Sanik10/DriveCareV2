@@ -1,4 +1,4 @@
-// src/modules/invoices/invoices.controller.ts
+// apps/backend/src/modules/invoices/invoices.controller.ts
 import {
   Controller,
   Get,

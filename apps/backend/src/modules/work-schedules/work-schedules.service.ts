@@ -1,5 +1,5 @@
 // path: apps/backend/src/modules/work-schedules/work-schedules.service.ts
-import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { WorkSchedulesDataService } from './services/work-schedules-data.service';
 import { WorkSchedulesMapperService } from './services/work-schedules-mapper.service';
 import { WorkSchedulesValidationService } from './services/work-schedules-validation.service';
@@ -217,6 +217,19 @@ export class WorkSchedulesService {
   }
 
   async updateExceptionStatus(id: string, status: ExceptionStatus, actor: UserWithCompany): Promise<ExceptionResponseDto> {
+    // Механики не могут менять статус исключений
+    if ((actor.role || '').toLowerCase() === 'mechanic') {
+      throw new ForbiddenException('Mechanics are not allowed to change exception status');
+    }
+
+    const existing = await this.dataService.getExceptionById(id);
+    if (!existing) {
+      throw new NotFoundException('Schedule exception not found');
+    }
+    if (existing.companyId !== actor.companyId) {
+      throw new ForbiddenException('No access to exception of another company');
+    }
+
     const updated = await this.dataService.updateExceptionStatus(id, status, actor?.id);
     await this.audit.log(AuditAction.SCHEDULE_EXCEPTION_STATUS_CHANGED, {
       userId: actor?.id,
@@ -234,6 +247,19 @@ export class WorkSchedulesService {
   }
 
   async deleteException(id: string, actor: UserWithCompany): Promise<void> {
+    // Механикам удаление (анонимизация) исключений запрещено
+    if ((actor.role || '').toLowerCase() === 'mechanic') {
+      throw new ForbiddenException('Mechanics are not allowed to delete exceptions');
+    }
+
+    const existing = await this.dataService.getExceptionById(id);
+    if (!existing) {
+      throw new NotFoundException('Schedule exception not found');
+    }
+    if (existing.companyId !== actor.companyId) {
+      throw new ForbiddenException('No access to exception of another company');
+    }
+
     await this.dataService.deleteException(id);
     await this.audit.log(AuditAction.SCHEDULE_EXCEPTION_DELETED, {
       userId: actor?.id,

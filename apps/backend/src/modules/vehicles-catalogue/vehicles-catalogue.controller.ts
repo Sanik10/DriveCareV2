@@ -33,6 +33,7 @@ import { UpdateTypeDto } from './dto/types/update-type.dto';
 import { TypeResponseDto } from './dto/types/type-response.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AuthWithOwnership } from '../../common';
+import { AllowCache } from '../../common/decorators/cache-policy.decorator';
 
 @ApiTags('🏭 Каталог транспортных средств')
 @Controller('vehicles-catalogue')
@@ -57,6 +58,7 @@ export class VehiclesCatalogueController {
 
   @Get('brands')
   @AuthWithOwnership() // 🔒 Авторизация обязательна, но каталог глобальный
+  @AllowCache(3600, 'public')
   @ApiOperation({
     summary: 'Получение списка брендов',
     description: 'Получение списка всех активных брендов автомобилей.',
@@ -126,6 +128,7 @@ export class VehiclesCatalogueController {
 
   @Get('models')
   @AuthWithOwnership()
+  @AllowCache(3600, 'public')
   @ApiOperation({ summary: 'Получение списка моделей' })
   @ApiQuery({ name: 'brandId', required: false, description: 'Фильтр по бренду' })
   @ApiQuery({ name: 'search', required: false, description: 'Поиск по названию модели' })
@@ -191,6 +194,7 @@ export class VehiclesCatalogueController {
 
   @Get('types')
   @AuthWithOwnership()
+  @AllowCache(3600, 'public')
   @ApiOperation({ summary: 'Получение списка типов ТС' })
   @ApiQuery({ name: 'search', required: false, description: 'Поиск по названию типа' })
   @ApiQuery({ name: 'page', required: false, description: 'Страница (>=1)', schema: { default: 1 } })

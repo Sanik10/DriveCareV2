@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+  import { tap } from 'rxjs/operators';
 import { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
@@ -106,8 +106,19 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
         : 'no-cache, no-store, must-revalidate');
 
     response.setHeader('Cache-Control', effectivePolicy);
-    if (!response.getHeader('Pragma')) response.setHeader('Pragma', 'no-cache');
-    if (!response.getHeader('Expires')) response.setHeader('Expires', '0');
+
+    // Pragma/Expires должны устанавливаться только при no-cache/no-store.
+    const lc = effectivePolicy.toLowerCase();
+    const isNoCachePolicy = lc.includes('no-store') || lc.includes('no-cache');
+
+    if (isNoCachePolicy) {
+      if (!response.getHeader('Pragma')) response.setHeader('Pragma', 'no-cache');
+      if (!response.getHeader('Expires')) response.setHeader('Expires', '0');
+    } else {
+      // Для кэшируемых ответов удаляем потенциально конфликтующие заголовки.
+      if (response.getHeader('Pragma')) response.removeHeader('Pragma');
+      if (response.getHeader('Expires')) response.removeHeader('Expires');
+    }
   }
 
   private addAdvancedSecurityHeaders(response: Response, request: any): void {

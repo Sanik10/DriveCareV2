@@ -413,4 +413,9 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
     });
     return !!user;
   }
+
+  // ===== Exceptions helpers =====
+  async getExceptionById(id: string): Promise<ScheduleException | null> {
+    return this.scheduleExceptionRepository.findOne({ where: { id } });
+  }
 }

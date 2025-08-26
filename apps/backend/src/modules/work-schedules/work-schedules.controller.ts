@@ -32,6 +32,7 @@ import { WorkSchedulesService } from './work-schedules.service';
 import { CreateScheduleDto } from './dto/request/create-schedule.dto';
 import { UpdateScheduleDto } from './dto/request/update-schedule.dto';
 import { CreateExceptionDto } from './dto/request/create-exception.dto';
+import { UpdateExceptionStatusDto } from './dto/request/update-exception-status.dto';
 import { ScheduleResponseDto } from './dto/response/schedule-response.dto';
 import { PaginatedSchedulesResponseDto } from './dto/response/paginated-schedules-response.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -216,5 +217,46 @@ export class WorkSchedulesController {
       throw new ForbiddenException('Mechanics can only create exceptions for themselves');
     }
     return this.workSchedulesService.createException(createExceptionDto, req.user);
+  }
+
+  @Patch('exceptions/:id/status')
+  @AuthWithOwnership()
+  @Roles('owner', 'admin', 'manager', 'company_owner', 'company_admin')
+  @ApiOperation({
+    summary: 'Смена статуса исключения',
+    description: 'Обновление статуса исключения расписания (approve/reject/etc).',
+  })
+  @ApiParam({ name: 'id', description: 'ID исключения' })
+  @ApiBody({ type: UpdateExceptionStatusDto })
+  @ApiResponse({ status: HttpStatus.OK, type: ExceptionResponseDto })
+  @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
+  @ApiForbiddenResponse({ description: '❌ Недостаточно прав доступа' })
+  @ApiNotFoundResponse({ description: '❌ Исключение не найдено' })
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  async updateExceptionStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateExceptionStatusDto,
+    @Req() req: RequestWithUser,
+  ): Promise<ExceptionResponseDto> {
+    return this.workSchedulesService.updateExceptionStatus(id, dto.status, req.user);
+  }
+
+  @Delete('exceptions/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @AuthWithOwnership()
+  @Roles('owner', 'admin', 'company_owner', 'company_admin')
+  @ApiOperation({
+    summary: 'Удаление исключения (анонимизация)',
+    description:
+      'Логическое удаление исключения: персональные поля анонимизируются, запись сохраняется для историчности.',
+  })
+  @ApiParam({ name: 'id', description: 'ID исключения' })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT })
+  @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
+  @ApiForbiddenResponse({ description: '❌ Недостаточно прав доступа' })
+  @ApiNotFoundResponse({ description: '❌ Исключение не найдено' })
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  async deleteException(@Param('id') id: string, @Req() req: RequestWithUser): Promise<void> {
+    return this.workSchedulesService.deleteException(id, req.user);
   }
 }

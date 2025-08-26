@@ -1,4 +1,4 @@
-// src/modules/payments/services/payments-business.service.ts
+// path: apps/backend/src/modules/payments/services/payments-business.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
@@ -24,6 +24,8 @@ import {
   ResourceOwnershipException,
   ValidationDataException,
 } from '../../../common/exceptions/domain.exceptions';
+// Тип для согласования с InvoicesService.processPayment
+import type { UserWithCompany as InvoiceUser } from '../../invoices/types/invoices.types';
 
 @Injectable()
 export class PaymentsBusinessService {
@@ -98,7 +100,7 @@ export class PaymentsBusinessService {
           ? await this.calculateFiscalData(processedData, paymentMethodInfo)
           : { vatRate: null, vatAmount: null };
 
-        const pdpData = await this.processPdpCompliance(data, user);
+        const pdpData = await this.processPdpCompliance(processedData, user);
 
         const paymentData: CreatePaymentData = {
           ...processedData,
@@ -120,13 +122,30 @@ export class PaymentsBusinessService {
 
         const payment = await this.paymentsDataService.createWithTransaction(paymentData, manager);
 
+        // Автоперевод в PROCESSED для наличных
         if (
           PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_PROCESS_CASH_PAYMENTS &&
           paymentMethodInfo.type === 'cash'
         ) {
           await this.processPaymentAutomatically(payment.id, user, manager);
+
+          // После успешной обработки наличного платежа — обновляем счет (оплата)
+          try {
+            const invUser: InvoiceUser = {
+              id: user.id,
+              email: user.email ?? '',
+              role: user.role as any,
+              companyId: user.companyId,
+              firstName: user.firstName,
+              lastName: user.lastName,
+            };
+            await this.invoicesService.processPayment(data.invoiceId, processedData.amount, invUser);
+          } catch (err) {
+            this.logger.warn(`Failed to mark invoice as paid for cash payment ${payment.id}: ${err?.message}`);
+          }
         }
 
+        // Фискализация (если требуется по типу оплаты и флагу)
         if (this.requiresFiscalization(paymentMethodInfo.type)) {
           await this.processFiscalization(payment, invoiceInfo, manager);
         }
@@ -146,10 +165,7 @@ export class PaymentsBusinessService {
           },
         });
 
-        if (PAYMENTS_CONSTANTS.BUSINESS_RULES.AUTO_UPDATE_INVOICE_STATUS) {
-          await this.updateInvoiceStatusIfNeeded(data.invoiceId, user, manager);
-        }
-
+        // Для безналичных/эквайринга статус станет PROCESSED позже — обработаем в update (processStatusChange)
         this.logger.log(`✅ Payment recorded: ${payment.id} for ${payment.amount} ${payment.currency}`);
         return payment;
       } catch (error) {
@@ -616,12 +632,30 @@ export class PaymentsBusinessService {
   }
 
   private async processStatusChange(
-    _payment: Payment,
-    _newStatus: PaymentStatus,
-    _user: UserWithCompany,
+    payment: Payment,
+    newStatus: PaymentStatus,
+    user: UserWithCompany,
     _manager: EntityManager,
   ): Promise<void> {
-    return;
+    // Если платеж стал PROCESSED (например, эквайринг подтвердил) — синхронизируем статус счета
+    if (newStatus === PaymentStatus.PROCESSED) {
+      try {
+        const invUser: InvoiceUser = {
+          id: user.id,
+          email: user.email ?? '',
+          role: user.role as any,
+          companyId: user.companyId,
+          firstName: user.firstName,
+          lastName: user.lastName,
+        };
+        const amount = parseFloat(payment.amount as any);
+        await this.invoicesService.processPayment(payment.invoiceId, amount, invUser);
+      } catch (err) {
+        this.logger.warn(
+          `Failed to update invoice after payment ${payment.id} moved to PROCESSED: ${err?.message}`,
+        );
+      }
+    }
   }
 
   private async prepareUpdateData(
@@ -648,6 +682,7 @@ export class PaymentsBusinessService {
     _user: UserWithCompany,
     _manager: EntityManager,
   ): Promise<void> {
+    // Логика перенесена: вызываем processPayment при переходе в PROCESSED (наличные — сразу, эквайринг — при update)
     return;
   }
 

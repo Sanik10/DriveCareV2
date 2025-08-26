@@ -82,6 +82,12 @@ export function validateConfig(config: Record<string, unknown>) {
     KKT_SERIAL_NUMBER: Joi.string().allow('', null),
     YOOKASSA_WEBHOOK_PATH: Joi.string().default('subscription-billing/webhooks/yookassa'),
     TINKOFF_WEBHOOK_PATH: Joi.string().default('subscription-billing/webhooks/tinkoff'),
+    // One-time payments webhooks (P0.2 wiring)
+    YOOKASSA_PAYMENTS_WEBHOOK_PATH: Joi.string().default('payments/webhooks/yookassa'),
+    TINKOFF_PAYMENTS_WEBHOOK_PATH: Joi.string().default('payments/webhooks/tinkoff'),
+    // PSP webhooks security
+    WEBHOOK_ALLOWED_IPS: Joi.string().allow('', null).default(''),
+    WEBHOOK_IDEMPOTENCY_TTL_SEC: Joi.number().integer().min(60).max(86400).default(300),
 
     // Inventory
     INVENTORY_IDEMPOTENCY_TTL_MS: Joi.number().default(6 * 60 * 60 * 1000),

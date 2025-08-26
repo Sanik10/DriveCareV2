@@ -1,6 +1,9 @@
 // path: apps/backend/src/config/configuration.ts
 import { registerAs } from '@nestjs/config';
 
+const parseCsv = (input?: string): string[] =>
+  input ? input.split(',').map((s) => s.trim()).filter(Boolean) : [];
+
 // 🏗️ Database Configuration
 export const databaseConfig = registerAs('database', () => ({
   type: 'postgres' as const,
@@ -222,8 +225,17 @@ export const billingConfig = registerAs('billing', () => ({
     .map((p) => p.trim())
     .filter(Boolean),
   webhooks: {
+    // Subscription billing webhooks (existing)
     yookassaPath: process.env.YOOKASSA_WEBHOOK_PATH || 'subscription-billing/webhooks/yookassa',
     tinkoffPath: process.env.TINKOFF_WEBHOOK_PATH || 'subscription-billing/webhooks/tinkoff',
+    // One-time payments webhooks (P0.2 wiring)
+    payments: {
+      yookassaPath: process.env.YOOKASSA_PAYMENTS_WEBHOOK_PATH || 'payments/webhooks/yookassa',
+      tinkoffPath: process.env.TINKOFF_PAYMENTS_WEBHOOK_PATH || 'payments/webhooks/tinkoff',
+    },
+    // Security for PSP webhooks
+    allowedIps: parseCsv(process.env.WEBHOOK_ALLOWED_IPS),
+    idempotencyTtlSec: parseInt(process.env.WEBHOOK_IDEMPOTENCY_TTL_SEC || '300', 10),
   },
 }));
 

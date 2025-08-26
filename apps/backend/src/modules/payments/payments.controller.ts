@@ -1,4 +1,4 @@
-// src/modules/payments/payments.controller.ts (✅ SECURITY GUARDS ADDED)
+// apps/backend/src/modules/payments/payments.controller.ts (✅ SECURITY GUARDS ADDED)
 
 import {
   Controller,

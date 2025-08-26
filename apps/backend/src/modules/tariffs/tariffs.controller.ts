@@ -43,6 +43,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TariffFilter } from './types/tariffs.types';
 import { TARIFFS_CONSTANTS } from './constants/tariffs.constants';
+import { AllowCache } from '../../common/decorators/cache-policy.decorator';
 
 @ApiTags('💰 Тарифные планы')
 @Controller('tariffs')
@@ -138,6 +139,7 @@ export class TariffsController {
   }
 
   @Get()
+  @AllowCache(3600, 'public')
   @ApiOperation({
     summary: 'Получение списка тарифов с фильтрацией',
     description: 'Получение списка всех тарифов с возможностью фильтрации по статусу, цене и поиску.',
@@ -236,6 +238,7 @@ export class TariffsController {
   }
 
   @Get('active')
+  @AllowCache(3600, 'public')
   @ApiOperation({
     summary: 'Получение активных тарифов',
     description: 'Получение списка только активных тарифов для публичного отображения.',
@@ -252,6 +255,7 @@ export class TariffsController {
   }
 
   @Get('popular')
+  @AllowCache(3600, 'public')
   @ApiOperation({
     summary: 'Получение популярных тарифов',
     description: 'Получение списка популярных тарифов (по количеству подписок).',
@@ -275,6 +279,7 @@ export class TariffsController {
   }
 
   @Get('compare')
+  @AllowCache(3600, 'public')
   @ApiOperation({
     summary: 'Сравнение тарифов',
     description: 'Получение данных для сравнения нескольких тарифов.',

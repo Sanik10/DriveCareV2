@@ -1,4 +1,4 @@
-// src/modules/payments/types/payments.types.ts
+// apps/backend/src/modules/payments/types/payments.types.ts
 import { AuthRole } from '../../auth/types/auth.types';
 
 export enum PaymentStatus {
