@@ -1,4 +1,4 @@
-// apps/backend/src/modules/payments/payments.service.ts
+// path: apps/backend/src/modules/payments/payments.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { PaymentsDataService } from './services/payments-data.service';
 import { PaymentsBusinessService } from './services/payments-business.service';
@@ -11,10 +11,11 @@ import { PaymentResponseDto } from './dto/response/payment-response.dto';
 import { PaginatedPaymentsResponseDto } from './dto/response/paginated-payments-response.dto';
 import { PaymentStatisticsDto } from './dto/response/payment-statistics.dto';
 import { CompanyBalanceDto } from './dto/response/company-balance.dto';
-import { PaymentFilter, CreatePaymentData, UserWithCompany } from './types/payments.types';
+import { PaymentFilter, CreatePaymentData, UserWithCompany, PaymentStatus } from './types/payments.types';
 import { RequestWithUser } from '../auth/interfaces/request-with-user.interface';
 import { PAYMENTS_CONSTANTS } from './constants/payments.constants';
 import { AuthRole } from '../auth/types/auth.types'
+import { PaymentProcessingException } from '../../common/exceptions/domain.exceptions';
 
 @Injectable()
 export class PaymentsService {
@@ -185,7 +186,6 @@ export class PaymentsService {
     this.logger.log(`Getting payment statistics for user ${user.id}`);
 
     const companyId = user.role === 'superadmin' ? undefined : user.companyId;
-    
     if (!companyId && user.role !== 'superadmin') {
       throw new Error('Company ID is required for non-superadmin users');
     }
@@ -202,7 +202,6 @@ export class PaymentsService {
     this.logger.log(`Getting company balance for user ${user.id}`);
 
     const companyId = user.role === 'superadmin' ? undefined : user.companyId;
-    
     if (!companyId && user.role !== 'superadmin') {
       throw new Error('Company ID is required for non-superadmin users');
     }
@@ -223,7 +222,6 @@ export class PaymentsService {
     this.logger.log(`Processing overdue payments for user ${user.id}`);
 
     const companyId = user.role === 'superadmin' ? undefined : user.companyId;
-    
     if (!companyId && user.role !== 'superadmin') {
       throw new Error('Company ID is required for non-superadmin users');
     }
@@ -280,7 +278,7 @@ export class PaymentsService {
       id: 'system-payment-user',
       email: 'system@payment.local',
       companyId: filter.companyId,
-      role: 'company_admin' as AuthRole, // ✅ Правильная новая роль
+      role: 'company_admin' as AuthRole,
     } as RequestWithUser['user'];
     
     return this.findAll(filter, mockUser);
@@ -289,7 +287,7 @@ export class PaymentsService {
   /**
    * 🔍 Получение платежа по ID (алиас для findOne)
    */
-  async getPaymentById(id: string, user: RequestWithUser['user']): Promise<PaymentResponseDto> {
+  async getPaymentById(id: string, _user: RequestWithUser['user']): Promise<PaymentResponseDto> {
     return this.findOne(id);
   }
 
@@ -316,9 +314,18 @@ export class PaymentsService {
     // Валидация существования и принадлежности
     const payment = await this.paymentsValidationService.validatePaymentOwnership(id, user.companyId!);
 
-    // Проверка возможности удаления
-    if (payment.status === 'processed') {
-      throw new Error('Cannot delete processed payment. Use refund instead.');
+    // Запрещаем удаление финальных/критических статусов по 402‑ФЗ
+    const forbiddenStatuses: PaymentStatus[] = [
+      PaymentStatus.PROCESSED,
+      PaymentStatus.REFUNDED,
+      PaymentStatus.PARTIALLY_REFUNDED,
+      PaymentStatus.DISPUTED,
+      PaymentStatus.CHARGEBACK,
+    ];
+    if (forbiddenStatuses.includes(payment.status as PaymentStatus)) {
+      throw new PaymentProcessingException(
+        'Cannot delete processed/refunded/disputed payments. Use refund or corrective documents.',
+      );
     }
 
     // Удаление

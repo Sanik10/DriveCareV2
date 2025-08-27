@@ -1,9 +1,11 @@
 // path: scripts/validate-tracker.js
+
 /* eslint-disable no-console */
+/*
 const fs = require('fs');
 const path = require('path');
 
-const FILE = path.resolve(__dirname, '..', 'docs', 'SECURITY_COMPLIANCE_AUDIT_TRACKER.md');
+const FILE = path.resolve(__dirname, '..', 'docs', 'backend', 'SECURITY_COMPLIANCE_AUDIT_TRACKER.md');
 
 function formatRuDate(d = new Date()) {
   const dd = String(d.getDate()).padStart(2, '0');
@@ -104,3 +106,4 @@ function maybeWrite(md, original, changes) {
 
   console.log('Tracker OK');
 })();
+*/

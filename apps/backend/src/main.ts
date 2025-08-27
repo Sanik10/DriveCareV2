@@ -56,15 +56,23 @@ function normalizePath(prefix: string, path: string) {
 }
 
 function configureWebhookRawBody(app: any, configService: ConfigService, apiPrefix: string) {
-  const ykPath = configService.get<string>('YOOKASSA_WEBHOOK_PATH', 'subscription-billing/webhooks/yookassa');
-  const tkPath = configService.get<string>('TINKOFF_WEBHOOK_PATH', 'subscription-billing/webhooks/tinkoff');
+  // Subscription billing webhooks (existing)
+  const ykSubsPath = configService.get<string>('YOOKASSA_WEBHOOK_PATH', 'subscription-billing/webhooks/yookassa');
+  const tkSubsPath = configService.get<string>('TINKOFF_WEBHOOK_PATH', 'subscription-billing/webhooks/tinkoff');
+  // One-time payments webhooks (P0.2)
+  const ykPayPath = configService.get<string>('YOOKASSA_PAYMENTS_WEBHOOK_PATH', 'payments/webhooks/yookassa');
+  const tkPayPath = configService.get<string>('TINKOFF_PAYMENTS_WEBHOOK_PATH', 'payments/webhooks/tinkoff');
 
-  const ykFull = normalizePath(apiPrefix, ykPath);
-  const tkFull = normalizePath(apiPrefix, tkPath);
+  const ykSubsFull = normalizePath(apiPrefix, ykSubsPath);
+  const tkSubsFull = normalizePath(apiPrefix, tkSubsPath);
+  const ykPayFull = normalizePath(apiPrefix, ykPayPath);
+  const tkPayFull = normalizePath(apiPrefix, tkPayPath);
+
+  const rawLimit = configService.get<string>('WEBHOOK_BODY_LIMIT', '128kb');
 
   const attachRaw = (path: string) => {
     app.use(path, (req: Request, res: Response, next: NextFunction) => {
-      express.raw({ type: '*/*', limit: '256kb' })(req, res, (err) => {
+      express.raw({ type: '*/*', limit: rawLimit })(req, res, (err) => {
         if (err) return next(err);
         (req as any).rawBody = req.body;
         return next();
@@ -72,12 +80,14 @@ function configureWebhookRawBody(app: any, configService: ConfigService, apiPref
     });
   };
 
-  attachRaw(ykFull);
-  attachRaw(tkFull);
+  // Attach raw-body only for webhook endpoints
+  [ykSubsFull, tkSubsFull, ykPayFull, tkPayFull].forEach(attachRaw);
 
+  // Default JSON/urlencoded parsers for all other routes
   const jsonParser = express.json({ limit: '1mb' });
   const urlencodedParser = express.urlencoded({ extended: true, limit: '1mb' });
-  const isWebhook = (url: string) => url.startsWith(ykFull) || url.startsWith(tkFull);
+  const isWebhook = (url: string) =>
+    [ykSubsFull, tkSubsFull, ykPayFull, tkPayFull].some((p) => url.startsWith(p));
 
   app.use((req, res, next) => {
     if (isWebhook(req.originalUrl || req.url)) return next();
@@ -87,7 +97,11 @@ function configureWebhookRawBody(app: any, configService: ConfigService, apiPref
     });
   });
 
-  console.log(`🪝 Webhook raw-body enabled: ${ykFull}, ${tkFull}`);
+  console.log(`🪝 Webhook raw-body enabled (limit=${rawLimit}):`);
+  console.log(`   • ${ykSubsFull}`);
+  console.log(`   • ${tkSubsFull}`);
+  console.log(`   • ${ykPayFull}`);
+  console.log(`   • ${tkPayFull}`);
 }
 
 async function configureSwagger(app: any, configService: ConfigService, environment: string) {
@@ -162,6 +176,18 @@ async function configureCORS(app: any, configService: ConfigService, environment
   console.log(`🌐 CORS configured for origins: ${corsOrigins.join(', ')}`);
 }
 
+function parseTrustProxySetting(raw: any): boolean | number | string {
+  if (raw === undefined || raw === null) return false;
+  if (typeof raw === 'boolean') return raw;
+  const str = String(raw).trim().toLowerCase();
+  if (str === 'true') return true;
+  if (str === 'false') return false;
+  const maybeNum = Number(str);
+  if (!isNaN(maybeNum)) return maybeNum;
+  // Allow values like "loopback, linklocal, uniquelocal" or IP list
+  return raw;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { logger: ['log', 'warn', 'error'] });
   const configService = app.get(ConfigService);
@@ -170,8 +196,13 @@ async function bootstrap() {
   const apiPrefix = configService.get('API_PREFIX', 'api/v1');
 
   app.setGlobalPrefix(apiPrefix);
-  app.getHttpAdapter().getInstance().set('trust proxy', 1);
-  app.getHttpAdapter().getInstance().disable('x-powered-by');
+
+  const http = app.getHttpAdapter().getInstance();
+  const trustProxyRaw = configService.get('TRUST_PROXY', isProduction ? '1' : 'false');
+  const trustProxyVal = parseTrustProxySetting(trustProxyRaw);
+  http.set('trust proxy', trustProxyVal);
+  http.disable('x-powered-by');
+  console.log(`🧱 trust proxy enabled with: ${JSON.stringify(trustProxyRaw)}`);
 
   // Helmet: отключаем HSTS и upgrade-insecure-requests в dev/staging (Safari иначе форсит HTTPS)
   const scriptSrc = ["'self'", ...(isProduction ? [] : ["'unsafe-inline'", "'unsafe-eval'"])];
@@ -204,7 +235,6 @@ async function bootstrap() {
     }),
   );
 
-  const http = app.getHttpAdapter().getInstance();
   // Тихие заглушки для “дефолтных” иконок Safari/браузеров (чтобы 404 не летели в аудит)
   ['/apple-touch-icon.png', '/apple-touch-icon-precomposed.png', '/favicon.ico', '/favicon-32x32.png', '/favicon-16x16.png'].forEach(
     (p) => http.get(p, (_req: Request, res: Response) => res.status(204).end()),

@@ -244,7 +244,7 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
       dataRetentionUntil,
       anonymizedAt: null,
       anonymizedBy: null,
-      piiAnonymized: false,
+      // piiAnonymized intentionally not set to avoid DB mismatch
     } as Partial<ScheduleException>);
     return this.scheduleExceptionRepository.save(entity);
   }
@@ -355,7 +355,7 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
         reason: null,
         rejectionReason: null,
         anonymizedAt: new Date() as any,
-        piiAnonymized: true,
+        // piiAnonymized intentionally skipped to avoid referencing missing column
       } as Partial<ScheduleException>,
     );
   }
@@ -369,10 +369,9 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
         reason: () => 'NULL',
         rejectionReason: () => 'NULL',
         anonymizedAt: () => 'CURRENT_TIMESTAMP',
-        piiAnonymized: () => 'TRUE',
       })
       .where('companyId = :companyId', { companyId })
-      .andWhere('piiAnonymized = FALSE')
+      .andWhere('anonymizedAt IS NULL')
       .andWhere('dataRetentionUntil IS NOT NULL')
       .andWhere('dataRetentionUntil <= NOW()')
       .execute();
@@ -384,7 +383,7 @@ export class WorkSchedulesDataService implements IWorkSchedulesDataService {
     const rows = await this.scheduleExceptionRepository
       .createQueryBuilder('e')
       .select('DISTINCT e.companyId', 'companyId')
-      .where('e.piiAnonymized = FALSE')
+      .where('e.anonymizedAt IS NULL')
       .andWhere('e.dataRetentionUntil IS NOT NULL')
       .andWhere('e.dataRetentionUntil <= NOW()')
       .limit(limit)

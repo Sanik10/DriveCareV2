@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/auth/auth.controller.ts
 import {
   Body,
   Controller,
@@ -57,6 +58,8 @@ import { EnhancedValidationPipe } from '../../common/pipes/enhanced-validation.p
 import { ConfigService } from '@nestjs/config';
 import { TwoFAService } from './services/twofa.service';
 
+type SameSiteOpt = 'lax' | 'strict' | 'none';
+
 @ApiTags('🔐 Аутентификация')
 @Controller('auth')
 export class AuthController {
@@ -67,24 +70,95 @@ export class AuthController {
     private twoFA: TwoFAService,
   ) {}
 
+  private getApiAuthPath(): string {
+    const apiPrefix = (this.config.get<string>('API_PREFIX', 'api/v1') || 'api/v1').replace(/^\/+|\/+$/g, '');
+    return `/${apiPrefix}/auth`;
+  }
+
+  private getCookieDomain(): string | undefined {
+    const domain = (this.config.get<string>('COOKIE_DOMAIN') || '').trim();
+    return domain.length > 0 ? domain : undefined;
+  }
+
+  private resolveCookieSecurity(): { secure: boolean; sameSite: SameSiteOpt } {
+    const env = (this.config.get<string>('NODE_ENV') || 'development').toLowerCase();
+    const isProd = env === 'production';
+    const sameSite = (this.config.get<string>('COOKIE_SAMESITE', 'strict') || 'strict').toLowerCase() as SameSiteOpt;
+
+    const rawSecure = this.config.get<string>('COOKIE_SECURE');
+    let secure =
+      typeof rawSecure === 'string'
+        ? rawSecure.toLowerCase() === 'true'
+        : isProd;
+
+    // Per modern browsers: SameSite=None requires Secure
+    if (sameSite === 'none') {
+      secure = true;
+    }
+    return { secure, sameSite };
+  }
+
   private setRtCookie(res: Response, token: string) {
     const maxAge = this.config.get<number>('RT_COOKIE_MAX_AGE_MS', 7 * 24 * 60 * 60 * 1000);
-    const secure = this.config.get('COOKIE_SECURE', 'true') === 'true';
-    const sameSite = this.config.get<'lax' | 'strict' | 'none'>('COOKIE_SAMESITE', 'strict');
+    const { secure, sameSite } = this.resolveCookieSecurity();
+    const path = this.getApiAuthPath();
+    const domain = this.getCookieDomain();
+
     res.cookie('rt', token, {
       httpOnly: true,
       secure,
       sameSite,
-      path: '/auth',
+      path,
       maxAge,
+      ...(domain ? { domain } : {}),
     });
     res.setHeader('Cache-Control', 'no-store');
   }
 
   private clearRtCookie(res: Response) {
-    const secure = this.config.get('COOKIE_SECURE', 'true') === 'true';
-    const sameSite = this.config.get<'lax' | 'strict' | 'none'>('COOKIE_SAMESITE', 'strict');
-    res.clearCookie('rt', { httpOnly: true, secure, sameSite, path: '/auth' });
+    const { secure, sameSite } = this.resolveCookieSecurity();
+    const path = this.getApiAuthPath();
+    const domain = this.getCookieDomain();
+
+    res.clearCookie('rt', {
+      httpOnly: true,
+      secure,
+      sameSite,
+      path,
+      ...(domain ? { domain } : {}),
+    });
+  }
+
+  private assertRefreshRequestOriginAllowed(req: any) {
+    const originsEnv = (this.config.get<string>('CORS_ORIGINS', 'http://localhost:3000,http://localhost:5173') || '')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean);
+    const frontendUrl = (this.config.get<string>('FRONTEND_URL') || '').trim();
+    const allowed = new Set<string>([...originsEnv, ...(frontendUrl ? [frontendUrl] : [])].map((o) => o.replace(/\/+$/, '')));
+
+    const origin = (req.headers?.origin as string | undefined)?.replace(/\/+$/, '');
+    const referer = (req.headers?.referer as string | undefined)?.replace(/\/+$/, '');
+
+    // Allow if explicit Origin header is in allow-list
+    if (origin) {
+      if (!allowed.has(origin)) {
+        throw new ForbiddenException('Cross-origin refresh is not allowed');
+      }
+      return;
+    }
+
+    // Otherwise fallback to Referer check (some browsers may omit Origin on same-site)
+    if (referer) {
+      const ok = Array.from(allowed).some((o) => referer.startsWith(o));
+      if (!ok) {
+        throw new ForbiddenException('Cross-origin refresh is not allowed (referer)');
+      }
+      return;
+    }
+
+    // No Origin and no Referer: allow server-to-server and special cases
+    // If you want to forbid this, introduce an env flag and enforce here.
   }
 
   @ApiOperation({
@@ -143,6 +217,9 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post('refresh')
   async refreshToken(@Req() req: any, @Res({ passthrough: true }) res: Response): Promise<RefreshTokenResponseDto> {
+    // CSRF hardening: allow refresh only from allowed Origins/Referers
+    this.assertRefreshRequestOriginAllowed(req);
+
     const userAgent = req.headers['user-agent'] || '';
     const ipAddress = req.ip || '';
     const rt = req.cookies?.rt;

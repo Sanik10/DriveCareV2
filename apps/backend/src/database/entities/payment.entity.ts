@@ -1,4 +1,4 @@
-// src/database/entities/payment.entity.ts
+// apps/backend/src/database/entities/payment.entity.ts
 import {
   Check,
   Column,

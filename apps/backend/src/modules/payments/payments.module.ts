@@ -7,13 +7,20 @@ import { InvoicesModule } from '../invoices/invoices.module';
 import { PaymentMethodsModule } from '../payment-methods/payment-methods.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { AuthModule } from '../auth/auth.module'; // ✅ нужен для JwtAuthGuard/SessionService/SecurityService
+import { RedisModule } from '../../common/redis/redis.module';
 
 import { PaymentsController } from './payments.controller';
+import { PaymentsWebhooksController } from './webhooks/payments-webhooks.controller';
+
 import { PaymentsService } from './payments.service';
 import { PaymentsBusinessService } from './services/payments-business.service';
 import { PaymentsDataService } from './services/payments-data.service';
 import { PaymentsValidationService } from './services/payments-validation.service';
 import { PaymentsMapperService } from './services/payments-mapper.service';
+
+import { WebhookIpAclGuard } from './guards/webhook-ip-acl.guard';
+import { WebhookIdempotencyService } from './services/webhook-idempotency.service';
+import { YooKassaPaymentsClient } from './services/yookassa-payments.client';
 
 import { AuditService } from '../../common/audit/audit.service';
 
@@ -23,9 +30,10 @@ import { AuditService } from '../../common/audit/audit.service';
     forwardRef(() => InvoicesModule),
     forwardRef(() => PaymentMethodsModule),
     SubscriptionsModule,
-    forwardRef(() => AuthModule), // ✅ добавлено
+    forwardRef(() => AuthModule),
+    RedisModule,
   ],
-  controllers: [PaymentsController],
+  controllers: [PaymentsController, PaymentsWebhooksController],
   providers: [
     PaymentsService,
     PaymentsBusinessService,
@@ -33,6 +41,10 @@ import { AuditService } from '../../common/audit/audit.service';
     PaymentsValidationService,
     PaymentsMapperService,
     AuditService,
+    // Webhooks
+    WebhookIpAclGuard,
+    WebhookIdempotencyService,
+    YooKassaPaymentsClient,
   ],
   exports: [
     PaymentsService,

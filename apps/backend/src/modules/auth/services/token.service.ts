@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/auth/services/token.service.ts
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';

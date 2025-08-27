@@ -1,4 +1,4 @@
-// apps/backend/src/modules/payments/services/payments-data.service.ts
+// path: apps/backend/src/modules/payments/services/payments-data.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, LessThan, MoreThanOrEqual, Repository } from 'typeorm';
@@ -78,6 +78,13 @@ export class PaymentsDataService implements IPaymentsDataService {
     return this.paymentsRepository.findOne({
       where: { id, companyId },
       relations: ['invoice', 'paymentMethod'],
+    });
+  }
+
+  async findByGatewayTransactionId(gatewayTransactionId: string, companyId?: string): Promise<Payment | null> {
+    return this.paymentsRepository.findOne({
+      where: companyId ? { gatewayTransactionId, companyId } as any : { gatewayTransactionId },
+      relations: ['invoice', 'paymentMethod', 'company'],
     });
   }
 

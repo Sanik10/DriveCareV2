@@ -78,6 +78,14 @@ export class PaymentsBusinessService {
           data.companyId,
         );
 
+        // 🚫 Server-side ban CASH in production (MVP) — 54‑ФЗ/161‑ФЗ/ваш план
+        if ((process.env.NODE_ENV || 'development') === 'production' && String(paymentMethodInfo.type) === 'cash') {
+          throw new ValidationDataException(
+            'paymentMethod',
+            'Cash payments are disabled in production for MVP. Use non-cash methods via PSP.',
+          );
+        }
+
         if (data.amount > invoiceInfo.remainingAmount) {
           throw new ValidationDataException(
             'amount',

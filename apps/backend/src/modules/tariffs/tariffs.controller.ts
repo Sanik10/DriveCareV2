@@ -223,6 +223,12 @@ export class TariffsController {
     @Query('sortField', new DefaultValuePipe('priceMonthly')) sortField?: string,
     @Query('sortOrder', new DefaultValuePipe('asc')) sortOrder?: 'asc' | 'desc',
   ) {
+    const allowedSortFields = new Set(['name', 'priceMonthly', 'priceYearly', 'createdAt']);
+    const sf = (sortField || 'priceMonthly').toString();
+    if (!allowedSortFields.has(sf)) {
+      throw new BadRequestException(`Недопустимое поле сортировки: ${sf}`);
+    }
+
     const filter: TariffFilter = {
       search: (search || '').trim() || undefined,
       isActive,
@@ -230,7 +236,7 @@ export class TariffsController {
       maxPrice,
       page,
       limit: Math.min(limit || TARIFFS_CONSTANTS.DEFAULTS.PAGE_SIZE, TARIFFS_CONSTANTS.DEFAULTS.MAX_ITEMS),
-      sortField: sortField as any,
+      sortField: sf as any,
       sortOrder: sortOrder === 'desc' ? 'desc' : 'asc',
     };
 

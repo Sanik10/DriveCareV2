@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
-  import { tap } from 'rxjs/operators';
+import { tap } from 'rxjs/operators';
 import { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
@@ -22,6 +22,7 @@ import { CACHE_POLICY_KEY } from '../decorators/cache-policy.decorator';
  * - Referrer-Policy / Permissions-Policy
  * - Request correlation ID
  * - Cache-Control: по умолчанию строгий no-store (можно переопределить декоратором @CachePolicy/@AllowCache/@NoStore)
+ * - Vary: Origin, Accept-Encoding — для кэшируемых публичных ответов (@AllowCache)
  *
  * Важно: не дублировать заголовки, уже выставленные Helmet/CORS.
  */
@@ -45,7 +46,7 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
     // Correlation ID: использовать входящий или сгенерировать
     const correlationId =
       (request.headers['x-request-id'] as string) ||
-      request.correlationId ||
+      (request as any).correlationId ||
       uuidv4();
     (request as any).correlationId = correlationId;
 
@@ -58,6 +59,7 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap(() => {
         this.addAdvancedSecurityHeaders(response, request);
+        this.addVaryForCacheable(response);
         if (this.isDevelopment) {
           this.logger.debug(
             `Security headers applied for ${request.method} ${request.url} [${correlationId}]`,
@@ -244,6 +246,38 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
         'Access-Control-Expose-Headers',
         'X-Total-Count, X-Request-ID, X-API-Version',
       );
+    }
+  }
+
+  /**
+   * Для кэшируемых ответов добавляем корректный Vary,
+   * чтобы CDN/браузер учитывали Origin и алгоритм сжатия.
+   */
+  private addVaryForCacheable(response: Response): void {
+    const cacheControl = response.getHeader('Cache-Control');
+    if (!cacheControl) return;
+    const cc = String(cacheControl).toLowerCase();
+    const cacheable = !cc.includes('no-store') && !cc.includes('no-cache');
+    if (!cacheable) return;
+
+    const toAdd = ['Origin', 'Accept-Encoding'];
+    const existing = response.getHeader('Vary');
+
+    if (existing === '*') return;
+
+    const currentTokens = new Set(
+      (Array.isArray(existing) ? existing.join(',') : String(existing || ''))
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+
+    for (const t of toAdd) currentTokens.add(t);
+
+    const final = Array.from(currentTokens).join(', ');
+    if (final) {
+      // Express Response has .setHeader; .append would duplicate values
+      response.setHeader('Vary', final);
     }
   }
 }

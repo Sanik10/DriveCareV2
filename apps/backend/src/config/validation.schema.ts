@@ -10,6 +10,7 @@ export function validateConfig(config: Record<string, unknown>) {
     PORT: Joi.number().port().default(3001),
     API_PREFIX: Joi.string().default('api/v1'),
     APP_VERSION: Joi.string().default('2.0'),
+    TRUST_PROXY: Joi.string().allow('', null).default('false'),
 
     // Database
     DATABASE_URL: Joi.string().uri().allow('', null),
@@ -48,6 +49,12 @@ export function validateConfig(config: Record<string, unknown>) {
     RT_HMAC_SECRET: Joi.string().min(32).required(),
     PWD_PEPPER: Joi.string().min(32).required(),
     DEVICE_ID_SECRET: Joi.string().min(32).required(),
+
+    // Cookies (refresh)
+    COOKIE_SECURE: Joi.boolean().truthy('true').falsy('false').default(true),
+    COOKIE_SAMESITE: Joi.string().valid('lax', 'strict', 'none').default('strict'),
+    COOKIE_DOMAIN: Joi.string().allow('', null),
+    RT_COOKIE_MAX_AGE_MS: Joi.number().integer().min(60_000).default(7 * 24 * 60 * 60 * 1000),
 
     // App/CORS/Frontend
     FRONTEND_URL: Joi.string().uri().default('http://localhost:5173'),
@@ -88,6 +95,7 @@ export function validateConfig(config: Record<string, unknown>) {
     // PSP webhooks security
     WEBHOOK_ALLOWED_IPS: Joi.string().allow('', null).default(''),
     WEBHOOK_IDEMPOTENCY_TTL_SEC: Joi.number().integer().min(60).max(86400).default(300),
+    WEBHOOK_BODY_LIMIT: Joi.string().default('128kb'),
 
     // Inventory
     INVENTORY_IDEMPOTENCY_TTL_MS: Joi.number().default(6 * 60 * 60 * 1000),
@@ -186,6 +194,13 @@ export function validateConfig(config: Record<string, unknown>) {
             message: 'JWT_PRIVATE_KEY and JWT_PUBLIC_KEY are required when JWT_ALG is RS256/ES256',
           });
         }
+      }
+
+      // SameSite=None requires Secure cookie
+      if (String(value.COOKIE_SAMESITE || '').toLowerCase() === 'none' && value.COOKIE_SECURE !== true) {
+        return helpers.error('any.custom', {
+          message: 'COOKIE_SECURE must be true when COOKIE_SAMESITE is "none"',
+        });
       }
 
       return value;

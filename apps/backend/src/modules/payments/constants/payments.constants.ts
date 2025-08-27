@@ -1,4 +1,4 @@
-// src/modules/payments/constants/payments.constants.ts
+// apps/backend/src/modules/payments/constants/payments.constants.ts
 import { PaymentStatus, PaymentCurrency, PaymentMethodType } from '../types/payments.types';
 import { AuditAction } from '../../../common/audit/audit.service';
 import { AuthRole } from '../../auth/types/auth.types';
