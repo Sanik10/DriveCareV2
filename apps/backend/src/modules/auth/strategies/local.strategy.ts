@@ -1,4 +1,5 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+// path: apps/backend/src/modules/auth/strategies/local.strategy.ts
+import { Injectable, UnauthorizedException, HttpException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-local';
 import { Request } from 'express';
@@ -16,7 +17,16 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
       const userAgent = (req.headers['user-agent'] || '') as string;
       const twoFactorCode = (req.body as any)?.twoFactorCode || (req.headers['x-2fa-code'] as string) || undefined;
       return await this.authService.validateUser(email, password, ipAddress, userAgent, twoFactorCode);
-    } catch {
+    } catch (err: any) {
+      if (process.env.NODE_ENV !== 'production') {
+        // eslint-disable-next-line no-console
+        console.error('[Auth] LocalStrategy failed', {
+          email,
+          reason: err?.message || err,
+        });
+      }
+      // ВАЖНО: не затираем коды и сообщения (например, 429 Too Many Requests)
+      if (err instanceof HttpException) throw err;
       throw new UnauthorizedException('Неверные учетные данные');
     }
   }

@@ -1,6 +1,7 @@
+// path: apps/backend/src/modules/auth/services/company-onboarding.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, EntityManager } from 'typeorm'; // ✅ ДОБАВЛЕНО: DataSource, EntityManager
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import { Company } from '../../../database/entities/company.entity';
 import { User } from '../../../database/entities/user.entity';
 import { Role } from '../../../database/entities/role.entity';
@@ -9,6 +10,8 @@ import { RegisterCompanyResponseDto } from '../dto/response/register-company-res
 import { AUTH_CONSTANTS } from '../constants/auth.constants';
 import { UserExistsException } from '../../../common/exceptions/custom-exceptions';
 import { UsersService } from '../../users/users.service';
+import { ConfigService } from '@nestjs/config';
+import * as argon2 from 'argon2';
 
 @Injectable()
 export class CompanyOnboardingService {
@@ -18,14 +21,16 @@ export class CompanyOnboardingService {
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
     private usersService: UsersService,
-    private dataSource: DataSource, // ✅ ДОБАВЛЕНО: DataSource для транзакций
+    private dataSource: DataSource,
+    private config: ConfigService, // ✅ ДОБАВЛЕНО: для хеширования паролей
   ) {}
 
-  // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Добавлена транзакция
   async createCompanyWithOwner(registerDto: RegisterCompanyDto): Promise<RegisterCompanyResponseDto> {
     return this.dataSource.transaction(async (manager: EntityManager) => {
       // Проверяем, что пользователь с таким email не существует
-      const existingUser = await this.usersService.findByEmail(registerDto.ownerEmail);
+      const existingUser = await manager.getRepository(User).findOne({
+        where: { email: this.normalizeEmail(registerDto.ownerEmail) }
+      });
       if (existingUser) {
         throw new UserExistsException();
       }
@@ -36,8 +41,8 @@ export class CompanyOnboardingService {
       // Создаём системные роли для компании
       const ownerRole = await this.createCompanyRoles(company.id, manager);
       
-      // Создаём владельца компании
-      const owner = await this.createCompanyOwner(registerDto, company.id, ownerRole.id, manager);
+      // ✅ ИСПРАВЛЕНО: Создаём владельца ВНУТРИ транзакции
+      const owner = await this.createCompanyOwnerInTransaction(registerDto, company.id, ownerRole.id, manager);
 
       return {
         company: {
@@ -56,7 +61,6 @@ export class CompanyOnboardingService {
     });
   }
 
-  // ✅ ИСПРАВЛЕНО: Добавлен manager параметр
   private async createCompany(registerDto: RegisterCompanyDto, manager: EntityManager): Promise<Company> {
     const company = manager.getRepository(Company).create({
       name: registerDto.companyName,
@@ -70,11 +74,10 @@ export class CompanyOnboardingService {
     return manager.getRepository(Company).save(company);
   }
 
-  // ✅ ИСПРАВЛЕНО: Обновлены роли + добавлен manager
   private async createCompanyRoles(companyId: string, manager: EntityManager): Promise<Role> {
     // Создаём роль владельца для компании
     const ownerRole = manager.getRepository(Role).create({
-      name: AUTH_CONSTANTS.SYSTEM_ROLES.COMPANY_OWNER, // ✅ ИСПРАВЛЕНО: COMPANY_OWNER вместо OWNER
+      name: AUTH_CONSTANTS.SYSTEM_ROLES.COMPANY_OWNER,
       description: 'Владелец компании - полный доступ',
       isSystem: true,
       companyId,
@@ -82,10 +85,10 @@ export class CompanyOnboardingService {
 
     const savedOwnerRole = await manager.getRepository(Role).save(ownerRole);
 
-    // ✅ ИСПРАВЛЕНО: Обновлены роли для компании
+    // Создаем остальные роли для компании
     const roles = [
       {
-        name: AUTH_CONSTANTS.SYSTEM_ROLES.COMPANY_ADMIN, // ✅ ИСПРАВЛЕНО: COMPANY_ADMIN вместо ADMIN
+        name: AUTH_CONSTANTS.SYSTEM_ROLES.COMPANY_ADMIN,
         description: 'Администратор - управление персоналом и настройками',
         isSystem: true,
         companyId,
@@ -97,25 +100,25 @@ export class CompanyOnboardingService {
         companyId,
       },
       {
-        name: AUTH_CONSTANTS.SYSTEM_ROLES.SERVICE_ADVISOR, // ✅ ДОБАВЛЕНО: Приемщик
+        name: AUTH_CONSTANTS.SYSTEM_ROLES.SERVICE_ADVISOR,
         description: 'Приемщик - ведёт записи на обслуживание',
         isSystem: true,
         companyId,
       },
       {
-        name: AUTH_CONSTANTS.SYSTEM_ROLES.CASHIER, // ✅ ДОБАВЛЕНО: Кассир
+        name: AUTH_CONSTANTS.SYSTEM_ROLES.CASHIER,
         description: 'Кассир - работа со счетами и платежами',
         isSystem: true,
         companyId,
       },
       {
-        name: AUTH_CONSTANTS.SYSTEM_ROLES.INVENTORY_MANAGER, // ✅ ДОБАВЛЕНО: Складской
+        name: AUTH_CONSTANTS.SYSTEM_ROLES.INVENTORY_MANAGER,
         description: 'Складской специалист - управление запасами',
         isSystem: true,
         companyId,
       },
       {
-        name: AUTH_CONSTANTS.SYSTEM_ROLES.LEAD_MECHANIC, // ✅ ДОБАВЛЕНО: Старший мастер
+        name: AUTH_CONSTANTS.SYSTEM_ROLES.LEAD_MECHANIC,
         description: 'Старший мастер - контролирует других механиков',
         isSystem: true,
         companyId,
@@ -127,14 +130,14 @@ export class CompanyOnboardingService {
         companyId,
       },
       {
-        name: AUTH_CONSTANTS.SYSTEM_ROLES.DIAGNOSTIC, // ✅ ДОБАВЛЕНО: Диагност
+        name: AUTH_CONSTANTS.SYSTEM_ROLES.DIAGNOSTIC,
         description: 'Диагност - диагностика и специализированные работы',
         isSystem: true,
         companyId,
       },
     ];
 
-    // ✅ ИСПРАВЛЕНО: Используем manager для сохранения ролей
+    // Сохраняем роли используя manager
     for (const roleData of roles) {
       const role = manager.getRepository(Role).create(roleData);
       await manager.getRepository(Role).save(role);
@@ -143,26 +146,46 @@ export class CompanyOnboardingService {
     return savedOwnerRole;
   }
 
-  // ✅ ИСПРАВЛЕНО: Добавлен manager параметр (хотя здесь используется usersService)
-  private async createCompanyOwner(
+  // ✅ НОВЫЙ МЕТОД: Создание пользователя внутри транзакции
+  private async createCompanyOwnerInTransaction(
     registerDto: RegisterCompanyDto, 
     companyId: string, 
     ownerRoleId: string,
-    manager: EntityManager // Добавлен но не используется, так как usersService имеет свою логику
+    manager: EntityManager
   ): Promise<User> {
-    return this.usersService.create({
+    // Хешируем пароль так же, как в UsersService
+    const hashedPassword = await this.hashPassword(registerDto.ownerPassword);
+
+    const owner = manager.getRepository(User).create({
       company_id: companyId,
-      email: registerDto.ownerEmail,
-      password_hash: registerDto.ownerPassword, // Будет захешен в usersService.create
+      email: this.normalizeEmail(registerDto.ownerEmail),
+      password_hash: hashedPassword,
       firstName: registerDto.ownerFirstName,
       lastName: registerDto.ownerLastName,
-      phone: registerDto.ownerPhone,
+      phone: registerDto.ownerPhone || null,
       roleId: ownerRoleId,
       isActive: true,
     });
+
+    return manager.getRepository(User).save(owner);
   }
 
-  // ✅ ИСПРАВЛЕНО: Добавлена валидация компании
+  // ✅ НОВЫЙ МЕТОД: Копия логики хеширования из UsersService
+  private async hashPassword(password: string): Promise<string> {
+    const pepper = this.config.get<string>('PWD_PEPPER', '');
+    return argon2.hash(`${password}${pepper}`, {
+      type: argon2.argon2id,
+      memoryCost: 19456, // ~19MB
+      timeCost: 2,
+      parallelism: 1,
+    });
+  }
+
+  // ✅ НОВЫЙ МЕТОД: Нормализация email
+  private normalizeEmail(email: string): string {
+    return (email || '').trim().toLowerCase();
+  }
+
   async findCompanyRoles(companyId: string): Promise<Role[]> {
     if (!companyId) {
       throw new Error('Company ID is required');
@@ -179,7 +202,6 @@ export class CompanyOnboardingService {
     });
   }
 
-  // ✅ ИСПРАВЛЕНО: Добавлена валидация
   async findRoleByNameAndCompany(roleName: string, companyId: string): Promise<Role | null> {
     if (!roleName || !companyId) {
       throw new Error('Role name and Company ID are required');
@@ -193,7 +215,6 @@ export class CompanyOnboardingService {
     });
   }
 
-  // ✅ ДОБАВЛЕНО: Метод для получения статистики компании
   async getCompanyStats(companyId: string): Promise<{
     totalRoles: number;
     totalUsers: number;
@@ -212,7 +233,6 @@ export class CompanyOnboardingService {
     };
   }
 
-  // ✅ ДОБАВЛЕНО: Метод для удаления компании (с осторожностью)
   async deactivateCompany(companyId: string): Promise<void> {
     await this.dataSource.transaction(async (manager: EntityManager) => {
       // Деактивируем компанию

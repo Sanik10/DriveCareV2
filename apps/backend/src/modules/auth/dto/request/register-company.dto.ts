@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/auth/dto/request/register-company.dto.ts
 import { IsEmail, IsNotEmpty, IsOptional, MinLength, MaxLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
@@ -16,11 +17,13 @@ export class RegisterCompanyDto {
   @ApiProperty({ example: 'г. Москва, ул. Автомобильная, д. 1', required: false })
   @IsOptional()
   @MaxLength(500, { message: 'Адрес не может превышать 500 символов' })
+  @Transform(({ value }) => value === '' ? undefined : value)
   companyAddress?: string;
 
   @ApiProperty({ example: '+7 (495) 123-45-67', required: false })
   @IsOptional()
   @Matches(/^[+]?[0-9\s\-()]{7,20}$/, { message: 'Некорректный формат номера телефона' })
+  @Transform(({ value }) => value === '' ? undefined : value)
   companyPhone?: string;
 
   @ApiProperty({ example: 'info@autoservice.com' })
@@ -41,8 +44,8 @@ export class RegisterCompanyDto {
   })
   @IsNotEmpty({ message: 'Пароль обязателен' })
   @MinLength(8, { message: 'Пароль должен содержать минимум 8 символов' })
-  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/, {
-    message: 'Пароль должен содержать строчные и заглавные буквы, цифры и спецсимволы (@$!%*?&)',
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_+=\-\\;'`~])[A-Za-z\d!@#$%^&*(),.?":{}|<>_+=\-\\;'`~]{8,}$/, {
+    message: 'Пароль должен содержать строчные и заглавные буквы, цифры и спецсимволы',
   })
   ownerPassword: string;
 
@@ -61,5 +64,6 @@ export class RegisterCompanyDto {
   @ApiProperty({ example: '+7 (999) 123-45-67', required: false })
   @IsOptional()
   @Matches(/^[+]?[0-9\s\-()]{7,20}$/, { message: 'Некорректный формат номера телефона' })
+  @Transform(({ value }) => value === '' ? undefined : value)
   ownerPhone?: string;
 }

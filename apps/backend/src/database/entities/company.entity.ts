@@ -1,4 +1,4 @@
-// src/database/entities/company.entity.ts
+// path: apps/backend/src/database/entities/company.entity.ts
 import { 
   Column, 
   CreateDateColumn, 
@@ -6,8 +6,7 @@ import {
   OneToMany, 
   PrimaryGeneratedColumn, 
   UpdateDateColumn,
-  Index,
-  Check
+  Index
 } from 'typeorm';
 
 @Entity('companies')
@@ -15,10 +14,6 @@ import {
 @Index(['isActive'])
 @Index(['createdAt'])
 @Index(['taxNumber'], { where: 'tax_number IS NOT NULL' })
-@Check('company_email_format', "email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'")
-@Check('company_phone_format', "phone IS NULL OR phone ~* '^\\+?[1-9][0-9]{7,14}$'")
-@Check('company_name_length', "LENGTH(name) >= 2 AND LENGTH(name) <= 255")
-@Check('company_legal_name_length', "LENGTH(legal_name) >= 2 AND LENGTH(legal_name) <= 255")
 export class Company {
   @PrimaryGeneratedColumn('uuid')
   id: string;

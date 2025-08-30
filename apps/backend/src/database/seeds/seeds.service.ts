@@ -8,7 +8,7 @@ import { User } from '../entities/user.entity';
 import { Role } from '../entities/role.entity';
 import { Company } from '../entities/company.entity';
 import { AuditService, AuditAction } from '../../common/audit/audit.service';
-import * as bcrypt from 'bcrypt';
+import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -192,8 +192,15 @@ export class SeedsService {
 
     // 🔐 ENTERPRISE SECURITY: Secure password generation
     const password = this.generateSecurePassword();
-    const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Хешируем так же, как и рантайм (argon2id + pepper)
+    const pepper = this.configService.get<string>('PWD_PEPPER', '');
+    const hashedPassword = await argon2.hash(`${password}${pepper}`, {
+      type: argon2.argon2id,
+      memoryCost: 19456,
+      timeCost: 2,
+      parallelism: 1,
+    });
 
     // 👤 Создаём superadmin с enhanced security
     const superadmin = this.usersRepository.create({

@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/users/users.service.ts
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -9,6 +10,7 @@ import { PaginatedUsersResponseDto } from './dto/response/paginated-users-respon
 import { AuthRole } from '../auth/types/auth.types';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
@@ -23,6 +25,10 @@ export class UsersService {
 
   private normalizeEmail(email: string): string {
     return (email || '').trim().toLowerCase();
+  }
+
+  private isBcryptHash(hash: string): boolean {
+    return typeof hash === 'string' && hash.startsWith('$2');
   }
 
   async findByEmail(email: string): Promise<User | null> {
@@ -89,9 +95,20 @@ export class UsersService {
   async comparePasswords(plainPassword: string, hashedPassword: string): Promise<boolean> {
     const pepper = this.config.get<string>('PWD_PEPPER', '');
     try {
+      // Обратная совместимость для старых сидов (bcrypt без pepper)
+      if (this.isBcryptHash(hashedPassword)) {
+        return await bcrypt.compare(plainPassword, hashedPassword);
+      }
       return await argon2.verify(hashedPassword, `${plainPassword}${pepper}`);
     } catch {
       return false;
+    }
+  }
+
+  async upgradePasswordHashIfNeeded(userId: string, plainPassword: string, currentHash: string): Promise<void> {
+    if (this.isBcryptHash(currentHash)) {
+      const newHash = await this.hashPassword(plainPassword);
+      await this.usersRepository.update({ id: userId }, { password_hash: newHash });
     }
   }
 

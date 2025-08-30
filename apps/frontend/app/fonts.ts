@@ -1,16 +1,6 @@
 // path: apps/frontend/app/fonts.ts
-import localFont from 'next/font/local';
+import { GeistSans } from 'geist/font/sans'
+import { GeistMono } from 'geist/font/mono'
 
-export const geistSans = localFont({
-  src: './fonts/GeistVF.woff',
-  variable: '--font-geist',
-  display: 'swap',
-  weight: '100 900',
-});
-
-export const geistMono = localFont({
-  src: './fonts/GeistMonoVF.woff',
-  variable: '--font-geist-mono',
-  display: 'swap',
-  weight: '100 900',
-});
+export const geistSans = GeistSans
+export const geistMono = GeistMono

@@ -1,7 +1,7 @@
 <!-- path: docs/frontend/FRONTEND_TECH_SPEC.md -->
 # 🛠️ DriveCare V2 — Frontend Tech Spec
 
-Обновлено: 27.08.2025 (актуализировано под текущую реализацию)  
+Обновлено: 28.08.2025  
 Цель: зафиксировать архитектуру, маршруты, взаимодействие с API, безопасность и планы внедрения.
 
 ---
@@ -12,10 +12,10 @@
 - [x] Next.js 15.4 (App Router) + React 19 + TypeScript
 - [x] Dev‑rewrites: `/api/v1 → http://localhost:3001/api/v1`
 - [x] ENV пример: `apps/frontend/.env.local.example` (BASE_URL=/api/v1)
-- [x] Tailwind v4 + CSS Variables (HSL) + PostCSS (`@tailwindcss/postcss`)
+- [x] Tailwind v4 + CSS Variables (HSL) + PostCSS
 - [x] Шрифты: Geist (local via next/font)
-- [x] UI: Button, Input, Card, Skeleton, Toast (sonner)
-- [x] Layout/Topbar, фон “Midnight Glow”, фокус‑ринги
+- [x] UI: Button, Input, Card, Skeleton, Toast, Badge
+- [x] Layout/Topbar (brand‑bar), чистые белые поверхности без hero‑фона
 - [x] lib/api.ts: credentials: 'include', in‑memory access token, refresh‑lock, 401→retry
 - [x] Страницы: /login, /invoices, /invoices/[id], /checkout/return, /tariffs
 - [x] Return: polling 1→2→4→8→15 сек (≤ ~45 c)
@@ -23,7 +23,7 @@
 
 Осталось в P0
 - [ ] Тестовые креды (email/пароль от сидов) для smoke‑прогона
-- [ ] Подтвердить контракт POST /payments (init/record) → { paymentId, invoiceId, redirectUrl? }
+- [ ] Подтвердить init‑payment эндпоинт → { paymentId, invoiceId, redirectUrl? }
 - [ ] Smoke E2E (ручной/Playwright)
 
 P1 (после P0)
@@ -32,23 +32,16 @@ P1 (после P0)
 - [ ] Sentry + Web Vitals
 - [ ] ErrorBoundary с X‑Request‑ID, retry, fallback
 - [ ] i18n (опц.)
+- [ ] /payments (журнал) — после подтверждения контрактов
 
 ---
 
 ## 1) Стек и ключевые библиотеки
 
 - Next.js 15 (App Router), React 19, TypeScript
-- Стили: TailwindCSS v4 + CSS Variables (HSL токены)
-  - Подключение Tailwind: `@import "tailwindcss";` в `app/globals.css`
-  - Конфиг: `tailwind.config.ts` (darkMode: 'class', theme.extend через токены)
-- Формы/валидация: React Hook Form + Zod
-- HTTP: встроенный fetch (credentials: 'include')
-- Состояние: пока не требуется (Zustand — опц. для UI‑флагов)
-- Иконки: Lucide
-- Тосты: sonner
-- Тесты: Playwright (E2E) — план, Jest/Vitest — опц.
-
-Node ≥ 20.10. Браузеры: последние 2 версии.
+- TailwindCSS v4 + CSS Variables (HSL‑токены)
+- RHF + Zod, Lucide, Sonner
+- Node ≥ 20.10; поддержка последних 2 версий браузеров
 
 ---
 
@@ -56,22 +49,22 @@ Node ≥ 20.10. Браузеры: последние 2 версии.
 
 ```
 apps/frontend/
-├─ next.config.js                 // rewrites /api/v1 → backend:3001
+├─ next.config.js
 ├─ app/
-│  ├─ layout.tsx                  // шапка/навигация, Toast provider
-│  ├─ login/page.tsx              // вход (RHF+Zod)
-│  ├─ invoices/page.tsx           // список счетов (table + skeleton)
-│  ├─ invoices/[id]/page.tsx      // карточка + CTA “Оплатить”
-│  ├─ checkout/return/page.tsx    // возврат PSP + polling
-│  ├─ tariffs/page.tsx            // тарифы (публичные, фолбэк эндпоинтов)
-│  ├─ globals.css                 // токены, Tailwind v4, WOW‑классы
-│  └─ fonts.ts                    // Geist (local)
+│  ├─ layout.tsx
+│  ├─ login/page.tsx
+│  ├─ invoices/page.tsx
+│  ├─ invoices/[id]/page.tsx
+│  ├─ checkout/return/page.tsx
+│  ├─ tariffs/page.tsx
+│  ├─ globals.css
+│  └─ fonts.ts
 ├─ lib/
-│  ├─ api.ts                      // fetch wrapper (in‑memory access token + refresh‑lock)
-│  └─ types.ts                    // DTO (Invoice, Tariff, LoginResponse, PaymentInitResponse)
-├─ components/ui/                 // Button, Input, Card, Skeleton, Toast
-├─ tailwind.config.ts             // Tailwind v4 theme (darkMode: 'class')
-├─ postcss.config.js              // @tailwindcss/postcss + autoprefixer
+│  ├─ api.ts
+│  └─ types.ts
+├─ components/ui/ (Button, Input, Card, Skeleton, Toast, Badge)
+├─ tailwind.config.ts
+├─ postcss.config.js
 └─ .env.local(.example)
 ```
 
@@ -81,25 +74,21 @@ apps/frontend/
 
 - Dev:
   - `NEXT_PUBLIC_API_BASE_URL=/api/v1`
-  - next.config.js rewrites:
-    - `/api/v1/:path* → http://localhost:3001/api/v1/:path*`
+  - rewrites: `/api/v1/:path* → http://localhost:3001/api/v1/:path*`
 - Staging/Prod:
   - `NEXT_PUBLIC_API_BASE_URL=https://api.<domain>/api/v1`
   - `NEXT_PUBLIC_APP_BASE_URL=https://app.<domain>`
-
-Дополнительно (P1): `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_BUILD_HASH`.
 
 ---
 
 ## 4) Безопасность и сессии
 
-- Все запросы: `credentials: 'include'`
-- Refresh токен — HttpOnly cookie (сервер делает Origin/Referer‑check)
-- Access токен — только в памяти (in‑memory), не сохраняем в storage
-- Алгоритм 401:
-  1) Разовый `/auth/refresh` (refresh‑lock)
-  2) Повтор исходного запроса
-  3) При повторном 401 — redirect на `/login?next=...`
+- Запросы: `credentials: 'include'`
+- Refresh токен — HttpOnly cookie; access — в памяти
+- 401 алгоритм:
+  1) `/auth/refresh` (refresh‑lock)
+  2) повтор исходного запроса
+  3) повторный 401 → redirect `/login?next=...`
 - CSP: избегать inline; PSP — редирект (не iframe)
 
 ---
@@ -107,99 +96,65 @@ apps/frontend/
 ## 5) API контракты (используемые фронтом)
 
 Auth
-- POST `/auth/login` → `{ user, accessToken, expiresIn?, deviceId? }` (+ RT в cookie)
-- POST `/auth/refresh` → `{ user, accessToken, expiresIn?, deviceId? }`
+- POST `/auth/login` → `{ user, accessToken, expiresIn?, deviceId? }`
+- POST `/auth/refresh` → `{ user, accessToken, ... }`
 - POST `/auth/logout`
 
 Invoices
-- GET `/invoices` → список инвойсов
-- GET `/invoices/:id` → деталь инвойса
+- GET `/invoices` → список или пагинация `{ items, ... }`
+- GET `/invoices/:id` → деталь
 
 Payments (MVP)
-- POST `/payments` (init/record) → ожидаем `{ paymentId, invoiceId, provider?, redirectUrl? }`
-  - Если `redirectUrl` есть → уходим на PSP
-  - Иначе (record) — подтверждаем локально (P1 уточнить UX)
+- POST init/record → ожидаем `{ paymentId, invoiceId, redirectUrl? }` (уточнить путь)
 
 Public
-- GET `/tariffs/active` | `/tariffs/popular` | `/tariffs?page=1&limit=6` (фолбэк на фронте)
+- GET `/tariffs/active` | `/tariffs/popular` | `/tariffs?page=1&limit=6`
 
 ---
 
 ## 6) Маршруты и флоу
 
-/login
-- RHF+Zod (email/password)
-- Успех: RT cookie + access in‑memory → redirect на `?next` или `/invoices`
-
-/invoices
-- Таблица счетов, скелетоны
-- 401 → `/login?next=/invoices`
-
-/invoices/[id]
-- Реквизиты, статус, сумма, срок
-- “Оплатить” → POST `/payments` → redirectUrl (если выдан)
-
-/checkout/return
-- query: `invoiceId`
-- Polling статуса инвойса: 1→2→4→8→15 сек (≤ ~45 сек)
-
-/tariffs
-- Публичная; фолбэк эндпоинтов при ошибках
+/login → вход и редирект
+/invoices → список; 401 → /login?next=...
+/invoices/[id] → деталь; “Оплатить” → init payment
+/checkout/return → polling статуса по invoiceId
+/tariffs → публичная
 
 ---
 
 ## 7) Перфоманс/кэш
 
-- Публичные страницы: SSR/edge (P1)
-- Приватные: no‑store на сервере (фронт не кэширует)
+- Публичные: SSR/edge (P1)
+- Приватные: no‑store
 - Prefetch: мягкий (P1)
-- Медиа: `next/image` при необходимости
 
 ---
 
 ## 8) Ошибки и UX
 
-- Toasts: успех/ошибки
-- Skeleton / Empty States
-- prefers‑reduced‑motion: учитываем
+- Toasts, Skeleton/Empty
+- prefers‑reduced‑motion
 - ErrorBoundary + X‑Request‑ID (P1)
 
 ---
 
 ## 9) Тестирование
 
-E2E (Playwright) — план
-- login → invoices → invoice → init payment → simulate return → PAID
-- cancel на PSP → Return → FAILED/CANCELED
-
-Unit — опционально
-- api.ts (refresh‑lock)
-- формы: валидация схемами
-- базовые UI‑компоненты
+- E2E (Playwright): login → invoices → invoice → init → return → PAID
+- Unit (опц.): api.ts, формы, UI
 
 ---
 
 ## 10) CI/CD
 
-- Линт: `eslint --max-warnings 0`
-- Типы: `tsc --noEmit`
-- Build: `next build`
-- Превью: Vercel/Netlify/др.
-- Secrets: .env.* через Secret Manager
+- eslint, tsc, next build
+- Превью: Vercel/Netlify
+- Secrets: Secret Manager
 
 ---
 
 ## 11) Что ещё нужно для полного P0
 
-- Тестовые креды (email/пароль сидового пользователя)
-- Подтвердить точный контракт POST /payments и Return URL (invoiceId|paymentId)
-- Лого/фавикон бренда (если есть) для шапки
-
----
-
-## 12) Риски и обход
-
-- Dev cookies/Origin: решено rewrites
-- PSP задержки: есть экспоненциальный polling + читаемые статусы
-- Несовпадение статусов: истина по вебхуку; добавим “Обновить статус” (P1)
-- Перфоманс: избегаем глобального состояния; серверные компоненты для статичных блоков (P1)
+- Тестовые креды
+- Точный контракт init‑payment + Return URL (invoiceId|paymentId)
+- Лого/фавикон для шапки (если есть)

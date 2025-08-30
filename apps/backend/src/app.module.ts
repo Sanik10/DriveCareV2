@@ -1,5 +1,5 @@
 // path: apps/backend/src/app.module.ts
-import { Module, OnModuleInit, Optional } from '@nestjs/common';
+import { Module, OnModuleInit, Optional, ExecutionContext } from '@nestjs/common';
 import { CommonModule } from './common/common.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -52,8 +52,6 @@ import { AppConfigService } from './config/config.service';
       useFactory: (appConfig: AppConfigService) => {
         const isDev = appConfig.app.isDevelopment === true;
 
-        // Управление логами: по умолчанию без 'query' даже в dev.
-        // Включить можно через ENV DB_LOG_QUERIES=true.
         const enableQueryLogs = (process.env.DB_LOG_QUERIES || '').toLowerCase() === 'true';
         const logging: ('query' | 'error' | 'warn')[] = enableQueryLogs ? ['query', 'error', 'warn'] : ['error', 'warn'];
 
@@ -76,7 +74,7 @@ import { AppConfigService } from './config/config.service';
           maxQueryExecutionTime: slowThreshold > 0 ? slowThreshold : undefined,
           extra: {
             max: appConfig.database.maxConnections,
-            min: appConfig.database.minConnections,
+            min: 2,
             idleTimeoutMillis: appConfig.database.idleTimeout,
             connectionTimeoutMillis: appConfig.database.connectionTimeout,
             ...(appConfig.database.ssl.enabled && {
@@ -96,22 +94,42 @@ import { AppConfigService } from './config/config.service';
       },
     }),
 
-    // 🛡️ RATE LIMITING
+    // 🛡️ RATE LIMITING (мягкие настройки в dev; в prod — из конфигов)
     ThrottlerModule.forRootAsync({
       imports: [AppConfigModule],
       inject: [AppConfigService],
       useFactory: (appConfig: AppConfigService) => {
-        const isProduction = appConfig.app.isProduction;
-        const baseTtl = appConfig.security.rateLimiting.ttl;
-        const baseLimit = appConfig.security.rateLimiting.limit;
-        // @nestjs/throttler v6 — поддерживает именованные «лимитеры».
-        // Использование: @Throttle('auth') | @Throttle('read') | @Throttle('write')
-        return [
-          { name: 'global', ttl: baseTtl, limit: isProduction ? Math.floor(baseLimit * 0.6) : baseLimit },
-          { name: 'auth', ttl: 900_000, limit: 5 },
-          { name: 'read', ttl: baseTtl, limit: isProduction ? Math.floor(baseLimit * 1.2) : baseLimit * 2 },
-          { name: 'write', ttl: baseTtl, limit: isProduction ? Math.floor(baseLimit * 0.3) : Math.floor(baseLimit * 0.5) },
-        ];
+        const isProd = appConfig.app.isProduction;
+        const baseTtl = appConfig.security.rateLimiting.ttl;      // может быть в мс (уточнить)
+        const baseLimit = appConfig.security.rateLimiting.limit;  // например 100
+
+        // Dev: короткое окно и высокий лимит, чтобы не мешать HMR/SSR и пр.
+        const devTtl = 10_000;     // 10 секунд (если ttl в мс)
+        const devLimit = 300;      // 300 запросов/окно
+
+        return {
+          throttlers: [
+            {
+              ttl: isProd ? baseTtl : devTtl,
+              limit: isProd ? baseLimit : devLimit,
+            },
+          ],
+          errorMessage: 'Too Many Requests',
+
+          // Пропускаем GET-запросы в dev (можно выключить переменной THROTTLE_DEV_SKIP_GET=false)
+          skipIf: (context: ExecutionContext) => {
+            const req = context.switchToHttp().getRequest();
+            const devSkipGet = (process.env.THROTTLE_DEV_SKIP_GET || 'true').toLowerCase() === 'true';
+            return !isProd && devSkipGet && req?.method === 'GET';
+          },
+
+          // Трекер: userId (если есть) или IP
+          getTracker: async (req: Record<string, any>) => {
+            const userId = req?.user?.id;
+            const ip = req?.ip || req?.connection?.remoteAddress || 'unknown';
+            return userId ? `user:${userId}` : `ip:${ip}`;
+          },
+        };
       },
     }),
 
@@ -137,6 +155,7 @@ import { AppConfigService } from './config/config.service';
   controllers: [AppController],
   providers: [
     AppService,
+    // Используем стандартный ThrottlerGuard с кастомными опциями выше
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

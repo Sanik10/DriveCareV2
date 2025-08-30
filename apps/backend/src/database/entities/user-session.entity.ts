@@ -1,3 +1,4 @@
+// path: apps/backend/src/database/entities/user-session.entity.ts
 import {
   Column,
   CreateDateColumn,

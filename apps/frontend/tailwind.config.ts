@@ -1,59 +1,43 @@
 // path: apps/frontend/tailwind.config.ts
-import type { Config } from 'tailwindcss';
+import type { Config } from 'tailwindcss'
 
 const config: Config = {
-  darkMode: 'class',
   content: [
-    './app/**/*.{ts,tsx}',
-    './components/**/*.{ts,tsx}',
-    './pages/**/*.{ts,tsx}',
-    './src/**/*.{ts,tsx}',
+    './pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './components/**/*.{js,ts,jsx,tsx,mdx}',
+    './app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
       colors: {
-        bg: {
-          page: 'hsl(var(--bg-page))',
-          elev1: 'hsl(var(--bg-elev-1))',
-          elev2: 'hsl(var(--bg-elev-2))',
-        },
-        fg: {
-          primary: 'hsl(var(--fg-primary))',
-          secondary: 'hsl(var(--fg-secondary))',
-          invert: 'hsl(var(--fg-invert))',
-        },
-        primary: { 500: 'hsl(var(--color-primary-500))', 600: 'hsl(var(--color-primary-600))' },
-        accent: { 500: 'hsl(var(--color-accent-500))', 600: 'hsl(var(--color-accent-600))' },
-        success: 'hsl(var(--color-success))',
-        warning: 'hsl(var(--color-warning))',
-        danger: 'hsl(var(--color-danger))',
-        info: 'hsl(var(--color-info))',
-        cloud: 'hsl(var(--color-cloud))',
-        smoke: 'hsl(var(--color-smoke))',
-        focus: 'hsl(var(--focus))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        primary: 'hsl(var(--primary))',
+        'primary-foreground': 'hsl(var(--primary-foreground))',
+        secondary: 'hsl(var(--secondary))',
+        'secondary-foreground': 'hsl(var(--secondary-foreground))',
+        muted: 'hsl(var(--muted))',
+        'muted-foreground': 'hsl(var(--muted-foreground))',
+        accent: 'hsl(var(--accent))',
+        'accent-foreground': 'hsl(var(--accent-foreground))',
+        destructive: 'hsl(var(--destructive))',
+        'destructive-foreground': 'hsl(var(--destructive-foreground))',
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        card: 'hsl(var(--card))',
+        'card-foreground': 'hsl(var(--card-foreground))',
       },
-      borderRadius: {
-        sm: 'var(--radius-sm)',
-        md: 'var(--radius-md)',
-        lg: 'var(--radius-lg)',
+      backgroundImage: {
+        'gradient-primary': 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 50%, hsl(var(--accent)) 100%)',
       },
-      boxShadow: {
-        sm: 'var(--shadow-sm)',
-        md: 'var(--shadow-md)',
-        lg: 'var(--shadow-lg)',
-      },
-      transitionTimingFunction: {
-        'ease-out': 'var(--ease-out)',
-        'ease-in': 'var(--ease-in)',
-      },
-      transitionDuration: {
-        fast: 'var(--dur-fast)',
-        base: 'var(--dur-base)',
-        slow: 'var(--dur-slow)',
+      fontFamily: {
+        sans: ['var(--font-geist-sans)', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-geist-mono)', 'monospace'],
       },
     },
   },
   plugins: [],
-};
+}
 
-export default config;
+export default config

@@ -1,4 +1,4 @@
-// path: src/modules/orders/orders.controller.ts
+// path: apps/backend/src/modules/orders/orders.controller.ts
 import {
   Controller,
   Get,
@@ -27,7 +27,6 @@ import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiBadRequestResponse,
-  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { OrdersService } from './orders.service';
@@ -66,12 +65,20 @@ export class OrdersController {
   @ApiOperation({ summary: 'Получение списка заказов', description: 'С фильтрацией и пагинацией' })
   @ApiResponse({ status: HttpStatus.OK, type: PaginatedOrdersResponseDto })
   @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
-  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @ApiQuery({ name: 'customerId', required: false, type: String, description: 'Фильтр по клиенту (UUID)' })
+  @ApiQuery({ name: 'vehicleId', required: false, type: String, description: 'Фильтр по автомобилю (UUID)' })
+  @ApiQuery({ name: 'status', required: false, enum: OrderStatus, description: 'Фильтр по статусу' })
+  @ApiQuery({ name: 'assignedTo', required: false, type: String, description: 'Фильтр по исполнителю (UUID)' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Поиск по номеру/описанию' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Страница (по умолчанию 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: `Размер страницы (по умолчанию ${ORDERS_CONSTANTS.DEFAULTS.PAGE_SIZE})` })
+  // Ослабляем троттлинг для списка заказов: 120 запросов/минуту на пользователя/IP
+  @Throttle({ default: { limit: 120, ttl: 60000 } })
   async findAll(
     @Req() req: RequestWithUser,
     @Query('customerId') customerId?: string,
     @Query('vehicleId') vehicleId?: string,
-    @Query('status', new ParseEnumPipe(OrderStatus)) status?: OrderStatus,
+    @Query('status', new ParseEnumPipe(OrderStatus, { optional: true })) status?: OrderStatus,
     @Query('assignedTo') assignedTo?: string,
     @Query('search') search?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page = 1,
@@ -79,11 +86,11 @@ export class OrdersController {
     limit = ORDERS_CONSTANTS.DEFAULTS.PAGE_SIZE,
   ): Promise<PaginatedOrdersResponseDto> {
     const filter: OrderFilter = {
-      customerId,
-      vehicleId,
+      customerId: customerId && customerId.trim() !== '' ? customerId : undefined,
+      vehicleId: vehicleId && vehicleId.trim() !== '' ? vehicleId : undefined,
       status,
-      assignedTo,
-      search,
+      assignedTo: assignedTo && assignedTo.trim() !== '' ? assignedTo : undefined,
+      search: search && search.trim() !== '' ? search : undefined,
       page,
       limit: Math.min(limit, ORDERS_CONSTANTS.DEFAULTS.MAX_ITEMS),
       companyId: req.user.role === 'superadmin' ? undefined : req.user.companyId,
@@ -124,7 +131,7 @@ export class OrdersController {
   @ApiParam({ name: 'id', description: 'ID заказа' })
   @ApiQuery({ name: 'status', enum: OrderStatus, description: 'Новый статус заказа' })
   @ApiResponse({ status: HttpStatus.OK, type: OrderResponseDto })
-  @Throttle({ default: { limit: 15, ttl: 60000 } })
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   async updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('status', new ParseEnumPipe(OrderStatus)) status: OrderStatus,

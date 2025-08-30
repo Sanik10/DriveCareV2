@@ -1,16 +1,16 @@
+// path: apps/backend/src/modules/auth/services/session.service.ts
 import { Injectable, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not, MoreThan } from 'typeorm';
 import Redis from 'ioredis';
 import { UserSession } from '../../../database/entities/user-session.entity';
 import { User } from '../../../database/entities/user.entity';
-import { CreateSessionData } from '../interfaces/session.interface';
 import { SessionDevice } from '../interfaces/device.interface';
 import { AUTH_CONSTANTS } from '../constants/auth.constants';
 import { DeviceService } from './device.service';
 import { TokenService } from './token.service';
 import { EntityNotFoundException } from '../../../common/exceptions/custom-exceptions';
-import { createHmac } from 'crypto';
+import { createHmac, randomUUID } from 'crypto';
 import * as argon2 from 'argon2';
 import { ConfigService } from '@nestjs/config';
 
@@ -31,38 +31,71 @@ export class SessionService {
     return createHmac('sha256', secret).update(token).digest('hex');
   }
 
-  async createSession(user: User, userAgent: string, ipAddress: string): Promise<{
+  /**
+   * Создаём новую сессию.
+   * - Перед созданием деактивируем все активные сессии для того же (userId + deviceId) — исключаем дубли.
+   * - В Redis перезаписываем HMAC RT для пары (userId, deviceId).
+   * - Фильтруем по expiresAt при проверках/выдаче списков.
+   */
+  async createSession(
+    user: User,
+    userAgent: string,
+    ipAddress: string,
+  ): Promise<{
     session: UserSession;
-    tokens: { accessToken: string; refreshToken: string; refreshJti: string; expiresIn: string | number; deviceId: string };
+    tokens: {
+      accessToken: string;
+      refreshToken: string;
+      refreshJti: string;
+      expiresIn: string | number;
+      deviceId: string;
+    };
   }> {
     const deviceId = this.deviceService.generateDeviceId({ userId: user.id, userAgent, ipAddress });
-    const expiresInSecs = this.tokenService.getTokenExpirationTime();
+    const deviceName = this.deviceService.generateDeviceName(userAgent);
+    const expiresInSecs = this.tokenService.getTokenExpirationTime(); // refresh TTL (sec)
+    const expiresAt = new Date(Date.now() + expiresInSecs * 1000);
 
-    const sessionData: CreateSessionData = {
-      userId: user.id,
-      deviceId,
-      deviceName: this.deviceService.generateDeviceName(userAgent),
-      userAgent,
-      ipAddress,
-      refreshToken: '', // legacy
-      expiresAt: new Date(Date.now() + expiresInSecs * 1000),
-    } as any;
+    // 0) Удаляем активные дубли для этого устройства
+    await this.userSessionRepo.update(
+      { userId: user.id, deviceId, isActive: true },
+      { isActive: false, lastUsedAt: new Date() },
+    );
 
-    const session = this.userSessionRepo.create(sessionData);
-    const savedSession = await this.userSessionRepo.save(session);
+    // 1) Очистим старый ключ в Redis (на всякий)
+    const redisKey = AUTH_CONSTANTS.REDIS_KEYS.REFRESH_TOKEN(user.id, deviceId);
+    await this.redis.del(redisKey);
 
-    const tokens = await this.tokenService.createTokenPair(user, deviceId, savedSession.id);
+    // 2) Генерируем sessionId заранее
+    const sessionId = randomUUID();
 
+    // 3) Генерируем пару токенов с этим sessionId
+    const tokens = await this.tokenService.createTokenPair(user, deviceId, sessionId);
+
+    // 4) Хешируем RT и сохраняем запись
     const pepper = this.config.get<string>('RT_PEPPER', 'dev-rt-pepper');
     const rtHash = await argon2.hash(tokens.refreshToken + pepper);
 
-    savedSession.refreshTokenHash = rtHash;
-    savedSession.jti = tokens.refreshJti;
-    savedSession.deviceFingerprint = this.deviceService.createDeviceFingerprint(userAgent, ipAddress);
-    savedSession.ipSubnet = this.getIpSubnet(ipAddress);
-    await this.userSessionRepo.save(savedSession);
+    const session = this.userSessionRepo.create({
+      id: sessionId,
+      userId: user.id,
+      deviceId,
+      deviceName,
+      userAgent,
+      ipAddress,
+      refreshTokenHash: rtHash,
+      jti: tokens.refreshJti,
+      ipSubnet: this.getIpSubnet(ipAddress),
+      expiresAt,
+      isActive: true,
+      lastUsedAt: null,
+      deviceFingerprint: this.deviceService.createDeviceFingerprint(userAgent, ipAddress),
+      compromisedAt: null,
+    });
 
-    const redisKey = AUTH_CONSTANTS.REDIS_KEYS.REFRESH_TOKEN(user.id, deviceId);
+    const savedSession = await this.userSessionRepo.save(session);
+
+    // 5) Кладём HMAC RT в Redis
     await this.redis.set(redisKey, this.rtHmac(tokens.refreshToken), 'EX', expiresInSecs);
 
     return { session: savedSession, tokens };
@@ -77,7 +110,7 @@ export class SessionService {
   }
 
   async findActiveSessionByJti(userId: string, jti: string, deviceId?: string): Promise<UserSession | null> {
-    const where: any = { userId, jti, isActive: true };
+    const where: any = { userId, jti, isActive: true, expiresAt: MoreThan(new Date()) };
     if (deviceId) where.deviceId = deviceId;
     return this.userSessionRepo.findOne({ where });
   }
@@ -89,8 +122,9 @@ export class SessionService {
 
   async getUserSessions(userId: string): Promise<SessionDevice[]> {
     const sessions = await this.userSessionRepo.find({
-      where: { userId, isActive: true },
+      where: { userId, isActive: true, expiresAt: MoreThan(new Date()) },
       select: ['id', 'deviceId', 'deviceName', 'userAgent', 'ipAddress', 'createdAt', 'updatedAt'],
+      order: { updatedAt: 'DESC' },
     });
     return sessions.map((s) => ({
       id: s.id,

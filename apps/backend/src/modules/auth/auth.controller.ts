@@ -91,7 +91,6 @@ export class AuthController {
         ? rawSecure.toLowerCase() === 'true'
         : isProd;
 
-    // Per modern browsers: SameSite=None requires Secure
     if (sameSite === 'none') {
       secure = true;
     }
@@ -140,7 +139,6 @@ export class AuthController {
     const origin = (req.headers?.origin as string | undefined)?.replace(/\/+$/, '');
     const referer = (req.headers?.referer as string | undefined)?.replace(/\/+$/, '');
 
-    // Allow if explicit Origin header is in allow-list
     if (origin) {
       if (!allowed.has(origin)) {
         throw new ForbiddenException('Cross-origin refresh is not allowed');
@@ -148,7 +146,6 @@ export class AuthController {
       return;
     }
 
-    // Otherwise fallback to Referer check (some browsers may omit Origin on same-site)
     if (referer) {
       const ok = Array.from(allowed).some((o) => referer.startsWith(o));
       if (!ok) {
@@ -156,9 +153,6 @@ export class AuthController {
       }
       return;
     }
-
-    // No Origin and no Referer: allow server-to-server and special cases
-    // If you want to forbid this, introduce an env flag and enforce here.
   }
 
   @ApiOperation({
@@ -180,7 +174,14 @@ export class AuthController {
     const fullUser = await this.usersService.findById(req.user.id);
     const { tokens, user } = await this.authService.generateTokens(fullUser, userAgent, ipAddress);
     this.setRtCookie(res, tokens.refreshToken);
-    return { user, accessToken: tokens.accessToken, expiresIn: tokens.expiresIn as any, deviceId: tokens.deviceId } as any;
+    // Добавим refreshToken в тело ответа для совместимости фронта (в dev)
+    return {
+      user,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresIn: tokens.expiresIn as any,
+      deviceId: tokens.deviceId,
+    } as any;
   }
 
   @ApiOperation({ summary: '🏢 Регистрация новой компании с владельцем' })
@@ -217,7 +218,6 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post('refresh')
   async refreshToken(@Req() req: any, @Res({ passthrough: true }) res: Response): Promise<RefreshTokenResponseDto> {
-    // CSRF hardening: allow refresh only from allowed Origins/Referers
     this.assertRefreshRequestOriginAllowed(req);
 
     const userAgent = req.headers['user-agent'] || '';
@@ -225,7 +225,13 @@ export class AuthController {
     const rt = req.cookies?.rt;
     const result = await this.authService.refreshTokenRaw(rt, userAgent, ipAddress);
     this.setRtCookie(res, result.tokens.refreshToken);
-    return { user: result.user, accessToken: result.tokens.accessToken, expiresIn: result.tokens.expiresIn as any, deviceId: result.tokens.deviceId } as any;
+    return {
+      user: result.user,
+      accessToken: result.tokens.accessToken,
+      refreshToken: result.tokens.refreshToken,
+      expiresIn: result.tokens.expiresIn as any,
+      deviceId: result.tokens.deviceId,
+    } as any;
   }
 
   @ApiOperation({ summary: 'Выход из системы (по cookie RT)' })
@@ -272,11 +278,11 @@ export class AuthController {
   @Throttle({ strict: { limit: 2, ttl: 300_000 } })
   @HttpCode(HttpStatus.OK)
   @Post('logout-all-devices')
-  async logoutAllDevices(@Req() req: RequestWithUser): Promise<LogoutResponseDto & { deactivatedCount: number }> {
+  async logoutAllDevices(@Req() req: RequestWithUser, @Res({ passthrough: true }) res: Response): Promise<LogoutResponseDto & { deactivatedCount: number }> {
     const userAgent = req.headers['user-agent'] || '';
     const ipAddress = req.ip || '';
-    const currentDeviceId = req.user.deviceId;
-    return this.authService.logoutAllDevices(req.user.id, currentDeviceId, ipAddress, userAgent);
+    this.clearRtCookie(res);
+    return this.authService.logoutAllDevices(req.user.id, undefined, ipAddress, userAgent);
   }
 
   @ApiOperation({ summary: 'Список активных сессий' })
@@ -309,13 +315,14 @@ export class AuthController {
         specialization: fullUser.specialization,
         isActive: fullUser.isActive,
         role: { id: fullUser.role.id, name: fullUser.role.name },
+        company_id: fullUser.company_id,
+        twoFactorEnabled: fullUser.twoFactorEnabled,
         createdAt: fullUser.createdAt,
         lastLoginAt: fullUser.lastLoginAt,
       },
-    };
+    } as any;
   }
 
-  // 2FA
   @ApiOperation({ summary: '2FA: подготовка (секрет и otpauth URL)' })
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)

@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+// path: apps/backend/src/modules/auth/auth.service.ts
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import {
   InvalidCredentialsException,
   InactiveUserException,
@@ -30,13 +31,12 @@ export class AuthService {
 
   async validateUser(email: string, password: string, ipAddress?: string, userAgent?: string, twoFactorCode?: string): Promise<any> {
     try {
-      let securityResult: { isBlocked: boolean; attempts: number; blockTime?: number } | null = null;
-
+      // 1) Проверка блокировки по логин-попыткам (без записи)
       if (ipAddress) {
-        securityResult = await this.securityService.checkAndRecordFailedAttempt(email, ipAddress);
-        if (securityResult.isBlocked) {
+        const loginBlocked = await this.securityService.checkFailedLoginAttempts(email, ipAddress);
+        if (loginBlocked) {
           await this.auditService.logLoginFailed({
-            details: { email: this.maskEmail(email), reason: 'IP temporarily blocked', attempts: securityResult.attempts, blockTime: securityResult.blockTime },
+            details: { email: this.maskEmail(email), reason: 'IP temporarily blocked' },
             ipAddress,
             userAgent,
             level: AuditLevel.WARNING,
@@ -45,9 +45,15 @@ export class AuthService {
         }
       }
 
+      // 2) Пользователь
       const user = await this.usersService.findByEmail(email);
       if (!user) {
-        await this.auditService.logLoginFailed({ details: { email: this.maskEmail(email), reason: 'User not found', attempts: securityResult?.attempts || 0 }, ipAddress, userAgent });
+        if (ipAddress) await this.securityService.recordFailedLoginAttempt(email, ipAddress);
+        await this.auditService.logLoginFailed({
+          details: { email: this.maskEmail(email), reason: 'User not found' },
+          ipAddress,
+          userAgent,
+        });
         throw new InvalidCredentialsException();
       }
 
@@ -55,40 +61,66 @@ export class AuthService {
         await this.auditService.logLoginFailed({
           userId: user.id,
           companyId: user.company_id,
-          details: { email: this.maskEmail(email), reason: 'User inactive', attempts: securityResult?.attempts || 0 },
+          details: { email: this.maskEmail(email), reason: 'User inactive' },
           ipAddress,
           userAgent,
         });
         throw new InactiveUserException();
       }
 
+      // 3) Пароль
       const isPasswordValid = await this.usersService.comparePasswords(password, user.password_hash);
       if (!isPasswordValid) {
+        if (ipAddress) await this.securityService.recordFailedLoginAttempt(email, ipAddress);
         await this.auditService.logLoginFailed({
           userId: user.id,
           companyId: user.company_id,
-          details: { email: this.maskEmail(email), reason: 'Invalid password', attempts: securityResult?.attempts || 0 },
+          details: { email: this.maskEmail(email), reason: 'Invalid password' },
           ipAddress,
           userAgent,
         });
         throw new InvalidCredentialsException();
       }
 
+      // 4) 2FA (отдельные лимиты/счётчик)
       if (user.twoFactorEnabled) {
-        if (!twoFactorCode || !(await this.twoFA.verify(user.id, twoFactorCode))) {
+        if (ipAddress) {
+          const twoFaBlocked = await this.securityService.checkTwoFaBlocked(email, ipAddress);
+          if (twoFaBlocked) {
+            await this.auditService.logLoginFailed({
+              userId: user.id,
+              companyId: user.company_id,
+              details: { email: this.maskEmail(email), reason: '2FA temporarily blocked' },
+              ipAddress,
+              userAgent,
+              level: AuditLevel.WARNING,
+            });
+            throw new TooManyAttemptsException();
+          }
+        }
+
+        const ok = !!twoFactorCode && (await this.twoFA.verify(user.id, twoFactorCode));
+        if (!ok) {
+          if (ipAddress) await this.securityService.recordTwoFaFailedAttempt(email, ipAddress);
           await this.auditService.logLoginFailed({
             userId: user.id,
             companyId: user.company_id,
-            details: { email: this.maskEmail(email), reason: '2FA required or invalid', attempts: securityResult?.attempts || 0 },
+            details: { email: this.maskEmail(email), reason: '2FA required or invalid' },
             ipAddress,
             userAgent,
           });
-          throw new InvalidCredentialsException();
+          // Явно указываем на 2FA, чтобы фронт подсветил поле
+          throw new UnauthorizedException('Требуется код 2FA или он неверен');
         }
       }
 
+      // 5) Апгрейд хеша при необходимости
+      await this.usersService.upgradePasswordHashIfNeeded(user.id, password, user.password_hash);
+
+      // 6) Успешный вход — сбрасываем счётчики
       if (ipAddress) {
         await this.securityService.resetFailedLoginAttempts(email, ipAddress);
+        await this.securityService.resetTwoFaAttempts(email, ipAddress);
       }
 
       return user;
@@ -96,7 +128,8 @@ export class AuthService {
       if (
         !(error instanceof InvalidCredentialsException) &&
         !(error instanceof InactiveUserException) &&
-        !(error instanceof TooManyAttemptsException)
+        !(error instanceof TooManyAttemptsException) &&
+        !(error instanceof UnauthorizedException)
       ) {
         await this.auditService.log(AuditAction.USER_LOGIN_FAILED, {
           details: { email: this.maskEmail(email), error: error?.message || String(error) },
@@ -135,6 +168,7 @@ export class AuthService {
         isActive: fullUser.isActive,
         role: { id: fullUser.role.id, name: fullUser.role.name },
         company_id: fullUser.company_id,
+        twoFactorEnabled: fullUser.twoFactorEnabled,
         createdAt: fullUser.createdAt,
       },
       tokens,
@@ -172,7 +206,6 @@ export class AuthService {
     }
   }
 
-  // Новый refresh: принимает RT из cookie
   async refreshTokenRaw(refreshToken: string, userAgent: string, ipAddress: string) {
     try {
       if (!refreshToken) throw new InvalidTokenException();
@@ -191,7 +224,6 @@ export class AuthService {
       const isValidInDb = await this.sessionService.verifyRtAgainstSession(session, refreshToken);
 
       if (!isValidInRedis || !isValidInDb) {
-        // reuse detected — ревок всех сессий устройства
         await this.sessionService.removeDeviceSessions(payload.sub, session.deviceId);
         await this.auditService.logTokenRefreshFailed({
           userId: payload.sub, ipAddress, userAgent, deviceId: session.deviceId,
@@ -210,10 +242,8 @@ export class AuthService {
         throw new InvalidTokenException();
       }
 
-      // деактивируем старую jti
       await this.sessionService.removeSessionByJti(payload.sub, session.deviceId, payload.jti!);
 
-      // создаём новую сессию
       const { tokens } = await this.sessionService.createSession(user, userAgent, ipAddress);
 
       await this.auditService.logTokenRefresh({
@@ -234,6 +264,7 @@ export class AuthService {
           isActive: user.isActive,
           role: { id: user.role.id, name: user.role.name },
           company_id: user.company_id,
+          twoFactorEnabled: user.twoFactorEnabled,
           createdAt: user.createdAt,
         },
         tokens,
@@ -294,13 +325,13 @@ export class AuthService {
 
   async logoutAllDevices(userId: string, currentDeviceId?: string, ipAddress?: string, userAgent?: string) {
     try {
-      const deactivatedCount = await this.sessionService.removeAllUserSessions(userId, currentDeviceId);
+      const deactivatedCount = await this.sessionService.removeAllUserSessions(userId);
       await this.auditService.logAllDevicesLogout({
         userId,
         ipAddress,
         userAgent,
         deviceId: currentDeviceId,
-        details: { excludedCurrentDevice: !!currentDeviceId, deactivatedCount },
+        details: { excludedCurrentDevice: false, deactivatedCount },
       });
       return { success: true, message: 'Выход выполнен со всех устройств', deactivatedCount };
     } catch (error) {
