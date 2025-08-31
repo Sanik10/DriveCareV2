@@ -7,8 +7,8 @@ import { Vehicle } from '../../../database/entities/vehicle.entity';
 import { Customer, Subscription, SubscriptionStatus, VehicleModel, VehicleType } from '../../../database/entities';
 import { CreateVehicleData, UpdateVehicleData } from '../types/vehicles.types';
 import { IVehiclesValidationService } from '../interfaces/vehicles.interface';
-import { 
-  VehicleNotFoundException, 
+import {
+  VehicleNotFoundException,
   VehicleVinAlreadyExistsException,
   VehicleLicensePlateAlreadyExistsException,
   ValidationDataException,
@@ -16,9 +16,10 @@ import {
   CompanyLimitExceededException,
   CustomerNotFoundException,
   VehicleModelNotFoundException,
-  VehicleTypeNotFoundException
+  VehicleTypeNotFoundException,
 } from '../../../common/exceptions/domain.exceptions';
 import { VEHICLES_CONSTANTS } from '../constants/vehicles.constants';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class VehiclesValidationService implements IVehiclesValidationService {
@@ -32,16 +33,17 @@ export class VehiclesValidationService implements IVehiclesValidationService {
     private readonly vehicleModelRepository: Repository<VehicleModel>,
     @InjectRepository(VehicleType)
     private readonly vehicleTypeRepository: Repository<VehicleType>,
+    private readonly config: ConfigService,
   ) {}
 
   async validateCreateData(data: CreateVehicleData): Promise<void> {
     await this.validateCustomerOwnership(data.customerId, data.companyId);
     await this.validateVehicleReferences(data.modelId, data.vehicleTypeId);
-    
+
     if (data.vin) {
       await this.validateVinUniqueness(data.vin);
     }
-    
+
     if (data.licensePlate) {
       await this.validateLicensePlateUniqueness(data.licensePlate, data.companyId);
     }
@@ -55,7 +57,7 @@ export class VehiclesValidationService implements IVehiclesValidationService {
     if (data.modelId || data.vehicleTypeId) {
       await this.validateVehicleReferences(
         data.modelId || vehicle.modelId,
-        data.vehicleTypeId || vehicle.vehicleTypeId
+        data.vehicleTypeId || vehicle.vehicleTypeId,
       );
     }
 
@@ -72,7 +74,7 @@ export class VehiclesValidationService implements IVehiclesValidationService {
 
   async validateVehicleExists(id: string): Promise<Vehicle> {
     const vehicle = await this.vehiclesDataService.findById(id);
-    
+
     if (!vehicle) {
       throw new VehicleNotFoundException(id);
     }
@@ -82,7 +84,7 @@ export class VehiclesValidationService implements IVehiclesValidationService {
 
   async validateVehicleOwnership(vehicleId: string, userCompanyId: string): Promise<Vehicle> {
     const vehicle = await this.validateVehicleExists(vehicleId);
-    
+
     if (vehicle.companyId !== userCompanyId) {
       throw new ResourceOwnershipException('vehicle', vehicleId);
     }
@@ -105,27 +107,32 @@ export class VehiclesValidationService implements IVehiclesValidationService {
   }
 
   async validateVehicleLimits(companyId: string): Promise<void> {
+    const enforce = this.shouldEnforceSubscriptionLimits();
+
     const subscription = await this.subscriptionRepository.findOne({
-      where: { 
-        companyId, 
-        status: SubscriptionStatus.ACTIVE
+      where: {
+        companyId,
+        status: SubscriptionStatus.ACTIVE,
       },
       relations: ['tariff'],
     });
 
+    // В DEV/QA (или при флаге отключения) не блокируем отсутствие подписки
     if (!subscription || !subscription.tariff) {
-      throw new ValidationDataException(
-        'subscription',
-        'У компании нет активной подписки'
-      );
+      if (!enforce) return;
+      throw new ValidationDataException('subscription', 'У компании нет активной подписки');
     }
 
-    const maxVehicles = subscription.tariff.maxVehicles;
-    if (maxVehicles === null) {
-      return; // Безлимитный тариф
-    }
+    const maxVehicles = (subscription.tariff as any).maxVehicles;
+
+    // Безлимитный тариф или поле не задано
+    if (maxVehicles === null || maxVehicles === undefined) return;
 
     const currentCount = await this.vehiclesDataService.countByCompany(companyId);
+
+    // В DEV/QA не блокируем даже при превышении лимитов
+    if (!enforce) return;
+
     if (currentCount >= maxVehicles) {
       throw new CompanyLimitExceededException('vehicles', currentCount, maxVehicles);
     }
@@ -137,7 +144,7 @@ export class VehiclesValidationService implements IVehiclesValidationService {
     }
 
     const existingVehicle = await this.vehiclesDataService.findByVin(vin);
-    
+
     if (existingVehicle && existingVehicle.id !== excludeId) {
       throw new VehicleVinAlreadyExistsException(vin);
     }
@@ -149,7 +156,7 @@ export class VehiclesValidationService implements IVehiclesValidationService {
     }
 
     const existingVehicle = await this.vehiclesDataService.findByLicensePlate(licensePlate, companyId);
-    
+
     if (existingVehicle && existingVehicle.id !== excludeId) {
       throw new VehicleLicensePlateAlreadyExistsException(licensePlate, companyId);
     }
@@ -175,11 +182,11 @@ export class VehiclesValidationService implements IVehiclesValidationService {
 
   async validateMileageUpdate(vehicleId: string, newMileage: number): Promise<void> {
     const vehicle = await this.validateVehicleExists(vehicleId);
-    
+
     if (vehicle.mileage && newMileage < vehicle.mileage) {
       throw new ValidationDataException(
         'mileage',
-        `Новый пробег (${newMileage} км) не может быть меньше текущего (${vehicle.mileage} км)`
+        `Новый пробег (${newMileage} км) не может быть меньше текущего (${vehicle.mileage} км)`,
       );
     }
   }
@@ -190,30 +197,43 @@ export class VehiclesValidationService implements IVehiclesValidationService {
       if (data.year < VEHICLES_CONSTANTS.VALIDATION.MIN_YEAR || data.year > currentYear + 2) {
         throw new ValidationDataException(
           'year',
-          `Год выпуска должен быть от ${VEHICLES_CONSTANTS.VALIDATION.MIN_YEAR} до ${currentYear + 2}`
+          `Год выпуска должен быть от ${VEHICLES_CONSTANTS.VALIDATION.MIN_YEAR} до ${currentYear + 2}`,
         );
       }
     }
 
     if (data.mileage !== undefined && data.mileage < 0) {
-      throw new ValidationDataException(
-        'mileage',
-        'Пробег не может быть отрицательным'
-      );
+      throw new ValidationDataException('mileage', 'Пробег не может быть отрицательным');
     }
 
     if (data.engineVolume !== undefined && (data.engineVolume < 0.1 || data.engineVolume > 20)) {
-      throw new ValidationDataException(
-        'engineVolume',
-        'Объем двигателя должен быть от 0.1 до 20.0 литров'
-      );
+      throw new ValidationDataException('engineVolume', 'Объем двигателя должен быть от 0.1 до 20.0 литров');
     }
 
     if (data.vin && data.vin.length !== VEHICLES_CONSTANTS.VALIDATION.VIN_LENGTH) {
       throw new ValidationDataException(
         'vin',
-        `VIN должен содержать ровно ${VEHICLES_CONSTANTS.VALIDATION.VIN_LENGTH} символов`
+        `VIN должен содержать ровно ${VEHICLES_CONSTANTS.VALIDATION.VIN_LENGTH} символов`,
       );
     }
+  }
+
+  private shouldEnforceSubscriptionLimits(): boolean {
+    // Аналогично CustomersValidationService: ENV-переменная VEHICLES_ENFORCE_LIMITS
+    // Если указана — используем её (поддержка boolean и string). Иначе — только в production.
+    const rawFlag = (this.config.get<any>('VEHICLES_ENFORCE_LIMITS') ?? process.env.VEHICLES_ENFORCE_LIMITS) as
+      | boolean
+      | string
+      | undefined;
+
+    if (typeof rawFlag === 'boolean') {
+      return rawFlag;
+    }
+    if (typeof rawFlag === 'string' && rawFlag.length > 0) {
+      return !/^(0|false|no|off)$/i.test(rawFlag);
+    }
+
+    const env = (this.config.get<string>('NODE_ENV') ?? process.env.NODE_ENV ?? 'development').toLowerCase();
+    return env === 'production';
   }
 }

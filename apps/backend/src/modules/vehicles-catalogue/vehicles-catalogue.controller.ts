@@ -44,10 +44,11 @@ export class VehiclesCatalogueController {
 
   @Post('brands')
   @AuthWithOwnership()
-  @Roles('superadmin', 'platform_admin') // 🔒 Только платформенные роли могут создавать бренды
+  @Roles('superadmin', 'platform_admin', 'company_owner', 'company_admin') // Разрешаем компаниям пополнять глобальный каталог
   @ApiOperation({
     summary: 'Создание нового бренда',
-    description: 'Создание бренда автомобиля. Доступно только платформенным администраторам.',
+    description:
+      'Создание бренда автомобиля. Глобальный каталог: доступно платформенным администраторам и владельцам/админам компаний.',
   })
   @ApiResponse({ status: HttpStatus.CREATED, type: BrandResponseDto })
   @ApiBadRequestResponse({ description: 'Бренд с таким названием уже существует' })
@@ -118,8 +119,8 @@ export class VehiclesCatalogueController {
 
   @Post('models')
   @AuthWithOwnership()
-  @Roles('superadmin', 'platform_admin')
-  @ApiOperation({ summary: 'Создание новой модели автомобиля' })
+  @Roles('superadmin', 'platform_admin', 'company_owner', 'company_admin') // Разрешаем компаниям пополнять глобальный каталог
+  @ApiOperation({ summary: 'Создание новой модели автомобиля', description: 'Глобальный каталог' })
   @ApiResponse({ status: HttpStatus.CREATED, type: ModelResponseDto })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async createModel(@Body() createModelDto: CreateModelDto): Promise<ModelResponseDto> {
@@ -184,8 +185,8 @@ export class VehiclesCatalogueController {
 
   @Post('types')
   @AuthWithOwnership()
-  @Roles('superadmin', 'platform_admin')
-  @ApiOperation({ summary: 'Создание нового типа ТС' })
+  @Roles('superadmin', 'platform_admin', 'company_owner', 'company_admin') // Разрешаем компаниям пополнять глобальный каталог
+  @ApiOperation({ summary: 'Создание нового типа ТС', description: 'Глобальный каталог' })
   @ApiResponse({ status: HttpStatus.CREATED, type: TypeResponseDto })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async createType(@Body() createTypeDto: CreateTypeDto): Promise<TypeResponseDto> {

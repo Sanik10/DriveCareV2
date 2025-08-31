@@ -2,6 +2,45 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EngineType } from '../../../../database/entities/vehicle.entity';
 
+export class BrandBriefDto {
+  @ApiProperty({ example: 'b1a2b3c4-0000-1111-2222-333344445555' })
+  id: string;
+
+  @ApiProperty({ example: 'BMW' })
+  name: string;
+}
+
+export class ModelBriefDto {
+  @ApiProperty({ example: 'm1a2b3c4-0000-1111-2222-333344445555' })
+  id: string;
+
+  @ApiProperty({ example: 'X5' })
+  name: string;
+
+  @ApiPropertyOptional({ type: () => BrandBriefDto })
+  brand?: BrandBriefDto;
+}
+
+export class OwnerBriefDto {
+  @ApiProperty({ example: 'c1a2b3c4-0000-1111-2222-333344445555' })
+  id: string;
+
+  @ApiPropertyOptional({ example: 'Иван' })
+  firstName?: string;
+
+  @ApiPropertyOptional({ example: 'Иванов' })
+  lastName?: string;
+
+  @ApiPropertyOptional({ example: 'ООО "Такси-тур"' })
+  companyName?: string;
+
+  @ApiPropertyOptional({ example: 'owner@example.com' })
+  email?: string;
+
+  @ApiPropertyOptional({ example: '+7 999 123-45-67' })
+  phone?: string;
+}
+
 export class VehicleResponseDto {
   @ApiProperty({ example: '123e4567-e89b-12d3-a456-426614174000' })
   id: string;
@@ -54,7 +93,7 @@ export class VehicleResponseDto {
   @ApiProperty()
   updatedAt: Date;
 
-  // Дополнительные поля для UI
+  // Дополнительные поля для UI (плоские)
   @ApiPropertyOptional({ example: 'BMW X5 (А123БВ456)' })
   displayName?: string;
 
@@ -78,4 +117,11 @@ export class VehicleResponseDto {
 
   @ApiPropertyOptional({ example: 15 })
   daysUntilService?: number;
+
+  // Вложенные объекты для фронтенда
+  @ApiPropertyOptional({ type: () => ModelBriefDto })
+  model?: ModelBriefDto;
+
+  @ApiPropertyOptional({ type: () => OwnerBriefDto })
+  customer?: OwnerBriefDto;
 }

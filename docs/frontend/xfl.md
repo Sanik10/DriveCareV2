@@ -1,1620 +1,636 @@
-вот такое могу тебе скинуть, лучше стало?
+Привет! Наша прошлая сессия прервалась. Прошу тебя, продолжить разработку проекта в том же стиле и в том же духе! Ни в коем случае нельзя утерять вот эту искорку и идейность. Прошу тебя проникнуться всем перед началом правок. Вкратце: меняем дизайн фронтенда. Сейчас ниже скину несколько сообщений из старого чата!
 
-"/api/v1/orders": {
-      "post": {
-        "operationId": "OrdersController_create",
-        "summary": "Создание нового заказа",
-        "description": "Создание заказа в своей компании",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateOrderDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderResponseDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "❌ Некорректные данные валидации"
-          },
-          "401": {
-            "description": "❌ Требуется авторизация"
-          },
-          "403": {
-            "description": "❌ Недостаточно прав доступа"
-          }
-        },
-        "tags": [
-          "📋 Управление заказами"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      },
-      "get": {
-        "operationId": "OrdersController_findAll",
-        "summary": "Получение списка заказов",
-        "description": "С фильтрацией и пагинацией",
-        "parameters": [
-          {
-            "name": "customerId",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "vehicleId",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "assignedTo",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "search",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PaginatedOrdersResponseDto"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "❌ Требуется авторизация"
-          }
-        },
-        "tags": [
-          "📋 Управление заказами"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{id}": {
-      "get": {
-        "operationId": "OrdersController_findOne",
-        "summary": "Получение заказа по ID",
-        "description": "Детальная информация с связями",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderResponseDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "❌ Заказ не найден или нет доступа"
-          }
-        },
-        "tags": [
-          "📋 Управление заказами"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      },
-      "patch": {
-        "operationId": "OrdersController_update",
-        "summary": "Обновление заказа",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateOrderDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "📋 Управление заказами"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      },
-      "delete": {
-        "operationId": "OrdersController_cancelOrder",
-        "summary": "Отмена заказа (soft)",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "📋 Управление заказами"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{id}/status": {
-      "patch": {
-        "operationId": "OrdersController_updateStatus",
-        "summary": "Изменение статуса заказа",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "required": true,
-            "in": "query",
-            "description": "Новый статус заказа",
-            "schema": {
-              "enum": [
-                "new",
-                "in_progress",
-                "awaiting_parts",
-                "completed",
-                "canceled"
-              ],
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "📋 Управление заказами"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{id}/assign": {
-      "patch": {
-        "operationId": "OrdersController_assignMechanic",
-        "summary": "Назначение исполнителя заказа",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "mechanicId",
-            "required": true,
-            "in": "query",
-            "description": "ID механика",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "📋 Управление заказами"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{id}/recalculate": {
-      "patch": {
-        "operationId": "OrdersController_recalculateOrderTotals",
-        "summary": "Пересчет финансов заказа",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "📋 Управление заказами"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{orderId}/services": {
-      "post": {
-        "operationId": "OrderServicesController_addServiceToOrder",
-        "summary": "Добавление услуги в заказ",
-        "description": "Добавление новой услуги в заказ с автоматическим расчетом стоимости.",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddServiceToOrderDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderServiceResponseDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "❌ Некорректные данные или услуга уже добавлена"
-          },
-          "401": {
-            "description": "❌ Требуется авторизация"
-          },
-          "403": {
-            "description": "❌ Недостаточно прав или нет доступа к заказу"
-          },
-          "404": {
-            "description": "❌ Заказ или услуга не найдены"
-          }
-        },
-        "tags": [
-          "🔧 Управление услугами в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      },
-      "get": {
-        "operationId": "OrderServicesController_getOrderServices",
-        "summary": "Получение списка услуг заказа",
-        "description": "Получение всех услуг заказа с информацией о выполнении и стоимости.",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderServicesListResponseDto"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "❌ Требуется авторизация"
-          },
-          "403": {
-            "description": "❌ Нет доступа к заказу"
-          },
-          "404": {
-            "description": "❌ Заказ не найден"
-          }
-        },
-        "tags": [
-          "🔧 Управление услугами в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{orderId}/services/{serviceId}": {
-      "patch": {
-        "operationId": "OrderServicesController_updateOrderService",
-        "summary": "Обновление услуги в заказе",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "serviceId",
-            "required": true,
-            "in": "path",
-            "description": "ID услуги в заказе",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateOrderServiceDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderServiceResponseDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "❌ Некорректные данные"
-          },
-          "401": {
-            "description": "❌ Требуется авторизация"
-          },
-          "403": {
-            "description": "❌ Недостаточно прав или нет доступа"
-          },
-          "404": {
-            "description": "❌ Услуга не найдена"
-          }
-        },
-        "tags": [
-          "🔧 Управление услугами в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      },
-      "delete": {
-        "operationId": "OrderServicesController_removeServiceFromOrder",
-        "summary": "Удаление услуги из заказа",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "serviceId",
-            "required": true,
-            "in": "path",
-            "description": "ID услуги в заказе",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "401": {
-            "description": "❌ Требуется авторизация"
-          },
-          "403": {
-            "description": "❌ Недостаточно прав или нет доступа"
-          },
-          "404": {
-            "description": "❌ Услуга не найдена"
-          }
-        },
-        "tags": [
-          "🔧 Управление услугами в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{orderId}/services/{serviceId}/status": {
-      "patch": {
-        "operationId": "OrderServicesController_updateServiceStatus",
-        "summary": "Изменение статуса выполнения услуги",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "serviceId",
-            "required": true,
-            "in": "path",
-            "description": "ID услуги в заказе",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "status": {
-                    "enum": [
-                      "planned",
-                      "in_progress",
-                      "completed"
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderServiceResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "🔧 Управление услугами в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{orderId}/services/{serviceId}/mechanic": {
-      "patch": {
-        "operationId": "OrderServicesController_assignMechanicToService",
-        "summary": "Назначение механика на услугу",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "serviceId",
-            "required": true,
-            "in": "path",
-            "description": "ID услуги в заказе",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderServiceResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "🔧 Управление услугами в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{orderId}/services/{serviceId}/start": {
-      "patch": {
-        "operationId": "OrderServicesController_startService",
-        "summary": "Начать выполнение услуги",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "serviceId",
-            "required": true,
-            "in": "path",
-            "description": "ID услуги в заказе",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderServiceResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "🔧 Управление услугами в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{orderId}/services/{serviceId}/complete": {
-      "patch": {
-        "operationId": "OrderServicesController_completeService",
-        "summary": "Завершить выполнение услуги",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "serviceId",
-            "required": true,
-            "in": "path",
-            "description": "ID услуги в заказе",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderServiceResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "🔧 Управление услугами в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{orderId}/parts": {
-      "post": {
-        "operationId": "OrderPartsController_addPartToOrder",
-        "summary": "Добавление запчасти в заказ",
-        "description": "Добавление новой запчасти в заказ с проверкой остатков и расчетом стоимости.",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddPartToOrderDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderPartResponseDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "❌ Некорректные данные или недостаточно запчастей на складе"
-          },
-          "401": {
-            "description": "❌ Требуется авторизация"
-          },
-          "403": {
-            "description": "❌ Недостаточно прав или нет доступа к заказу"
-          },
-          "404": {
-            "description": "❌ Заказ или запчасть не найдены"
-          }
-        },
-        "tags": [
-          "🔧 Управление запчастями в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      },
-      "get": {
-        "operationId": "OrderPartsController_getOrderParts",
-        "summary": "Получение списка запчастей заказа",
-        "description": "Все запчасти в заказе с информацией о наличии и стоимости.",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderPartsListResponseDto"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "❌ Требуется авторизация"
-          },
-          "403": {
-            "description": "❌ Нет доступа к заказу"
-          },
-          "404": {
-            "description": "❌ Заказ не найден"
-          }
-        },
-        "tags": [
-          "🔧 Управление запчастями в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{orderId}/parts/{partId}": {
-      "patch": {
-        "operationId": "OrderPartsController_updateOrderPart",
-        "summary": "Обновление запчасти в заказе",
-        "description": "Изменение количества/цены/скидки. Автоматический пересчет.",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "partId",
-            "required": true,
-            "in": "path",
-            "description": "ID запчасти в заказе",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateOrderPartDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderPartResponseDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "❌ Некорректные данные или недостаточно запчастей на складе"
-          },
-          "401": {
-            "description": "❌ Требуется авторизация"
-          },
-          "403": {
-            "description": "❌ Недостаточно прав или нет доступа"
-          },
-          "404": {
-            "description": "❌ Запчасть в заказе не найдена"
-          }
-        },
-        "tags": [
-          "🔧 Управление запчастями в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      },
-      "delete": {
-        "operationId": "OrderPartsController_removePartFromOrder",
-        "summary": "Удаление запчасти из заказа",
-        "description": "Освобождение резерва и пересчет общей стоимости.",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "partId",
-            "required": true,
-            "in": "path",
-            "description": "ID запчасти в заказе",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "401": {
-            "description": "❌ Требуется авторизация"
-          },
-          "403": {
-            "description": "❌ Недостаточно прав или нет доступа"
-          },
-          "404": {
-            "description": "❌ Запчасть в заказе не найдена"
-          }
-        },
-        "tags": [
-          "🔧 Управление запчастями в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{orderId}/parts/{partId}/customer-provided": {
-      "patch": {
-        "operationId": "OrderPartsController_toggleCustomerProvided",
-        "summary": "Переключение типа запчасти",
-        "description": "Переключение между запчастью клиента и нашей запчастью. Влияет на цену и резерв.",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "partId",
-            "required": true,
-            "in": "path",
-            "description": "ID запчасти в заказе",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderPartResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "🔧 Управление запчастями в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1/orders/{orderId}/parts/{partId}/availability": {
-      "get": {
-        "operationId": "OrderPartsController_checkPartAvailability",
-        "summary": "Проверка наличия запчасти",
-        "description": "Проверка текущего наличия запчасти на складе и возможности добавления в заказ.",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "description": "ID заказа",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "partId",
-            "required": true,
-            "in": "path",
-            "description": "ID запчасти (каталог)",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "partId": {
-                      "type": "string"
-                    },
-                    "available": {
-                      "type": "number"
-                    },
-                    "reserved": {
-                      "type": "number"
-                    },
-                    "canAddToOrder": {
-                      "type": "boolean"
-                    },
-                    "maxQuantity": {
-                      "type": "number"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "🔧 Управление запчастями в заказах"
-        ],
-        "security": [
-          {
-            "JWT-auth": []
-          }
-        ]
-      }
-    },
+сообщения:
 
+Привет! Отлично понял задачу! 
 
+**Что буду делать:**
+- Улучшать только визуальную часть - дизайн, расположение элементов, стилизацию
+- Следовать дизайн-системе NeoCarbon (dark тема, палитра с #00D4AA primary, радиусы 24/14px, шрифт Geist)
+- Добавлять дизайнерские фишки: мягкие тени с glow, градиенты, улучшенные переходы
+- Делать интерфейс более премиальным в стиле banking/Apple
 
+**Что НЕ буду менять:**
+- Логику компонентов и функциональность
+- API вызовы и обработку данных  
+- Структуру компонентов и пропсы
+- Роутинг и навигацию
 
+**Мой подход:**
+- Улучшу композицию и spacing
+- Добавлю визуальную иерархию 
+- Применю элементы из дизайн-системы (surface-glow, accent градиенты)
+- Улучшу кнопки, карточки, формы
+- Добавлю subtle анимации
 
+Готов приступать! Скидывай страницы - буду улучшать их дизайн в формате path-blocks, сохраняя всю функциональность. Жду первую страницу для работы! 🎨
 
+2) Edits (path‑blocks)
+Миграции можно не делать! Ты можешь просто заменить код в сущности! Я могу спокойно удалить БД и создать заново!
+- Если нет точного содержимого файлов → сначала верни блок “NEED FILES”.
+- Если точные версии есть → присылай только path‑blocks (один блок = один файл, всегда полный валидный контент).
 
+Шаблон запроса точных версий файлов (если они нужны)
+```
+NEED FILES (нужны точные текущие версии файлов для корректных правок):
+- apps/backend/src/.../file-a.ts
+- apps/backend/src/.../file-b.ts
+Причина: правки в формате path‑blocks требуют полного, актуального содержимого, иначе велика вероятность ошибок.
+```
 
+Формат path‑blocks (обязателен)
 
+- Один файл — один блок. Полный валидный контент файла.
+- В каждом блоке обязательно:
+  1) HTML‑комментарий с путём (для скрипта)
+  2) Тот же путь первой строкой комментария внутри файла (если язык поддерживает комментарии)
+- Пути от корня репозитория:
+  - apps/backend/src/...
+  - apps/frontend/src/...
+  - .env.example, turbo.json и т.д.
+- Действия: replace|delete|append|move (replace по умолчанию). Для move обязательно from.
 
+Синтаксис блока
+<!-- path: относительный/путь/к/файлу[, action: delete|replace|append|move, from: старый/путь] -->
+```lang
+// path: относительный/путь/к/файлу
+<полное содержимое файла>
+```
 
+- lang: ts, js, tsx, json, yaml, md, sh и т.д.
+- Если формат без комментариев (JSON/YAML/ENV) — внутренний комментарий не вставлять.
 
+Примеры
 
+1) Замена/создание файла
+<!-- path: apps/backend/src/modules/users/users.service.ts -->
+```ts
+// path: apps/backend/src/modules/users/users.service.ts
+import { Injectable } from '@nestjs/common';
+import { UsersRepository } from './services/users-data.service';
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// src/modules/orders/dto/request/create-order.dto.ts
-import { IsString, IsUUID, IsOptional, IsEnum, IsInt, IsPositive, IsDateString, IsNumber, Min } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { OrderStatus } from '../../types/orders.types';
-
-export class CreateOrderDto {
-  @ApiPropertyOptional({ 
-    description: 'ID компании (автоматически устанавливается из токена)', 
-    example: '123e4567-e89b-12d3-a456-426614174000' 
-  })
-  @IsUUID()
-  @IsOptional()
-  companyId?: string;
-
-  @ApiProperty({ 
-    description: 'ID клиента', 
-    example: '123e4567-e89b-12d3-a456-426614174001' 
-  })
-  @IsUUID()
-  customerId: string;
-
-  @ApiProperty({ 
-    description: 'ID автомобиля', 
-    example: '123e4567-e89b-12d3-a456-426614174002' 
-  })
-  @IsUUID()
-  vehicleId: string;
-
-  @ApiPropertyOptional({ 
-    description: 'Статус заказа', 
-    enum: OrderStatus, 
-    default: OrderStatus.NEW,
-    example: OrderStatus.NEW
-  })
-  @IsEnum(OrderStatus)
-  @IsOptional()
-  status?: OrderStatus;
-
-  @ApiPropertyOptional({ 
-    description: 'ID создателя заказа (автоматически устанавливается)', 
-    example: '123e4567-e89b-12d3-a456-426614174003' 
-  })
-  @IsUUID()
-  @IsOptional()
-  createdBy?: string;
-
-  @ApiPropertyOptional({ 
-    description: 'ID исполнителя', 
-    example: '123e4567-e89b-12d3-a456-426614174004' 
-  })
-  @IsUUID()
-  @IsOptional()
-  assignedTo?: string;
-
-  @ApiPropertyOptional({ 
-    description: 'Описание заказа', 
-    example: 'Плановое техническое обслуживание' 
-  })
-  @IsString()
-  @IsOptional()
-  description?: string;
-
-  @ApiPropertyOptional({ 
-    description: 'Жалобы клиента', 
-    example: 'Шум при торможении, вибрация руля' 
-  })
-  @IsString()
-  @IsOptional()
-  customerComplaints?: string;
-
-  @ApiPropertyOptional({ 
-    description: 'Пробег автомобиля на момент создания заказа', 
-    example: 15000 
-  })
-  @IsInt()
-  @IsPositive()
-  @IsOptional()
-  @Type(() => Number)
-  mileage?: number;
-
-  @ApiPropertyOptional({ 
-    description: 'Планируемое время завершения', 
-    example: '2025-01-01T14:00:00Z' 
-  })
-  @IsDateString()
-  @IsOptional()
-  estimatedCompletionTime?: string;
-
-  @ApiPropertyOptional({ 
-    description: 'Сумма скидки', 
-    example: 500,
-    minimum: 0
-  })
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @IsOptional()
-  @Type(() => Number)
-  discountAmount?: number;
+@Injectable()
+export class UsersService {
+  constructor(private readonly repo: UsersRepository) {}
+  // ...
 }
+```
 
-// src/modules/orders/dto/request/update-order.dto.ts
-import { PartialType, OmitType } from '@nestjs/swagger';
-import { IsOptional, IsDateString, IsString } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { CreateOrderDto } from './create-order.dto';
+2) Удаление файла
+<!-- path: apps/backend/src/modules/old/obsolete.service.ts, action: delete -->
+```ts
+// path: apps/backend/src/modules/old/obsolete.service.ts
+```
 
-export class UpdateOrderDto extends PartialType(
-  OmitType(CreateOrderDto, ['companyId', 'createdBy'] as const)
-) {
-  @ApiPropertyOptional({ 
-    description: 'Результаты диагностики', 
-    example: 'Износ тормозных колодок передней оси, замена рекомендуется' 
+3) Добавление строк в конец
+<!-- path: .env.example, action: append -->
+```dotenv
+# path: .env.example
+NEW_FEATURE_FLAG=true
+```
+
+4) Перемещение
+<!-- path: apps/backend/src/modules/foo/bar.service.ts, action: move, from: apps/backend/src/modules/old/bar.service.ts -->
+```ts
+// path: apps/backend/src/modules/foo/bar.service.ts
+// обновлённый контент (если нужен)
+```
+
+Правила отправки ответа
+- Только path‑blocks. Никаких diff/patch.
+- В каждый изменённый файл — полный валидный контент (не фрагменты).
+- Без дублей одного и того же файла; присылай финальную версию один раз.
+- UTF‑8 без BOM, переводы строк LF, без невидимых символов; пустая строка в конце файла.
+- JSON/YAML/ENV — строго валидный синтаксис.
+
+Подсказка по комментариям внутри файла
+- TS/JS/TSX/JSX/Go/C#: // path: apps/backend/src/...
+- CSS/SCSS/Less: /* path: apps/backend/src/... */
+- HTML/XML/SVG/MD: <!-- path: apps/backend/src/... -->
+- Shell/YAML/ENV/INI/TOML/Python/Ruby/SQL: # или -- в SQL
+- Для форматов без комментариев (JSON/YAML/ENV) — внутренний комментарий не использовать.
+P.S. писть любые сообщения и комменатрии между блоками, а может и вопросы задавать после блоков кода - можно и даже нужно! Скрипт сам выберет код из сообщения
+
+Супер! Теперь сделаю страницы авторизации незабываемыми! 🚀 Для каждой страницы добавлю уникальную фишку, но в едином стиле.
+
+**Мои фишки для каждой страницы:**
+- **Login**: Floating геометрические фигуры + морфинг эффекты
+- **Register**: Динамический прогресс + particle система  
+- **Success**: Конфетти анимация + celebration эффекты
+- **Invite**: Пульсирующие связи + network visualization
+
+Начинаем! 🎨
+
+<!-- path: apps/frontend/app/(auth)/login/page.tsx -->
+```tsx
+// path: apps/frontend/app/(auth)/login/page.tsx
+"use client"
+
+import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { Eye, EyeOff, ArrowRight, Building2, AlertCircle, Clock, Lock, Mail, Shield } from 'lucide-react'
+import Link from 'next/link'
+
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { authAPI } from '@/lib/api/auth'
+import { useAuth } from '@/lib/hooks/use-auth'
+import { EMAIL_REGEX, PASSWORD_REGEX, TWO_FA_REGEX } from '@/lib/types/auth'
+
+const loginSchema = z.object({
+  email: z.string()
+    .min(1, 'Email обязателен')
+    .regex(EMAIL_REGEX, 'Некорректный email'),
+  password: z.string()
+    .min(8, 'Минимум 8 символов')
+    .regex(PASSWORD_REGEX, 'Пароль должен содержать строчные и заглавные буквы, цифры и спецсимволы'),
+  twoFactorCode: z.string()
+    .optional()
+    .refine((val) => !val || TWO_FA_REGEX.test(val), {
+      message: 'Код 2FA должен состоять из 6 цифр'
+    })
+})
+
+type LoginForm = z.infer<typeof loginSchema>
+
+export default function LoginPage() {
+  const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [isThrottled, setIsThrottled] = useState(false)
+  const [throttleTimeLeft, setThrottleTimeLeft] = useState(0)
+  const router = useRouter()
+  const { setAuthUser } = useAuth()
+  
+  const loginAttemptRef = useRef(false)
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    setError
+  } = useForm<LoginForm>({
+    resolver: zodResolver(loginSchema),
   })
-  @IsString()
-  @IsOptional()
-  diagnosticResults?: string;
 
-  @ApiPropertyOptional({ 
-    description: 'Фактическое время завершения', 
-    example: '2025-01-01T15:30:00Z' 
-  })
-  @IsDateString()
-  @IsOptional()
-  actualCompletionTime?: string;
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null
+    
+    if (isThrottled && throttleTimeLeft > 0) {
+      interval = setInterval(() => {
+        setThrottleTimeLeft(prev => {
+          if (prev <= 1) {
+            setIsThrottled(false)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
 
-  @ApiPropertyOptional({ 
-    description: 'ID пользователя, вносящего изменения (для аудита)' 
-  })
-  @IsOptional()
-  updatedBy?: string;
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [isThrottled, throttleTimeLeft])
+
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+  }
+
+  const onSubmit = async (data: LoginForm) => {
+    if (isThrottled || isLoading || loginAttemptRef.current) {
+      return
+    }
+    
+    loginAttemptRef.current = true
+    setIsLoading(true)
+    setApiError(null)
+    
+    try {
+      const response = await authAPI.login(data)
+      
+      if (!response.user || !response.user.email) {
+        setApiError('Ошибка входа: получены некорректные данные пользователя')
+        return
+      }
+      
+      if (response.accessToken) {
+        localStorage.setItem('accessToken', response.accessToken)
+      }
+      if (response.refreshToken) {
+        localStorage.setItem('refreshToken', response.refreshToken)
+      }
+      localStorage.setItem('user', JSON.stringify(response.user))
+      if (response.deviceId) {
+        localStorage.setItem('deviceId', response.deviceId)
+      }
+      
+      setAuthUser(response.user)
+      router.push('/dashboard')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Неизвестная ошибка'
+      
+      try {
+        const errorData = JSON.parse(message)
+        
+        if (errorData.statusCode === 429) {
+          setIsThrottled(true)
+          setThrottleTimeLeft(15 * 60)
+          setApiError('Превышен лимит попыток входа. Попробуйте позже.')
+        } else if (errorData.statusCode === 401) {
+          setApiError('Неверный email или пароль')
+        } else if (errorData.statusCode === 400) {
+          setApiError('Некорректные данные для входа')
+        } else {
+          setApiError('Ошибка сервера. Попробуйте позже.')
+        }
+      } catch {
+        if (message.includes('2FA')) {
+          setError('twoFactorCode', { message: 'Неверный код 2FA' })
+        } else if (message.includes('email') || message.includes('пароль')) {
+          setApiError(message)
+        } else {
+          setApiError('Ошибка входа. Проверьте данные и попробуйте снова.')
+        }
+      }
+    } finally {
+      setIsLoading(false)
+      setTimeout(() => {
+        loginAttemptRef.current = false
+      }, 1000)
+    }
+  }
+
+  return (
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Advanced Background with Floating Shapes */}
+      <div 
+        className="fixed inset-0 -z-10"
+        style={{
+          background: `
+            radial-gradient(ellipse 600px 400px at 80% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+            radial-gradient(ellipse 500px 500px at 20% 80%, rgba(14, 165, 233, 0.12) 0%, transparent 50%),
+            radial-gradient(ellipse 700px 300px at 60% 60%, rgba(168, 85, 247, 0.08) 0%, transparent 50%)
+          `
+        }}
+      />
+      
+      {/* Floating Geometric Shapes */}
+      <div className="fixed inset-0 -z-10 pointer-events-none">
+        {/* Triangle */}
+        <div 
+          className="absolute login-shape-1"
+          style={{
+            width: '60px',
+            height: '60px',
+            top: '15%',
+            left: '10%',
+            clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
+            background: 'linear-gradient(45deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.08))',
+            filter: 'blur(1px)',
+          }}
+        />
+        
+        {/* Circle */}
+        <div 
+          className="absolute login-shape-2"
+          style={{
+            width: '80px',
+            height: '80px',
+            top: '25%',
+            right: '15%',
+            borderRadius: '50%',
+            background: 'linear-gradient(45deg, rgba(14, 165, 233, 0.12), rgba(99, 102, 241, 0.1))',
+            filter: 'blur(2px)',
+          }}
+        />
+        
+        {/* Square */}
+        <div 
+          className="absolute login-shape-3"
+          style={{
+            width: '50px',
+            height: '50px',
+            bottom: '20%',
+            left: '20%',
+            background: 'linear-gradient(45deg, rgba(168, 85, 247, 0.1), rgba(14, 165, 233, 0.08))',
+            transform: 'rotate(45deg)',
+            filter: 'blur(1px)',
+          }}
+        />
+        
+        {/* Hexagon */}
+        <div 
+          className="absolute login-shape-4"
+          style={{
+            width: '70px',
+            height: '70px',
+            bottom: '30%',
+            right: '10%',
+            clipPath: 'polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%)',
+            background: 'linear-gradient(45deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.06))',
+            filter: 'blur(2px)',
+          }}
+        />
+        
+        {/* Additional smaller shapes */}
+        <div 
+          className="absolute login-shape-5"
+          style={{
+            width: '30px',
+            height: '30px',
+            top: '60%',
+            left: '5%',
+            borderRadius: '50%',
+            background: 'rgba(14, 165, 233, 0.1)',
+            filter: 'blur(1px)',
+          }}
+        />
+        
+        <div 
+          className="absolute login-shape-6"
+          style={{
+            width: '40px',
+            height: '40px',
+            top: '10%',
+            right: '5%',
+            background: 'rgba(168, 85, 247, 0.08)',
+            transform: 'rotate(30deg)',
+            filter: 'blur(1px)',
+          }}
+        />
+      </div>
+      
+      <div className="flex items-center justify-center min-h-screen p-6 relative z-10">
+        <div className="w-full max-w-md space-y-8">
+          {/* Header with enhanced animation */}
+          <div className="text-center space-y-6">
+            <Link href="/" className="inline-block group">
+              <div className="flex items-center justify-center">
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-primary shadow-glass-lg transition-all duration-300 group-hover:scale-105 group-hover:shadow-xl">
+                  <Building2 className="w-7 h-7 text-white" />
+                </div>
+              </div>
+            </Link>
+            <div className="space-y-3">
+              <h1 className="text-4xl font-bold text-gradient-primary">
+                Вход в систему
+              </h1>
+              <p className="text-lg text-muted-foreground">
+                Добро пожаловать в DriveCare
+              </p>
+              <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-primary" />
+                  <span>Безопасно</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-secondary" />
+                  <span>Защищено</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Enhanced Login Form */}
+          <Card className="p-8 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 rounded-3xl">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {/* API Error */}
+              {apiError && (
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 animate-in slide-in-from-top-2 duration-300">
+                  <AlertCircle className="w-5 h-5 text-destructive" />
+                  <p className="text-sm text-destructive">{apiError}</p>
+                </div>
+              )}
+
+              {/* Throttle Warning */}
+              {isThrottled && (
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 animate-in slide-in-from-top-2 duration-300">
+                  <Clock className="w-5 h-5 text-amber-600" />
+                  <div className="text-sm text-amber-600">
+                    <p className="font-medium">Временная блокировка</p>
+                    <p>Попробуйте снова через {formatTime(throttleTimeLeft)}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-5">
+                <div className="relative group">
+                  <Mail className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+                  <Input
+                    {...register('email')}
+                    type="email"
+                    placeholder="Email"
+                    autoComplete="email"
+                    disabled={isLoading || isThrottled}
+                    error={errors.email?.message}
+                    className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+                  />
+                </div>
+
+                <div className="relative group">
+                  <Lock className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+                  <Input
+                    {...register('password')}
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Пароль"
+                    autoComplete="current-password"
+                    disabled={isLoading || isThrottled}
+                    error={errors.password?.message}
+                    className="pl-12 pr-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-all duration-200 hover:scale-110"
+                    disabled={isLoading || isThrottled}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+
+                <Input
+                  {...register('twoFactorCode')}
+                  type="text"
+                  placeholder="Код 2FA (если включен)"
+                  autoComplete="one-time-code"
+                  disabled={isLoading || isThrottled}
+                  error={errors.twoFactorCode?.message}
+                  maxLength={6}
+                  className="h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full h-14 bg-gradient-primary hover:opacity-90 text-white font-medium group rounded-2xl transition-all duration-300 hover:scale-[1.02] hover:shadow-glass-lg"
+                disabled={isLoading || isThrottled || loginAttemptRef.current}
+              >
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    Вход в систему...
+                  </div>
+                ) : isThrottled ? (
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-5 h-5" />
+                    Заблокировано ({formatTime(throttleTimeLeft)})
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    Войти в DriveCare
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
+                  </div>
+                )}
+              </Button>
+
+              <div className="text-center space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Нет аккаунта компании?{' '}
+                  <Link
+                    href="/register"
+                    className="text-primary hover:text-secondary transition-colors font-medium hover:underline"
+                  >
+                    Зарегистрировать автосервис
+                  </Link>
+                </p>
+                
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>Используя DriveCare, вы соглашаетесь с</p>
+                  <p>
+                    <Link href="/terms" className="hover:text-foreground transition-colors hover:underline">
+                      Условиями использования
+                    </Link>
+                    {' и '}
+                    <Link href="/privacy" className="hover:text-foreground transition-colors hover:underline">
+                      Политикой конфиденциальности
+                    </Link>
+                  </p>
+                </div>
+              </div>
+            </form>
+          </Card>
+
+          {/* Back to Home */}
+          <div className="text-center">
+            <Link 
+              href="/" 
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300 hover:underline inline-flex items-center gap-2"
+            >
+              ← Вернуться на главную
+            </Link>
+          </div>
+
+          {/* Security Notice */}
+          {isThrottled && (
+            <Card className="p-6 glass border-border/30 rounded-2xl animate-in slide-in-from-bottom-2 duration-500">
+              <div className="text-center space-y-3">
+                <Shield className="w-6 h-6 text-primary mx-auto" />
+                <h4 className="text-sm font-semibold text-muted-foreground">
+                  Система защиты от атак
+                </h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Для безопасности количество попыток входа ограничено. 
+                  Лимит: 5 попыток в 15 минут.
+                </p>
+              </div>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* CSS for animations */}
+      <style jsx>{`
+        .login-shape-1 {
+          animation: float1 12s ease-in-out infinite;
+        }
+        
+        .login-shape-2 {
+          animation: float2 15s ease-in-out infinite;
+        }
+        
+        .login-shape-3 {
+          animation: float3 10s ease-in-out infinite;
+        }
+        
+        .login-shape-4 {
+          animation: float4 18s ease-in-out infinite;
+        }
+        
+        .login-shape-5 {
+          animation: float5 8s ease-in-out infinite;
+        }
+        
+        .login-shape-6 {
+          animation: float6 14s ease-in-out infinite;
+        }
+
+        @keyframes float1 {
+          0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
+          33% { transform: translateY(-15px) translateX(10px) rotate(5deg); }
+          66% { transform: translateY(10px) translateX(-5px) rotate(-3deg); }
+        }
+
+        @keyframes float2 {
+          0%, 100% { transform: translateY(0px) translateX(0px) scale(1); }
+          25% { transform: translateY(12px) translateX(-8px) scale(1.1); }
+          75% { transform: translateY(-8px) translateX(12px) scale(0.9); }
+        }
+
+        @keyframes float3 {
+          0%, 100% { transform: translateY(0px) translateX(0px) rotate(45deg); }
+          50% { transform: translateY(-20px) translateX(15px) rotate(90deg); }
+        }
+
+        @keyframes float4 {
+          0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
+          40% { transform: translateY(18px) translateX(-12px) rotate(10deg); }
+          80% { transform: translateY(-6px) translateX(8px) rotate(-5deg); }
+        }
+
+        @keyframes float5 {
+          0%, 100% { transform: translateY(0px) scale(1); }
+          50% { transform: translateY(-25px) scale(1.2); }
+        }
+
+        @keyframes float6 {
+          0%, 100% { transform: translateY(0px) translateX(0px) rotate(30deg); }
+          33% { transform: translateY(-10px) translateX(6px) rotate(60deg); }
+          66% { transform: translateY(8px) translateX(-4px) rotate(0deg); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .login-shape-1, .login-shape-2, .login-shape-3, 
+          .login-shape-4, .login-shape-5, .login-shape-6 {
+            animation: none !important;
+          }
+        }
+      `}</style>
+    </div>
+  )
 }
+```
 
-// src/modules/orders/dto/response/order-part-response.dto.ts
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+Это только первая страница - Login с floating геометрическими фигурами! ✨ 
 
-class PartInfo {
-  @ApiProperty({ description: 'ID запчасти' })
-  id: string;
+**Фишки что добавил:**
+- **6 анимированных геометрических фигур** (треугольник, круг, квадрат, гексагон и др.)
+- **Морфинг анимации** - фигуры плавно двигаются и вращаются
+- **Улучшенная форма** с иконками в инпутах
+- **Hover эффекты** на всех элементах
+- **Glass morphism** карточка
+- **Градиентные переходы**
 
-  @ApiProperty({ description: 'Название запчасти' })
-  name: string;
+Теперь сделать остальные страницы? Register будет с particle системой! 🚀
 
-  @ApiPropertyOptional({ description: 'Номер запчасти' })
-  partNumber?: string;
-
-  @ApiPropertyOptional({ description: 'Бренд' })
-  brand?: string;
-
-  @ApiPropertyOptional({ description: 'Описание' })
-  description?: string;
-}
-
-export class OrderPartResponseDto {
-  @ApiProperty({ description: 'ID записи запчасти в заказе' })
-  id: string;
-
-  @ApiProperty({ description: 'ID заказа' })
-  orderId: string;
-
-  @ApiProperty({ description: 'ID запчасти' })
-  partId: string;
-
-  @ApiProperty({ description: 'Цена запчасти для данного заказа' })
-  price: number;
-
-  @ApiProperty({ description: 'Количество' })
-  quantity: number;
-
-  @ApiProperty({ description: 'Процент скидки' })
-  discountPercent: number;
-
-  @ApiProperty({ description: 'Общая сумма с учетом количества и скидки' })
-  totalAmount: number;
-
-  @ApiProperty({ description: 'Предоставлена ли запчасть клиентом' })
-  isCustomerProvided: boolean;
-
-  @ApiProperty({ description: 'Дата создания записи' })
-  createdAt: Date;
-
-  @ApiProperty({ description: 'Дата обновления записи' })
-  updatedAt: Date;
-
-  @ApiPropertyOptional({ description: 'Информация о запчасти' })
-  part?: PartInfo;
-}
-
-// src/modules/orders/dto/response/order-response.dto.ts
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { OrderStatus } from '../../types/orders.types';
-
-// Вложенные типы для связанных данных
-class CustomerInfo {
-  @ApiProperty({ description: 'ID клиента' })
-  id: string;
-
-  @ApiPropertyOptional({ description: 'Имя клиента' })
-  firstName?: string;
-
-  @ApiPropertyOptional({ description: 'Фамилия клиента' })
-  lastName?: string;
-
-  @ApiPropertyOptional({ description: 'Название компании' })
-  companyName?: string;
-
-  @ApiProperty({ description: 'Email клиента' })
-  email: string;
-
-  @ApiProperty({ description: 'Телефон клиента' })
-  phone: string;
-
-  @ApiProperty({ description: 'Тип клиента', enum: ['individual', 'company'] })
-  type: string;
-}
-
-class VehicleBrandInfo {
-  @ApiProperty({ description: 'ID бренда' })
-  id: string;
-
-  @ApiProperty({ description: 'Название бренда' })
-  name: string;
-}
-
-class VehicleModelInfo {
-  @ApiProperty({ description: 'ID модели' })
-  id: string;
-
-  @ApiProperty({ description: 'Название модели' })
-  name: string;
-
-  @ApiPropertyOptional({ description: 'Информация о бренде' })
-  brand?: VehicleBrandInfo;
-}
-
-class VehicleInfo {
-  @ApiProperty({ description: 'ID автомобиля' })
-  id: string;
-
-  @ApiPropertyOptional({ description: 'VIN номер' })
-  vin?: string;
-
-  @ApiPropertyOptional({ description: 'Госномер' })
-  licensePlate?: string;
-
-  @ApiPropertyOptional({ description: 'Год выпуска' })
-  year?: number;
-
-  @ApiPropertyOptional({ description: 'Цвет' })
-  color?: string;
-
-  @ApiPropertyOptional({ description: 'Пробег' })
-  mileage?: number;
-
-  @ApiPropertyOptional({ description: 'Информация о модели' })
-  model?: VehicleModelInfo;
-}
-
-class UserInfo {
-  @ApiProperty({ description: 'ID пользователя' })
-  id: string;
-
-  @ApiProperty({ description: 'Имя' })
-  firstName: string;
-
-  @ApiProperty({ description: 'Фамилия' })
-  lastName: string;
-
-  @ApiPropertyOptional({ description: 'Email (для создателя)' })
-  email?: string;
-
-  @ApiPropertyOptional({ description: 'Специализация (для механика)' })
-  specialization?: string;
-}
-
-export class OrderResponseDto {
-  @ApiProperty({ description: 'Уникальный идентификатор' })
-  id: string;
-
-  @ApiProperty({ description: 'ID компании' })
-  companyId: string;
-
-  @ApiProperty({ description: 'ID клиента' })
-  customerId: string;
-
-  @ApiProperty({ description: 'ID автомобиля' })
-  vehicleId: string;
-
-  @ApiProperty({ description: 'Номер заказ-наряда', example: 'ORD-2025-00001' })
-  orderNumber: string;
-
-  @ApiProperty({ description: 'Статус заказа', enum: OrderStatus })
-  status: OrderStatus;
-
-  @ApiProperty({ description: 'ID создателя заказа' })
-  createdBy: string;
-
-  @ApiPropertyOptional({ description: 'ID исполнителя' })
-  assignedTo?: string;
-
-  @ApiPropertyOptional({ description: 'Описание заказа' })
-  description?: string;
-
-  @ApiPropertyOptional({ description: 'Жалобы клиента' })
-  customerComplaints?: string;
-
-  @ApiPropertyOptional({ description: 'Результаты диагностики' })
-  diagnosticResults?: string;
-
-  @ApiProperty({ description: 'Общая сумма', example: 15000 })
-  totalAmount: number;
-
-  @ApiProperty({ description: 'Сумма скидки', example: 750 })
-  discountAmount: number;
-
-  @ApiProperty({ description: 'Сумма налога', example: 2850 })
-  taxAmount: number;
-
-  @ApiProperty({ description: 'Итоговая сумма к оплате', example: 17100 })
-  finalAmount: number;
-
-  @ApiPropertyOptional({ description: 'Пробег автомобиля' })
-  mileage?: number;
-
-  @ApiPropertyOptional({ description: 'Планируемое время завершения' })
-  estimatedCompletionTime?: Date;
-
-  @ApiPropertyOptional({ description: 'Фактическое время завершения' })
-  actualCompletionTime?: Date;
-
-  @ApiProperty({ description: 'Дата создания' })
-  createdAt: Date;
-
-  @ApiProperty({ description: 'Дата обновления' })
-  updatedAt: Date;
-
-  // 🔗 Связанная информация
-  @ApiPropertyOptional({ description: 'Информация о клиенте' })
-  customer?: CustomerInfo;
-
-  @ApiPropertyOptional({ description: 'Информация об автомобиле' })
-  vehicle?: VehicleInfo;
-
-  @ApiPropertyOptional({ description: 'Информация о создателе' })
-  createdByUser?: UserInfo;
-
-  @ApiPropertyOptional({ description: 'Информация об исполнителе' })
-  assignedToUser?: UserInfo;
-
-  @ApiPropertyOptional({ description: 'Услуги в заказе', type: [Object] })
-  orderServices?: any[]; // OrderServiceResponseDto[]
-
-  @ApiPropertyOptional({ description: 'Запчасти в заказе', type: [Object] })
-  orderParts?: any[]; // OrderPartResponseDto[]
-
-  // 📊 Вычисляемые поля
-  @ApiProperty({ description: 'Читаемый статус', example: 'В работе' })
-  displayStatus: string;
-
-  @ApiProperty({ description: 'Просрочен ли заказ' })
-  isOverdue: boolean;
-
-  @ApiProperty({ description: 'Процент выполнения', example: 50 })
-  progressPercentage: number;
-
-  @ApiPropertyOptional({ description: 'Предполагаемая длительность в часах' })
-  estimatedDuration?: number;
-}
-
-// src/modules/orders/dto/response/order-service-response.dto.ts
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-class ServiceInfo {
-  @ApiProperty({ description: 'ID услуги' })
-  id: string;
-
-  @ApiProperty({ description: 'Название услуги' })
-  name: string;
-
-  @ApiPropertyOptional({ description: 'Описание услуги' })
-  description?: string;
-
-  @ApiProperty({ description: 'Базовая цена услуги' })
-  price: number;
-
-  @ApiProperty({ description: 'Длительность в минутах' })
-  durationMinutes: number;
-}
-
-export class OrderServiceResponseDto {
-  @ApiProperty({ description: 'ID записи услуги в заказе' })
-  id: string;
-
-  @ApiProperty({ description: 'ID заказа' })
-  orderId: string;
-
-  @ApiProperty({ description: 'ID услуги' })
-  serviceId: string;
-
-  @ApiProperty({ description: 'Цена услуги для данного заказа' })
-  price: number;
-
-  @ApiProperty({ description: 'Количество', example: 1 })
-  quantity: number;
-
-  @ApiProperty({ description: 'Процент скидки', example: 5.5 })
-  discountPercent: number;
-
-  @ApiProperty({ description: 'Общая сумма с учетом количества и скидки' })
-  totalAmount: number;
-
-  @ApiProperty({ description: 'Статус выполнения услуги', enum: ['planned', 'in_progress', 'completed'] })
-  status: string;
-
-  @ApiPropertyOptional({ description: 'ID механика, выполняющего услугу' })
-  mechanicId?: string;
-
-  @ApiPropertyOptional({ description: 'Время начала выполнения' })
-  startTime?: Date;
-
-  @ApiPropertyOptional({ description: 'Время завершения выполнения' })
-  endTime?: Date;
-
-  @ApiPropertyOptional({ description: 'Заметки по выполнению услуги' })
-  notes?: string;
-
-  @ApiProperty({ description: 'Дата создания записи' })
-  createdAt: Date;
-
-  @ApiProperty({ description: 'Дата обновления записи' })
-  updatedAt: Date;
-
-  @ApiPropertyOptional({ description: 'Информация об услуге' })
-  service?: ServiceInfo;
-}
-
-// src/modules/orders/dto/response/paginated-orders-response.dto.ts
-import { ApiProperty } from '@nestjs/swagger';
-import { OrderResponseDto } from './order-response.dto';
-
-export class PaginatedOrdersResponseDto {
-  @ApiProperty({ 
-    description: 'Список заказов', 
-    type: [OrderResponseDto] 
-  })
-  items: OrderResponseDto[];
-
-  @ApiProperty({ 
-    description: 'Общее количество заказов', 
-    example: 150 
-  })
-  total: number;
-
-  @ApiProperty({ 
-    description: 'Номер текущей страницы', 
-    example: 1 
-  })
-  page: number;
-
-  @ApiProperty({ 
-    description: 'Количество элементов на странице', 
-    example: 20 
-  })
-  limit: number;
-
-  @ApiProperty({ 
-    description: 'Общее количество страниц', 
-    example: 8 
-  })
-  totalPages: number;
-}

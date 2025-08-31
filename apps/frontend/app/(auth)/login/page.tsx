@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, ArrowRight, Building2, AlertCircle, Clock } from 'lucide-react'
+import { Eye, EyeOff, ArrowRight, Building2, AlertCircle, Clock, Lock, Mail, Shield } from 'lucide-react'
 import Link from 'next/link'
 
 import { Button } from '@/components/ui/button'
@@ -39,9 +39,8 @@ export default function LoginPage() {
   const [isThrottled, setIsThrottled] = useState(false)
   const [throttleTimeLeft, setThrottleTimeLeft] = useState(0)
   const router = useRouter()
-  const { setAuthUser } = useAuth() // ДОБАВЛЕНО
+  const { setAuthUser } = useAuth()
   
-  // Защита от множественных попыток логина
   const loginAttemptRef = useRef(false)
 
   const {
@@ -53,7 +52,6 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   })
 
-  // Таймер для throttle
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
     
@@ -81,9 +79,7 @@ export default function LoginPage() {
   }
 
   const onSubmit = async (data: LoginForm) => {
-    // Защита от множественных одновременных запросов
     if (isThrottled || isLoading || loginAttemptRef.current) {
-      console.log('[Login] Пропускаем попытку логина - уже выполняется или заблокирован')
       return
     }
     
@@ -92,26 +88,13 @@ export default function LoginPage() {
     setApiError(null)
     
     try {
-      console.log('[Login] Начинаем логин для', data.email)
       const response = await authAPI.login(data)
       
-      console.log('[Login] Логин успешен, ответ сервера:', {
-        hasUser: !!response.user,
-        userEmail: response.user?.email,
-        hasTokens: !!(response.accessToken && response.refreshToken),
-        deviceId: response.deviceId
-      })
-      
-      // ИСПРАВЛЕНО: проверяем что пользователь валидный
       if (!response.user || !response.user.email) {
-        console.error('[Login] Получен невалидный пользователь от сервера:', response.user)
         setApiError('Ошибка входа: получены некорректные данные пользователя')
         return
       }
       
-      console.log('[Login] Сохраняем токены и пользователя')
-      
-      // Сохраняем токены (только если действительно пришли)
       if (response.accessToken) {
         localStorage.setItem('accessToken', response.accessToken)
       }
@@ -123,25 +106,17 @@ export default function LoginPage() {
         localStorage.setItem('deviceId', response.deviceId)
       }
       
-      // НОВОЕ: сразу устанавливаем пользователя в useAuth
       setAuthUser(response.user)
-      
-      console.log('[Login] Пользователь установлен в useAuth, перенаправляем на dashboard')
-      
-      // Редирект на dashboard
       router.push('/dashboard')
     } catch (error) {
-      console.error('[Login] Ошибка логина:', error)
-      
       const message = error instanceof Error ? error.message : 'Неизвестная ошибка'
       
       try {
         const errorData = JSON.parse(message)
         
         if (errorData.statusCode === 429) {
-          // Rate limit exceeded
           setIsThrottled(true)
-          setThrottleTimeLeft(15 * 60) // 15 минут в секундах
+          setThrottleTimeLeft(15 * 60)
           setApiError('Превышен лимит попыток входа. Попробуйте позже.')
         } else if (errorData.statusCode === 401) {
           setApiError('Неверный email или пароль')
@@ -151,7 +126,6 @@ export default function LoginPage() {
           setApiError('Ошибка сервера. Попробуйте позже.')
         }
       } catch {
-        // Если не удалось распарсить JSON
         if (message.includes('2FA')) {
           setError('twoFactorCode', { message: 'Неверный код 2FA' })
         } else if (message.includes('email') || message.includes('пароль')) {
@@ -162,57 +136,158 @@ export default function LoginPage() {
       }
     } finally {
       setIsLoading(false)
-      // Сбрасываем флаг через задержку
       setTimeout(() => {
         loginAttemptRef.current = false
-      }, 1000) // УВЕЛИЧИЛИ до 1 секунды
+      }, 1000)
     }
   }
 
   return (
-    <div className="min-h-screen relative">
-      {/* Fixed Background Effects */}
-      <div className="fixed inset-0 bg-gradient-to-br from-background via-background to-surface-1 -z-10"></div>
-      <div className="fixed inset-0 bg-gradient-surface -z-10"></div>
-      <div className="fixed top-0 right-0 w-96 h-96 bg-gradient-primary opacity-10 rounded-full blur-3xl -z-10"></div>
-      <div className="fixed bottom-0 left-0 w-64 h-64 bg-secondary/20 rounded-full blur-3xl -z-10"></div>
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Advanced Background with Floating Shapes */}
+      <div 
+        className="fixed inset-0 -z-10"
+        style={{
+          background: `
+            radial-gradient(ellipse 600px 400px at 80% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+            radial-gradient(ellipse 500px 500px at 20% 80%, rgba(14, 165, 233, 0.12) 0%, transparent 50%),
+            radial-gradient(ellipse 700px 300px at 60% 60%, rgba(168, 85, 247, 0.08) 0%, transparent 50%)
+          `
+        }}
+      />
       
-      <div className="flex items-center justify-center min-h-screen p-6">
+      {/* Floating Geometric Shapes */}
+      <div className="fixed inset-0 -z-10 pointer-events-none">
+        {/* Triangle */}
+        <div 
+          className="absolute login-shape-1"
+          style={{
+            width: '60px',
+            height: '60px',
+            top: '15%',
+            left: '10%',
+            clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
+            background: 'linear-gradient(45deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.08))',
+            filter: 'blur(1px)',
+          }}
+        />
+        
+        {/* Circle */}
+        <div 
+          className="absolute login-shape-2"
+          style={{
+            width: '80px',
+            height: '80px',
+            top: '25%',
+            right: '15%',
+            borderRadius: '50%',
+            background: 'linear-gradient(45deg, rgba(14, 165, 233, 0.12), rgba(99, 102, 241, 0.1))',
+            filter: 'blur(2px)',
+          }}
+        />
+        
+        {/* Square */}
+        <div 
+          className="absolute login-shape-3"
+          style={{
+            width: '50px',
+            height: '50px',
+            bottom: '20%',
+            left: '20%',
+            background: 'linear-gradient(45deg, rgba(168, 85, 247, 0.1), rgba(14, 165, 233, 0.08))',
+            transform: 'rotate(45deg)',
+            filter: 'blur(1px)',
+          }}
+        />
+        
+        {/* Hexagon */}
+        <div 
+          className="absolute login-shape-4"
+          style={{
+            width: '70px',
+            height: '70px',
+            bottom: '30%',
+            right: '10%',
+            clipPath: 'polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%)',
+            background: 'linear-gradient(45deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.06))',
+            filter: 'blur(2px)',
+          }}
+        />
+        
+        {/* Additional smaller shapes */}
+        <div 
+          className="absolute login-shape-5"
+          style={{
+            width: '30px',
+            height: '30px',
+            top: '60%',
+            left: '5%',
+            borderRadius: '50%',
+            background: 'rgba(14, 165, 233, 0.1)',
+            filter: 'blur(1px)',
+          }}
+        />
+        
+        <div 
+          className="absolute login-shape-6"
+          style={{
+            width: '40px',
+            height: '40px',
+            top: '10%',
+            right: '5%',
+            background: 'rgba(168, 85, 247, 0.08)',
+            transform: 'rotate(30deg)',
+            filter: 'blur(1px)',
+          }}
+        />
+      </div>
+      
+      <div className="flex items-center justify-center min-h-screen p-6 relative z-10">
         <div className="w-full max-w-md space-y-8">
-          {/* Header */}
+          {/* Header with enhanced animation */}
           <div className="text-center space-y-6">
-            <Link href="/" className="inline-block">
+            <Link href="/" className="inline-block group">
               <div className="flex items-center justify-center">
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-primary">
-                  <Building2 className="w-6 h-6 text-white" />
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-primary shadow-glass-lg transition-all duration-300 group-hover:scale-105 group-hover:shadow-xl">
+                  <Building2 className="w-7 h-7 text-white" />
                 </div>
               </div>
             </Link>
-            <div className="space-y-2">
-              <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                Войти в DriveCare
+            <div className="space-y-3">
+              <h1 className="text-4xl font-bold text-gradient-primary">
+                Вход в систему
               </h1>
-              <p className="text-muted-foreground">
-                Управление автосервисом нового поколения
+              <p className="text-lg text-muted-foreground">
+                Добро пожаловать в DriveCare
               </p>
+              <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-primary" />
+                  <span>Безопасно</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-secondary" />
+                  <span>Защищено</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Login Form */}
-          <Card className="p-8 shadow-glass border-border/50 backdrop-blur-sm bg-card/80">
+          {/* Enhanced Login Form */}
+          <Card className="p-8 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 rounded-3xl">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               {/* API Error */}
               {apiError && (
-                <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20">
-                  <AlertCircle className="w-4 h-4 text-destructive" />
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 animate-in slide-in-from-top-2 duration-300">
+                  <AlertCircle className="w-5 h-5 text-destructive" />
                   <p className="text-sm text-destructive">{apiError}</p>
                 </div>
               )}
 
               {/* Throttle Warning */}
               {isThrottled && (
-                <div className="flex items-center gap-2 p-3 rounded-md bg-amber-500/10 border border-amber-500/20">
-                  <Clock className="w-4 h-4 text-amber-600" />
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 animate-in slide-in-from-top-2 duration-300">
+                  <Clock className="w-5 h-5 text-amber-600" />
                   <div className="text-sm text-amber-600">
                     <p className="font-medium">Временная блокировка</p>
                     <p>Попробуйте снова через {formatTime(throttleTimeLeft)}</p>
@@ -220,17 +295,22 @@ export default function LoginPage() {
                 </div>
               )}
 
-              <div className="space-y-4">
-                <Input
-                  {...register('email')}
-                  type="email"
-                  placeholder="Email"
-                  autoComplete="email"
-                  disabled={isLoading || isThrottled}
-                  error={errors.email?.message}
-                />
+              <div className="space-y-5">
+                <div className="relative group">
+                  <Mail className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+                  <Input
+                    {...register('email')}
+                    type="email"
+                    placeholder="Email"
+                    autoComplete="email"
+                    disabled={isLoading || isThrottled}
+                    error={errors.email?.message}
+                    className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+                  />
+                </div>
 
-                <div className="relative">
+                <div className="relative group">
+                  <Lock className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
                   <Input
                     {...register('password')}
                     type={showPassword ? 'text' : 'password'}
@@ -238,18 +318,18 @@ export default function LoginPage() {
                     autoComplete="current-password"
                     disabled={isLoading || isThrottled}
                     error={errors.password?.message}
-                    className="pr-12"
+                    className="pl-12 pr-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-all duration-200 hover:scale-110"
                     disabled={isLoading || isThrottled}
                   >
                     {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
+                      <EyeOff className="w-5 h-5" />
                     ) : (
-                      <Eye className="w-4 h-4" />
+                      <Eye className="w-5 h-5" />
                     )}
                   </button>
                 </div>
@@ -262,52 +342,53 @@ export default function LoginPage() {
                   disabled={isLoading || isThrottled}
                   error={errors.twoFactorCode?.message}
                   maxLength={6}
+                  className="h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
                 />
               </div>
 
               <Button
                 type="submit"
                 size="lg"
-                className="w-full h-12 bg-gradient-primary hover:opacity-90 text-white font-medium group"
+                className="w-full h-14 bg-gradient-primary hover:opacity-90 text-white font-medium group rounded-2xl transition-all duration-300 hover:scale-[1.02] hover:shadow-glass-lg"
                 disabled={isLoading || isThrottled || loginAttemptRef.current}
               >
                 {isLoading ? (
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    Вход...
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    Вход в систему...
                   </div>
                 ) : isThrottled ? (
                   <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
+                    <Clock className="w-5 h-5" />
                     Заблокировано ({formatTime(throttleTimeLeft)})
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    Войти
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    Войти в DriveCare
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
                   </div>
                 )}
               </Button>
 
               <div className="text-center space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Нет аккаунта?{' '}
+                  Нет аккаунта компании?{' '}
                   <Link
                     href="/register"
-                    className="text-primary hover:text-secondary transition-colors font-medium"
+                    className="text-primary hover:text-secondary transition-colors font-medium hover:underline"
                   >
-                    Зарегистрировать компанию
+                    Зарегистрировать автосервис
                   </Link>
                 </p>
                 
-                <div className="text-xs text-muted-foreground">
+                <div className="text-xs text-muted-foreground space-y-1">
                   <p>Используя DriveCare, вы соглашаетесь с</p>
                   <p>
-                    <Link href="/terms" className="hover:text-foreground transition-colors">
+                    <Link href="/terms" className="hover:text-foreground transition-colors hover:underline">
                       Условиями использования
                     </Link>
                     {' и '}
-                    <Link href="/privacy" className="hover:text-foreground transition-colors">
+                    <Link href="/privacy" className="hover:text-foreground transition-colors hover:underline">
                       Политикой конфиденциальности
                     </Link>
                   </p>
@@ -320,7 +401,7 @@ export default function LoginPage() {
           <div className="text-center">
             <Link 
               href="/" 
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300 hover:underline inline-flex items-center gap-2"
             >
               ← Вернуться на главную
             </Link>
@@ -328,12 +409,13 @@ export default function LoginPage() {
 
           {/* Security Notice */}
           {isThrottled && (
-            <Card className="p-4 backdrop-blur-sm bg-card/60 border-border/30">
-              <div className="text-center space-y-2">
-                <h4 className="text-sm font-medium text-muted-foreground">
-                  Защита от перебора
+            <Card className="p-6 glass border-border/30 rounded-2xl animate-in slide-in-from-bottom-2 duration-500">
+              <div className="text-center space-y-3">
+                <Shield className="w-6 h-6 text-primary mx-auto" />
+                <h4 className="text-sm font-semibold text-muted-foreground">
+                  Система защиты от атак
                 </h4>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   Для безопасности количество попыток входа ограничено. 
                   Лимит: 5 попыток в 15 минут.
                 </p>
@@ -342,6 +424,74 @@ export default function LoginPage() {
           )}
         </div>
       </div>
+
+      {/* CSS for animations */}
+      <style jsx>{`
+        .login-shape-1 {
+          animation: float1 12s ease-in-out infinite;
+        }
+        
+        .login-shape-2 {
+          animation: float2 15s ease-in-out infinite;
+        }
+        
+        .login-shape-3 {
+          animation: float3 10s ease-in-out infinite;
+        }
+        
+        .login-shape-4 {
+          animation: float4 18s ease-in-out infinite;
+        }
+        
+        .login-shape-5 {
+          animation: float5 8s ease-in-out infinite;
+        }
+        
+        .login-shape-6 {
+          animation: float6 14s ease-in-out infinite;
+        }
+
+        @keyframes float1 {
+          0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
+          33% { transform: translateY(-15px) translateX(10px) rotate(5deg); }
+          66% { transform: translateY(10px) translateX(-5px) rotate(-3deg); }
+        }
+
+        @keyframes float2 {
+          0%, 100% { transform: translateY(0px) translateX(0px) scale(1); }
+          25% { transform: translateY(12px) translateX(-8px) scale(1.1); }
+          75% { transform: translateY(-8px) translateX(12px) scale(0.9); }
+        }
+
+        @keyframes float3 {
+          0%, 100% { transform: translateY(0px) translateX(0px) rotate(45deg); }
+          50% { transform: translateY(-20px) translateX(15px) rotate(90deg); }
+        }
+
+        @keyframes float4 {
+          0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
+          40% { transform: translateY(18px) translateX(-12px) rotate(10deg); }
+          80% { transform: translateY(-6px) translateX(8px) rotate(-5deg); }
+        }
+
+        @keyframes float5 {
+          0%, 100% { transform: translateY(0px) scale(1); }
+          50% { transform: translateY(-25px) scale(1.2); }
+        }
+
+        @keyframes float6 {
+          0%, 100% { transform: translateY(0px) translateX(0px) rotate(30deg); }
+          33% { transform: translateY(-10px) translateX(6px) rotate(60deg); }
+          66% { transform: translateY(8px) translateX(-4px) rotate(0deg); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .login-shape-1, .login-shape-2, .login-shape-3, 
+          .login-shape-4, .login-shape-5, .login-shape-6 {
+            animation: none !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

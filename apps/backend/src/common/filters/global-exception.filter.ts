@@ -54,24 +54,39 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request & RequestWithUser & { correlationId?: string }>();
     const response = ctx.getResponse<Response>();
 
-    // Корреляция: принять входящий или использовать из интерсептора, иначе сгенерировать
     const correlationId =
       (request.headers['x-request-id'] as string) || request.correlationId || uuidv4();
 
     const requestContext = this.extractRequestContext(request, correlationId);
     const exceptionDetails = await this.analyzeException(exception, requestContext);
 
-    // Аудит (не блокируем ответ)
+    // Если ответ уже отправлен (например, в контроллере использовали @Res() и res.send()),
+    // не пытаемся писать ещё раз, иначе будет ERR_HTTP_HEADERS_SENT.
+    if (response.headersSent) {
+      this.logForMonitoring(
+        {
+          ...exceptionDetails,
+          type: `${exceptionDetails.type}_AFTER_HEADERS_SENT`,
+          message: `${exceptionDetails.message} (response already sent)`,
+        },
+        requestContext,
+        correlationId,
+      );
+      // Всё равно пишем в аудит (fire-and-forget)
+      this.auditExceptionAsync(exceptionDetails, requestContext).catch((auditError) => {
+        this.logger.error(`Audit logging failed: ${auditError.message}`);
+      });
+      return;
+    }
+
+    // fire-and-forget audit
     this.auditExceptionAsync(exceptionDetails, requestContext).catch((auditError) => {
       this.logger.error(`Audit logging failed: ${auditError.message}`);
     });
 
     const secureResponse = this.generateSecureResponse(exceptionDetails, correlationId);
 
-    // Базовые security-заголовки
     this.addSecurityHeaders(response, correlationId);
-
-    // Логи для мониторинга
     this.logForMonitoring(exceptionDetails, requestContext, correlationId);
 
     response.status(exceptionDetails.statusCode).json(secureResponse);
@@ -93,7 +108,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   }
 
   private async analyzeException(exception: unknown, context: any) {
-    // Специальные доменные исключения
+    // Domain exceptions
     if (exception instanceof EntityNotFoundException) {
       return {
         type: 'ENTITY_NOT_FOUND',
@@ -149,12 +164,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       };
     }
     if (exception instanceof ValidationDataException) {
+      const field = (exception as any)?.field;
+      const detailMsg = (exception as any)?.message || 'Validation failed';
       return {
         type: 'VALIDATION_EXCEPTION',
         statusCode: HttpStatus.BAD_REQUEST,
-        message: 'Validation failed',
+        message: this.isDevelopment ? `Validation failed: ${detailMsg}` : 'Validation failed',
         level: AuditLevel.WARNING,
         category: 'VALIDATION_ERROR',
+        field,
       };
     }
     if (exception instanceof CompanyNotFoundException || exception instanceof CompanyEmailAlreadyExistsException) {
@@ -284,6 +302,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           category: exceptionDetails.category,
           sanitizedMessage: exceptionDetails.message,
           internalError: exceptionDetails.internalError,
+          field: exceptionDetails.field,
         },
         status: 'error',
       });
@@ -300,6 +319,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       correlationId,
     };
+
+    if (exceptionDetails.field) {
+      baseResponse.field = exceptionDetails.field;
+    }
 
     if (this.isDevelopment && exceptionDetails.originalError) {
       baseResponse.error = exceptionDetails.originalError;

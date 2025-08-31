@@ -18,7 +18,7 @@ export class VehiclesMapperService {
       year: vehicle.year,
       color: vehicle.color,
       engineType: vehicle.engineType,
-      engineVolume: vehicle.engineVolume,
+      engineVolume: vehicle.engineVolume as any,
       mileage: vehicle.mileage,
       lastServiceDate: vehicle.lastServiceDate,
       nextServiceDate: vehicle.nextServiceDate,
@@ -28,24 +28,45 @@ export class VehiclesMapperService {
       displayName: this.formatVehicleDisplayName(vehicle),
     };
 
-    if (vehicle.customer) {
-      dto.customerName = this.formatCustomerName(vehicle.customer);
+    // Вложенный владелец (customer)
+    if ((vehicle as any).customer) {
+      const c = (vehicle as any).customer;
+      dto.customer = {
+        id: c.id,
+        firstName: c.firstName ?? undefined,
+        lastName: c.lastName ?? undefined,
+        companyName: c.companyName ?? undefined,
+        email: c.email ?? undefined,
+        phone: c.phone ?? undefined,
+      };
+      dto.customerName = this.formatCustomerName(c);
     }
 
-    if (vehicle.model) {
-      dto.modelName = vehicle.model.name;
-      if (vehicle.model.brand) {
-        dto.brandName = vehicle.model.brand.name;
-        dto.modelName = `${vehicle.model.brand.name} ${vehicle.model.name}`;
+    // Вложенная модель и бренд
+    if ((vehicle as any).model) {
+      const m = (vehicle as any).model;
+      dto.model = {
+        id: vehicle.modelId,
+        name: m.name || '',
+        brand: m.brand
+          ? { id: m.brandId || (m.brand.id ?? ''), name: m.brand.name || '' }
+          : undefined,
+      };
+
+      // Плоские поля совместимости
+      dto.modelName = m.name;
+      if (m.brand) {
+        dto.brandName = m.brand.name;
+        dto.modelName = `${m.brand.name} ${m.name}`;
       }
     }
 
-    if (vehicle.vehicleType) {
-      dto.vehicleTypeName = vehicle.vehicleType.name;
+    if ((vehicle as any).vehicleType) {
+      dto.vehicleTypeName = (vehicle as any).vehicleType.name;
     }
 
-    if (vehicle.serviceHistory) {
-      dto.serviceHistoryCount = vehicle.serviceHistory.length;
+    if ((vehicle as any).serviceHistory) {
+      dto.serviceHistoryCount = ((vehicle as any).serviceHistory as any[]).length;
     }
 
     if (vehicle.nextServiceDate) {
@@ -65,11 +86,11 @@ export class VehiclesMapperService {
     const dto = this.mapToResponseDto(vehicle);
     const lowPIIRoles = new Set(['mechanic', 'diagnostic']);
     if (role && lowPIIRoles.has(role)) {
-      if (dto.vin) dto.vin = `***${dto.vin.slice(-6)}`;
+      if (dto.vin) dto.vin = `***${String(dto.vin).slice(-6)}`;
       if (dto.licensePlate) dto.licensePlate = this.maskLicensePlate(dto.licensePlate);
       dto.notes = undefined;
       if (!vehicle.licensePlate && vehicle.vin) {
-        dto.displayName = dto.displayName?.replace(/VIN:\s*[A-Z0-9]+$/i, `VIN: ${vehicle.vin.slice(-6)}`);
+        dto.displayName = dto.displayName?.replace(/VIN:\s*[A-Z0-9]+$/i, `VIN: ${String(vehicle.vin).slice(-6)}`);
       }
     }
     return dto;
@@ -91,11 +112,11 @@ export class VehiclesMapperService {
       vin: vehicle.vin,
       year: vehicle.year,
       customerId: vehicle.customerId,
-      customerName: vehicle.customer ? this.formatCustomerName(vehicle.customer) : '',
+      customerName: (vehicle as any).customer ? this.formatCustomerName((vehicle as any).customer) : '',
       companyId: vehicle.companyId,
-      isActive: Boolean(vehicle.isActive),
+      isActive: Boolean((vehicle as any).isActive),
     };
-    }
+  }
 
   mapToWithDetails(vehicle: Vehicle): VehicleWithDetails {
     const basicInfo = this.mapToBasicInfo(vehicle);
@@ -104,17 +125,17 @@ export class VehiclesMapperService {
       ...basicInfo,
       model: {
         id: vehicle.modelId,
-        name: vehicle.model?.name || '',
+        name: (vehicle as any).model?.name || '',
         brand: {
-          id: vehicle.model?.brandId || '',
-          name: vehicle.model?.brand?.name || '',
+          id: (vehicle as any).model?.brandId || '',
+          name: (vehicle as any).model?.brand?.name || '',
         },
       },
       vehicleType: {
         id: vehicle.vehicleTypeId,
-        name: vehicle.vehicleType?.name || '',
+        name: (vehicle as any).vehicleType?.name || '',
       },
-      serviceHistoryCount: vehicle.serviceHistory?.length || 0,
+      serviceHistoryCount: (vehicle as any).serviceHistory?.length || 0,
       lastServiceDate: vehicle.lastServiceDate,
       nextServiceDate: vehicle.nextServiceDate,
       mileage: vehicle.mileage,
@@ -125,18 +146,18 @@ export class VehiclesMapperService {
     return {
       value: vehicle.id,
       label: this.formatVehicleDisplayName(vehicle),
-      disabled: vehicle.isDeleted,
+      disabled: (vehicle as any).isDeleted,
     };
   }
 
   formatVehicleDisplayName(vehicle: Vehicle): string {
     const parts: string[] = [];
 
-    if (vehicle.model) {
-      if (vehicle.model.brand) {
-        parts.push(`${vehicle.model.brand.name} ${vehicle.model.name}`);
-      } else {
-        parts.push(vehicle.model.name);
+    if ((vehicle as any).model) {
+      if ((vehicle as any).model.brand) {
+        parts.push(`${(vehicle as any).model.brand.name} ${(vehicle as any).model.name}`);
+      } else if ((vehicle as any).model.name) {
+        parts.push((vehicle as any).model.name);
       }
     }
 
@@ -147,7 +168,7 @@ export class VehiclesMapperService {
     if (vehicle.licensePlate) {
       parts.push(`[${vehicle.licensePlate}]`);
     } else if (vehicle.vin) {
-      parts.push(`[VIN: ${vehicle.vin.slice(-6)}]`);
+      parts.push(`[VIN: ${String(vehicle.vin).slice(-6)}]`);
     }
 
     return parts.length > 0 ? parts.join(' ') : `Автомобиль ${vehicle.id.slice(-8)}`;
@@ -159,11 +180,11 @@ export class VehiclesMapperService {
     }
 
     if (vehicle.vin) {
-      return `VIN: ${vehicle.vin.slice(-6)}`;
+      return `VIN: ${String(vehicle.vin).slice(-6)}`;
     }
 
-    if (vehicle.model?.name) {
-      return vehicle.model.name;
+    if ((vehicle as any).model?.name) {
+      return (vehicle as any).model.name;
     }
 
     return `ID: ${vehicle.id.slice(-8)}`;

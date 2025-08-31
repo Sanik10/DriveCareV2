@@ -1,4 +1,4 @@
-// src/modules/orders/services/orders-validation.service.ts
+// path: apps/backend/src/modules/orders/services/orders-validation.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -14,6 +14,7 @@ import {
   ResourceOwnershipException,
 } from '../../../common/exceptions/domain.exceptions';
 import { ORDERS_CONSTANTS } from '../constants/orders.constants';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class OrdersValidationService {
@@ -23,6 +24,7 @@ export class OrdersValidationService {
     @InjectRepository(Customer) private readonly customerRepo: Repository<Customer>,
     @InjectRepository(Vehicle) private readonly vehicleRepo: Repository<Vehicle>,
     @InjectRepository(User) private readonly userRepo: Repository<User>,
+    private readonly config: ConfigService,
   ) {}
 
   async validateCreateDataForUser(data: CreateOrderData, user: RequestWithUser['user']): Promise<void> {
@@ -57,6 +59,9 @@ export class OrdersValidationService {
   }
 
   private async validateSubscriptionLimits(companyId: string): Promise<void> {
+    // В DEV/QA (или при флаге отключения) не блокируем отсутствие подписки/лимитов
+    if (!this.shouldEnforceSubscriptionLimits()) return;
+
     try {
       const currentOrdersCount = await this.ordersDataService.getOrdersCountForCompany(companyId);
       const limitCheckResult = await this.subscriptionLimitsService.checkOrderLimit(companyId, currentOrdersCount, 1);
@@ -73,8 +78,28 @@ export class OrdersValidationService {
       }
     } catch (error) {
       if (error instanceof ValidationDataException) throw error;
+      // Не валим создание при операционных сбоях проверки лимитов
+      // (аудит/логгирование может быть добавлено на уровне GlobalExceptionFilter)
+      // console.warn уже в исходной версии
       console.warn(`⚠️ Ошибка проверки лимитов заказов для компании ${companyId}:`, error);
     }
+  }
+
+  private shouldEnforceSubscriptionLimits(): boolean {
+    // Флаг через ENV (ORDERS_ENFORCE_LIMITS=false отключает лимиты), по умолчанию включаем только в production
+    const rawFlag = (this.config.get<any>('ORDERS_ENFORCE_LIMITS') ?? process.env.ORDERS_ENFORCE_LIMITS) as
+      | boolean
+      | string
+      | undefined;
+
+    if (typeof rawFlag === 'boolean') {
+      return rawFlag;
+    }
+    if (typeof rawFlag === 'string' && rawFlag.length > 0) {
+      return !/^(0|false|no|off)$/i.test(rawFlag);
+    }
+    const env = (this.config.get<string>('NODE_ENV') ?? process.env.NODE_ENV ?? 'development').toLowerCase();
+    return env === 'production';
   }
 
   async validateOrderExists(id: string): Promise<Order> {

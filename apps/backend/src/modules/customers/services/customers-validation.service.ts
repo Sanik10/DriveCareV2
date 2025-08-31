@@ -1,15 +1,15 @@
-// apps/backend/src/modules/customers/services/customers-validation.service.ts
+// path: apps/backend/src/modules/customers/services/customers-validation.service.ts
 import { Injectable } from '@nestjs/common';
 import { CustomersDataService } from './customers-data.service';
 import { Customer } from '../../../database/entities/customer.entity';
 import { CreateCustomerData, UpdateCustomerData } from '../types/customers.types';
 import { ICustomersValidationService } from '../interfaces/customers.interface';
-import { 
-  CustomerNotFoundException, 
+import {
+  CustomerNotFoundException,
   CustomerEmailAlreadyExistsException,
   ValidationDataException,
   ResourceOwnershipException,
-  CompanyLimitExceededException
+  CompanyLimitExceededException,
 } from '../../../common/exceptions/domain.exceptions';
 import { CUSTOMERS_CONSTANTS } from '../constants/customers.constants';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -71,19 +71,29 @@ export class CustomersValidationService implements ICustomersValidationService {
   }
 
   async validateCustomerLimits(companyId: string): Promise<void> {
+    const enforce = this.shouldEnforceSubscriptionLimits();
+
     const subscription = await this.subscriptionRepository.findOne({
       where: { companyId, status: SubscriptionStatus.ACTIVE },
       relations: ['tariff'],
     });
 
+    // В DEV/QA (или при флаге отключения) не блокируем отсутствие подписки
     if (!subscription || !subscription.tariff) {
+      if (!enforce) return;
       throw new ValidationDataException('subscription', 'У компании нет активной подписки');
     }
 
-    const maxCustomers = subscription.tariff.maxCustomers;
-    if (maxCustomers === null) return;
+    const maxCustomers = (subscription.tariff as any).maxCustomers;
+
+    // Безлимитный тариф или поле не задано
+    if (maxCustomers === null || maxCustomers === undefined) return;
 
     const currentCount = await this.customersDataService.countByCompany(companyId);
+
+    // В DEV/QA не блокируем даже при превышении лимитов
+    if (!enforce) return;
+
     if (currentCount >= maxCustomers) {
       throw new CompanyLimitExceededException('customers', currentCount, maxCustomers);
     }
@@ -110,9 +120,17 @@ export class CustomersValidationService implements ICustomersValidationService {
 
   private validateContactInfo(data: Partial<CreateCustomerData | UpdateCustomerData>): void {
     if (data.phone) {
-      const phoneRegex = /^[\+]?[1-9][\d\s\-KATEX_INLINE_OPENKATEX_INLINE_CLOSE]{7,15}$/;
-      if (!phoneRegex.test(data.phone.replace(/\s/g, ''))) {
+      // Поддерживаем +E.164 или локальные форматы с 8/7/10 знаками, пробелы/дефисы допустимы
+      const normalized = String(data.phone).replace(/\s+/g, '');
+      const phoneRegex = /^[+]?[\d\-() ]{7,20}$/;
+      if (!phoneRegex.test(normalized)) {
         throw new ValidationDataException('phone', 'Некорректный формат телефона');
+      }
+      if (String(data.phone).length > CUSTOMERS_CONSTANTS.VALIDATION.MAX_PHONE_LENGTH) {
+        throw new ValidationDataException(
+          'phone',
+          `Телефон не может превышать ${CUSTOMERS_CONSTANTS.VALIDATION.MAX_PHONE_LENGTH} символов`,
+        );
       }
     }
 
@@ -137,5 +155,15 @@ export class CustomersValidationService implements ICustomersValidationService {
         throw new ValidationDataException('pdpConsentVersion', 'Версия политики не может превышать 50 символов');
       }
     }
+  }
+
+  private shouldEnforceSubscriptionLimits(): boolean {
+    // Флаг через ENV (CUSTOMERS_ENFORCE_LIMITS=false отключает лимиты), по умолчанию включаем только в production
+    const rawFlag = this.config.get<string>('CUSTOMERS_ENFORCE_LIMITS') ?? process.env.CUSTOMERS_ENFORCE_LIMITS;
+    if (typeof rawFlag === 'string' && rawFlag.length > 0) {
+      return !/^(0|false|no|off)$/i.test(rawFlag);
+    }
+    const env = (this.config.get<string>('NODE_ENV') ?? process.env.NODE_ENV ?? 'development').toLowerCase();
+    return env === 'production';
   }
 }

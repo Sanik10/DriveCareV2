@@ -181,40 +181,44 @@ export default function DashboardPage() {
             </Link>
 
             {/* Customers */}
-            <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50 hover:shadow-glass transition-shadow group">
-              <div className="space-y-4">
-                <div className="w-12 h-12 rounded-lg bg-accent/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Users className="w-6 h-6 text-accent" />
+            <Link href="/dashboard/customers">
+              <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50 hover:shadow-glass transition-shadow group cursor-pointer">
+                <div className="space-y-4">
+                  <div className="w-12 h-12 rounded-lg bg-accent/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Users className="w-6 h-6 text-accent" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">Клиенты</h3>
+                    <p className="text-sm text-muted-foreground">
+                      База клиентов и история обслуживания
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" className="w-full">
+                    Открыть
+                  </Button>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-lg">Клиенты</h3>
-                  <p className="text-sm text-muted-foreground">
-                    База клиентов и история обслуживания
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" className="w-full" disabled>
-                  Скоро
-                </Button>
-              </div>
-            </Card>
+              </Card>
+            </Link>
 
             {/* Vehicles */}
-            <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50 hover:shadow-glass transition-shadow group">
-              <div className="space-y-4">
-                <div className="w-12 h-12 rounded-lg bg-emerald-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Car className="w-6 h-6 text-emerald-500" />
+            <Link href="/dashboard/vehicles">
+              <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50 hover:shadow-glass transition-shadow group cursor-pointer">
+                <div className="space-y-4">
+                  <div className="w-12 h-12 rounded-lg bg-emerald-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Car className="w-6 h-6 text-emerald-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">Автомобили</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Учет автомобилей и техническая информация
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" className="w-full">
+                    Открыть
+                  </Button>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-lg">Автомобили</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Учет автомобилей и техническая информация
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" className="w-full" disabled>
-                  Скоро
-                </Button>
-              </div>
-            </Card>
+              </Card>
+            </Link>
 
             {/* Appointments */}
             <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50 hover:shadow-glass transition-shadow group">

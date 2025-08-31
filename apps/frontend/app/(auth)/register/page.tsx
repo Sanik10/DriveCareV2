@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Building2, ArrowRight, ArrowLeft, Check, AlertCircle, Eye, EyeOff } from 'lucide-react'
+import { Building2, ArrowRight, ArrowLeft, Check, AlertCircle, Eye, EyeOff, User, Mail, Phone, MapPin, Lock, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
 import { Button } from '@/components/ui/button'
@@ -189,130 +189,174 @@ export default function RegisterPage() {
     switch (currentStep) {
       case 0:
         return (
-          <div className="space-y-4">
-            <Input
-              {...register('companyName')}
-              placeholder="Название компании"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck="false"
-              data-form-type="other"
-              data-lpignore="true"
-              disabled={isLoading}
-              error={errors.companyName?.message || validationErrors.companyName}
-            />
-            <Input
-              {...register('companyLegalName')}
-              placeholder="Юридическое название"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck="false"
-              data-form-type="other"
-              data-lpignore="true"
-              disabled={isLoading}
-              error={errors.companyLegalName?.message || validationErrors.companyLegalName}
-            />
-            <Input
-              {...register('companyAddress')}
-              placeholder="Адрес (необязательно)"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck="false"
-              data-form-type="other"
-              data-lpignore="true"
-              disabled={isLoading}
-              error={errors.companyAddress?.message || validationErrors.companyAddress}
-            />
-            <Input
-              {...register('companyPhone')}
-              placeholder="Телефон (необязательно)"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck="false"
-              data-form-type="other"
-              data-lpignore="true"
-              disabled={isLoading}
-              error={errors.companyPhone?.message || validationErrors.companyPhone}
-            />
-            <Input
-              {...register('companyEmail')}
-              type="email"
-              placeholder="Email компании"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck="false"
-              data-form-type="other"
-              data-lpignore="true"
-              disabled={isLoading}
-              error={errors.companyEmail?.message || validationErrors.companyEmail}
-            />
+          <div className="space-y-5">
+            <div className="relative group">
+              <Building2 className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+              <Input
+                {...register('companyName')}
+                placeholder="Название компании"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                disabled={isLoading}
+                error={errors.companyName?.message || validationErrors.companyName}
+                className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+              />
+            </div>
+            
+            <div className="relative group">
+              <Building2 className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+              <Input
+                {...register('companyLegalName')}
+                placeholder="Юридическое название"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                disabled={isLoading}
+                error={errors.companyLegalName?.message || validationErrors.companyLegalName}
+                className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+              />
+            </div>
+            
+            <div className="relative group">
+              <MapPin className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+              <Input
+                {...register('companyAddress')}
+                placeholder="Адрес (необязательно)"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                disabled={isLoading}
+                error={errors.companyAddress?.message || validationErrors.companyAddress}
+                className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+              />
+            </div>
+            
+            <div className="relative group">
+              <Phone className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+              <Input
+                {...register('companyPhone')}
+                placeholder="Телефон (необязательно)"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                disabled={isLoading}
+                error={errors.companyPhone?.message || validationErrors.companyPhone}
+                className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+              />
+            </div>
+            
+            <div className="relative group">
+              <Mail className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+              <Input
+                {...register('companyEmail')}
+                type="email"
+                placeholder="Email компании"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                disabled={isLoading}
+                error={errors.companyEmail?.message || validationErrors.companyEmail}
+                className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+              />
+            </div>
           </div>
         )
       
       case 1:
         return (
-          <div className="space-y-4">
-            <Input
-              {...register('ownerEmail')}
-              type="email"
-              placeholder="Email владельца"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck="false"
-              data-form-type="other"
-              data-lpignore="true"
-              disabled={isLoading}
-              error={errors.ownerEmail?.message || validationErrors.ownerEmail}
-            />
-            <Input
-              {...register('ownerFirstName')}
-              placeholder="Имя владельца"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck="false"
-              data-form-type="other"
-              data-lpignore="true"
-              disabled={isLoading}
-              error={errors.ownerFirstName?.message || validationErrors.ownerFirstName}
-            />
-            <Input
-              {...register('ownerLastName')}
-              placeholder="Фамилия владельца"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck="false"
-              data-form-type="other"
-              data-lpignore="true"
-              disabled={isLoading}
-              error={errors.ownerLastName?.message || validationErrors.ownerLastName}
-            />
-            <Input
-              {...register('ownerPhone')}
-              placeholder="Телефон владельца (необязательно)"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck="false"
-              data-form-type="other"
-              data-lpignore="true"
-              disabled={isLoading}
-              error={errors.ownerPhone?.message || validationErrors.ownerPhone}
-            />
+          <div className="space-y-5">
+            <div className="relative group">
+              <Mail className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+              <Input
+                {...register('ownerEmail')}
+                type="email"
+                placeholder="Email владельца"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                disabled={isLoading}
+                error={errors.ownerEmail?.message || validationErrors.ownerEmail}
+                className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+              />
+            </div>
+            
+            <div className="relative group">
+              <User className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+              <Input
+                {...register('ownerFirstName')}
+                placeholder="Имя владельца"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                disabled={isLoading}
+                error={errors.ownerFirstName?.message || validationErrors.ownerFirstName}
+                className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+              />
+            </div>
+            
+            <div className="relative group">
+              <User className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+              <Input
+                {...register('ownerLastName')}
+                placeholder="Фамилия владельца"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                disabled={isLoading}
+                error={errors.ownerLastName?.message || validationErrors.ownerLastName}
+                className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+              />
+            </div>
+            
+            <div className="relative group">
+              <Phone className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+              <Input
+                {...register('ownerPhone')}
+                placeholder="Телефон владельца (необязательно)"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                disabled={isLoading}
+                error={errors.ownerPhone?.message || validationErrors.ownerPhone}
+                className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+              />
+            </div>
           </div>
         )
       
       case 2:
         return (
-          <div className="space-y-4">
-            <div className="relative">
+          <div className="space-y-5">
+            <div className="relative group">
+              <Lock className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
               <Input
                 {...register('ownerPassword')}
                 type={showPassword ? 'text' : 'password'}
@@ -325,23 +369,24 @@ export default function RegisterPage() {
                 data-lpignore="true"
                 disabled={isLoading}
                 error={errors.ownerPassword?.message || validationErrors.ownerPassword}
-                className="pr-12"
+                className="pl-12 pr-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-all duration-200 hover:scale-110"
                 disabled={isLoading}
               >
                 {showPassword ? (
-                  <EyeOff className="w-4 h-4" />
+                  <EyeOff className="w-5 h-5" />
                 ) : (
-                  <Eye className="w-4 h-4" />
+                  <Eye className="w-5 h-5" />
                 )}
               </button>
             </div>
 
-            <div className="relative">
+            <div className="relative group">
+              <Lock className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
               <Input
                 {...register('confirmPassword')}
                 type={showConfirmPassword ? 'text' : 'password'}
@@ -354,42 +399,42 @@ export default function RegisterPage() {
                 data-lpignore="true"
                 disabled={isLoading}
                 error={errors.confirmPassword?.message}
-                className="pr-12"
+                className="pl-12 pr-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-all duration-200 hover:scale-110"
                 disabled={isLoading}
               >
                 {showConfirmPassword ? (
-                  <EyeOff className="w-4 h-4" />
+                  <EyeOff className="w-5 h-5" />
                 ) : (
-                  <Eye className="w-4 h-4" />
+                  <Eye className="w-5 h-5" />
                 )}
               </button>
             </div>
 
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3 p-4 rounded-2xl glass-subtle border border-border/30">
               <input
                 {...register('acceptTerms')}
                 type="checkbox"
-                className="mt-1.5 w-4 h-4 text-primary border-border rounded focus:ring-primary focus:ring-2"
+                className="mt-1 w-4 h-4 text-primary border-border rounded focus:ring-primary focus:ring-2"
                 disabled={isLoading}
               />
               <div className="text-sm">
-                <label className="text-foreground">
+                <label className="text-foreground leading-relaxed">
                   Я принимаю{' '}
-                  <Link href="/terms" className="text-primary hover:text-secondary transition-colors">
+                  <Link href="/terms" className="text-primary hover:text-secondary transition-colors underline">
                     Условия использования
                   </Link>
                   {' '}и{' '}
-                  <Link href="/privacy" className="text-primary hover:text-secondary transition-colors">
+                  <Link href="/privacy" className="text-primary hover:text-secondary transition-colors underline">
                     Политику конфиденциальности
                   </Link>
                 </label>
                 {errors.acceptTerms && (
-                  <p className="text-destructive text-sm mt-1">{errors.acceptTerms.message}</p>
+                  <p className="text-destructive text-sm mt-2">{errors.acceptTerms.message}</p>
                 )}
               </div>
             </div>
@@ -402,55 +447,90 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen relative">
-      {/* Fixed Background Effects */}
-      <div className="fixed inset-0 bg-gradient-to-br from-background via-background to-surface-1 -z-10"></div>
-      <div className="fixed inset-0 bg-gradient-surface -z-10"></div>
-      <div className="fixed top-0 right-0 w-96 h-96 bg-gradient-primary opacity-10 rounded-full blur-3xl -z-10"></div>
-      <div className="fixed bottom-0 left-0 w-64 h-64 bg-secondary/20 rounded-full blur-3xl -z-10"></div>
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Optimized Background - Static gradients only */}
+      <div 
+        className="fixed inset-0 -z-10"
+        style={{
+          background: `
+            radial-gradient(ellipse 700px 450px at 20% 30%, rgba(168, 85, 247, 0.15) 0%, transparent 65%),
+            radial-gradient(ellipse 600px 600px at 80% 70%, rgba(99, 102, 241, 0.12) 0%, transparent 65%),
+            radial-gradient(ellipse 650px 400px at 40% 80%, rgba(14, 165, 233, 0.08) 0%, transparent 65%)
+          `
+        }}
+      />
       
-      <div className="flex items-center justify-center min-h-screen p-6">
+      {/* Simplified floating orbs - only 2 orbs with lighter effects */}
+      <div className="fixed inset-0 -z-10 pointer-events-none">
+        <div 
+          className="absolute rounded-full register-orb-1"
+          style={{
+            width: '300px',
+            height: '300px',
+            filter: 'blur(60px)',
+            top: '10%',
+            left: '10%',
+            background: 'radial-gradient(circle, rgba(168, 85, 247, 0.08) 0%, transparent 70%)',
+            willChange: 'transform',
+          }}
+        />
+        
+        <div 
+          className="absolute rounded-full register-orb-2"
+          style={{
+            width: '350px',
+            height: '350px',
+            filter: 'blur(65px)',
+            top: '40%',
+            right: '10%',
+            background: 'radial-gradient(circle, rgba(14, 165, 233, 0.06) 0%, transparent 70%)',
+            willChange: 'transform',
+          }}
+        />
+      </div>
+      
+      <div className="flex items-center justify-center min-h-screen p-6 relative z-10">
         <div className="w-full max-w-2xl space-y-8">
           {/* Header */}
           <div className="text-center space-y-6">
-            <Link href="/" className="inline-block">
+            <Link href="/" className="inline-block group">
               <div className="flex items-center justify-center">
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-primary">
-                  <Building2 className="w-6 h-6 text-white" />
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-primary shadow-glass-lg transition-all duration-300 group-hover:scale-105 group-hover:shadow-xl">
+                  <Building2 className="w-7 h-7 text-white" />
                 </div>
               </div>
             </Link>
-            <div className="space-y-2">
-              <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+            <div className="space-y-3">
+              <h1 className="text-4xl font-bold text-gradient-primary">
                 Регистрация автосервиса
               </h1>
-              <p className="text-muted-foreground">
+              <p className="text-lg text-muted-foreground">
                 {steps[currentStep].description}
               </p>
             </div>
           </div>
 
-          {/* Steps Progress */}
+          {/* Enhanced Steps Progress */}
           <div className="flex items-center justify-center">
             <div className="flex items-center space-x-4">
               {steps.map((step, index) => (
                 <div key={index} className="flex items-center">
-                  <div className={`flex items-center justify-center w-10 h-10 rounded-full text-sm font-medium transition-colors ${
+                  <div className={`flex items-center justify-center w-12 h-12 rounded-full text-sm font-medium transition-all duration-300 ${
                     index < currentStep 
-                      ? 'bg-primary text-white' 
+                      ? 'bg-gradient-primary text-white shadow-glass' 
                       : index === currentStep 
-                        ? 'bg-primary text-white' 
-                        : 'bg-surface-1 text-muted-foreground border border-border'
+                        ? 'bg-gradient-primary text-white shadow-glass scale-110' 
+                        : 'bg-surface-1 text-muted-foreground border border-border glass-subtle'
                   }`}>
                     {index < currentStep ? (
-                      <Check className="w-4 h-4" />
+                      <Check className="w-5 h-5" />
                     ) : (
                       index + 1
                     )}
                   </div>
                   {index < steps.length - 1 && (
-                    <div className={`w-12 h-0.5 mx-2 transition-colors ${
-                      index < currentStep ? 'bg-primary' : 'bg-border'
+                    <div className={`w-16 h-0.5 mx-3 transition-all duration-500 ${
+                      index < currentStep ? 'bg-gradient-primary shadow-glow' : 'bg-border'
                     }`} />
                   )}
                 </div>
@@ -458,8 +538,8 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Form */}
-          <Card className="p-8 shadow-glass border-border/50 backdrop-blur-sm bg-card/80">
+          {/* Enhanced Form */}
+          <Card className="p-8 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 rounded-3xl surface-glow">
             <form 
               onSubmit={handleSubmit(currentStep === steps.length - 1 ? onSubmit : onNext)} 
               className="space-y-6"
@@ -468,65 +548,71 @@ export default function RegisterPage() {
             >
               {/* API Error */}
               {apiError && (
-                <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20">
-                  <AlertCircle className="w-4 h-4 text-destructive" />
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 animate-in slide-in-from-top-2 duration-300">
+                  <AlertCircle className="w-5 h-5 text-destructive" />
                   <p className="text-sm text-destructive">{apiError}</p>
                 </div>
               )}
 
               {/* Validation Errors */}
               {Object.keys(validationErrors).length > 0 && (
-                <div className="space-y-2 p-3 rounded-md bg-destructive/10 border border-destructive/20">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-destructive" />
+                <div className="space-y-3 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 animate-in slide-in-from-top-2 duration-300">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="w-5 h-5 text-destructive" />
                     <p className="text-sm font-medium text-destructive">Ошибки валидации:</p>
                   </div>
-                  <ul className="text-sm text-destructive space-y-1">
+                  <ul className="text-sm text-destructive space-y-1 ml-8">
                     {Object.values(validationErrors).map((error, idx) => (
-                      <li key={idx}>• {error}</li>
+                      <li key={idx} className="flex items-center gap-2">
+                        <div className="w-1 h-1 bg-destructive rounded-full" />
+                        {error}
+                      </li>
                     ))}
                   </ul>
                 </div>
               )}
 
-              <div className="space-y-1">
-                <h3 className="text-xl font-semibold">{steps[currentStep].title}</h3>
-                <p className="text-sm text-muted-foreground">{steps[currentStep].description}</p>
+              <div className="space-y-4">
+                <div className="text-center space-y-2">
+                  <Sparkles className="w-6 h-6 text-primary mx-auto" />
+                  <h3 className="text-xl font-semibold">{steps[currentStep].title}</h3>
+                  <p className="text-sm text-muted-foreground">{steps[currentStep].description}</p>
+                </div>
+
+                {renderStep()}
               </div>
 
-              {renderStep()}
-
-              <div className="flex items-center justify-between pt-4">
+              <div className="flex items-center justify-between pt-6">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={onBack}
                   disabled={currentStep === 0 || isLoading}
-                  className="group"
+                  className="group h-12 rounded-2xl btn-outline-fixed"
                 >
-                  <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
+                  <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform duration-300" />
                   Назад
                 </Button>
 
                 <Button
                   type="submit"
-                  className="group bg-gradient-primary hover:opacity-90 text-white"
+                  className="group h-14 bg-gradient-primary hover:opacity-90 text-white font-medium rounded-2xl transition-all duration-300 hover:scale-[1.02] hover:shadow-glass-lg px-8"
                   disabled={isLoading}
                 >
                   {isLoading ? (
                     <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      {currentStep === steps.length - 1 ? 'Создание...' : 'Загрузка...'}
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      {currentStep === steps.length - 1 ? 'Создание аккаунта...' : 'Загрузка...'}
                     </div>
                   ) : currentStep === steps.length - 1 ? (
                     <div className="flex items-center gap-2">
-                      Создать аккаунт
-                      <Check className="w-4 h-4" />
+                      <Sparkles className="w-5 h-5" />
+                      Создать автосервис
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
                       Далее
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
                     </div>
                   )}
                 </Button>
@@ -540,7 +626,7 @@ export default function RegisterPage() {
               Уже есть аккаунт?{' '}
               <Link
                 href="/login"
-                className="text-primary hover:text-secondary transition-colors font-medium"
+                className="text-primary hover:text-secondary transition-colors font-medium hover:underline"
               >
                 Войти в систему
               </Link>
@@ -548,13 +634,48 @@ export default function RegisterPage() {
             
             <Link 
               href="/" 
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300 hover:underline inline-flex items-center gap-2"
             >
               ← Вернуться на главную
             </Link>
           </div>
         </div>
       </div>
+
+      {/* Simplified CSS animations */}
+      <style jsx global>{`
+        .register-orb-1 {
+          animation: gentle-float-1 20s ease-in-out infinite;
+        }
+
+        .register-orb-2 {
+          animation: gentle-float-2 25s ease-in-out infinite;
+        }
+
+        @keyframes gentle-float-1 {
+          0%, 100% { 
+            transform: translate3d(0, 0, 0) scale(1); 
+          }
+          50% { 
+            transform: translate3d(10px, -10px, 0) scale(1.05); 
+          }
+        }
+
+        @keyframes gentle-float-2 {
+          0%, 100% { 
+            transform: translate3d(0, 0, 0) scale(1); 
+          }
+          50% { 
+            transform: translate3d(-8px, 12px, 0) scale(0.95); 
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .register-orb-1, .register-orb-2 {
+            animation: none !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

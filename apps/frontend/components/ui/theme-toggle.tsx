@@ -29,7 +29,7 @@ export function ThemeToggle() {
         <Button
           variant="ghost"
           size="sm"
-          className="h-9 w-auto px-3 rounded-md border border-border/50 hover:bg-accent gap-2"
+          className="h-10 w-auto px-4 rounded-2xl glass border-border/50 hover:bg-surface-1 gap-2 transition-all duration-300"
         >
           <CurrentIcon className="h-4 w-4" />
           <span className="text-sm hidden sm:inline">
@@ -38,10 +38,13 @@ export function ThemeToggle() {
           <ChevronDown className="h-3 w-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[160px]">
+      <DropdownMenuContent 
+        align="end" 
+        className="min-w-[160px] rounded-2xl glass border-border/50 shadow-glass-lg"
+      >
         <DropdownMenuItem 
           onClick={() => setTheme("light")}
-          className="gap-2 cursor-pointer"
+          className="gap-2 cursor-pointer rounded-xl transition-colors duration-200"
         >
           <Sun className="h-4 w-4" />
           <span>Светлая</span>
@@ -49,7 +52,7 @@ export function ThemeToggle() {
         </DropdownMenuItem>
         <DropdownMenuItem 
           onClick={() => setTheme("dark")}
-          className="gap-2 cursor-pointer"
+          className="gap-2 cursor-pointer rounded-xl transition-colors duration-200"
         >
           <Moon className="h-4 w-4" />
           <span>Тёмная</span>
@@ -57,7 +60,7 @@ export function ThemeToggle() {
         </DropdownMenuItem>
         <DropdownMenuItem 
           onClick={() => setTheme("system")}
-          className="gap-2 cursor-pointer"
+          className="gap-2 cursor-pointer rounded-xl transition-colors duration-200"
         >
           <Monitor className="h-4 w-4" />
           <span>Автоматическая</span>

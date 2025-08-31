@@ -1,13 +1,9 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class InitSchema1756497937821 implements MigrationInterface {
-    name = 'InitSchema1756497937821'
+export class InitSchema1756575611312 implements MigrationInterface {
+    name = 'InitSchema1756575611312'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`CREATE TABLE "work_schedules" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid NOT NULL, "userId" uuid NOT NULL, "dayOfWeek" integer NOT NULL, "startTime" TIME, "endTime" TIME, "isDayOff" boolean NOT NULL DEFAULT false, "breakStartTime" TIME, "breakEndTime" TIME, "efficiency" numeric(3,2) NOT NULL DEFAULT '1', "skillMatrix" jsonb DEFAULT ('[]')::jsonb, "shiftType" character varying(50) NOT NULL DEFAULT 'flexible', "maxConsecutiveDays" integer NOT NULL DEFAULT '5', "preferredDaysOff" jsonb DEFAULT ('[]')::jsonb, "isActive" boolean NOT NULL DEFAULT true, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "uq_work_schedule_company_user_day" UNIQUE ("companyId", "userId", "dayOfWeek"), CONSTRAINT "chk_ws_shift_duration_bounds" CHECK (("isDayOff" = true) OR ((EXTRACT(EPOCH FROM ("endTime"::time - "startTime"::time))/3600) BETWEEN 2 AND 12)), CONSTRAINT "chk_ws_break_duration_bounds" CHECK ((("breakStartTime" IS NULL AND "breakEndTime" IS NULL) OR ((EXTRACT(EPOCH FROM ("breakEndTime"::time - "breakStartTime"::time))/60) BETWEEN 15 AND 120))), CONSTRAINT "chk_ws_break_within_work" CHECK (("breakStartTime" IS NULL AND "breakEndTime" IS NULL) OR ("breakStartTime" >= "startTime" AND "breakEndTime" <= "endTime" AND "breakEndTime" > "breakStartTime")), CONSTRAINT "chk_ws_efficiency_bounds" CHECK (("efficiency" >= 0.5 AND "efficiency" <= 2.0)), CONSTRAINT "chk_ws_time_range" CHECK (("isDayOff" = true) OR ("endTime" > "startTime")), CONSTRAINT "PK_f5251879700e5ca0d2e353fa34f" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "idx_work_schedule_company_day" ON "work_schedules" ("companyId", "dayOfWeek") `);
-        await queryRunner.query(`CREATE INDEX "idx_work_schedule_company_active" ON "work_schedules" ("companyId", "isActive") `);
-        await queryRunner.query(`CREATE INDEX "idx_work_schedule_company" ON "work_schedules" ("companyId") `);
         await queryRunner.query(`CREATE TABLE "companies" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "name" character varying(255) NOT NULL, "legal_name" character varying(255) NOT NULL, "tax_number" character varying(12), "address" text, "phone" character varying(20), "email" character varying(255) NOT NULL, "website" character varying(500), "logo_url" character varying(1000), "working_hours" jsonb, "is_active" boolean NOT NULL DEFAULT true, "data_retention_until" TIMESTAMP WITH TIME ZONE, "pdp_consent_version" character varying(50), "pdp_consent_date" TIMESTAMP WITH TIME ZONE, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_d0af6f5866201d5cb424767744a" UNIQUE ("email"), CONSTRAINT "PK_d4bc3e82a314fa9e29f652c2c22" PRIMARY KEY ("id")); COMMENT ON COLUMN "companies"."name" IS 'Название компании (ПДн при наличии ИП)'; COMMENT ON COLUMN "companies"."legal_name" IS 'Юридическое название'; COMMENT ON COLUMN "companies"."tax_number" IS 'ИНН (ПДн для ИП)'; COMMENT ON COLUMN "companies"."address" IS 'Адрес (может содержать ПДн)'; COMMENT ON COLUMN "companies"."phone" IS 'Телефон компании'; COMMENT ON COLUMN "companies"."email" IS 'Email компании'; COMMENT ON COLUMN "companies"."working_hours" IS 'Часы работы в формате JSON'; COMMENT ON COLUMN "companies"."data_retention_until" IS 'Дата до которой храним ПДн компании (152-ФЗ)'; COMMENT ON COLUMN "companies"."pdp_consent_version" IS 'Версия согласия на обработку ПДн'; COMMENT ON COLUMN "companies"."pdp_consent_date" IS 'Дата согласия на обработку ПДн'`);
         await queryRunner.query(`CREATE INDEX "IDX_774de87b5d9acde9112a1645ef" ON "companies" ("tax_number") WHERE tax_number IS NOT NULL`);
         await queryRunner.query(`CREATE INDEX "IDX_b559ae26b6f801536d28109453" ON "companies" ("created_at") `);
@@ -27,9 +23,6 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`CREATE INDEX "IDX_eea946a495b5724fd8b31149aa" ON "vehicle_models" ("is_deleted") `);
         await queryRunner.query(`CREATE UNIQUE INDEX "IDX_bddf5fcb0c09ab5d6ccd46e8d9" ON "vehicle_models" ("brand_id", "name_normalized") WHERE is_deleted = false`);
         await queryRunner.query(`CREATE INDEX "IDX_e71c84a17f9c006260e2d487c0" ON "vehicle_models" ("brand_id") `);
-        await queryRunner.query(`CREATE TABLE "vehicle_types" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "name" character varying(100) NOT NULL, "name_normalized" character varying(110) NOT NULL, "description" text, "is_active" boolean NOT NULL DEFAULT true, "is_deleted" boolean NOT NULL DEFAULT false, "deleted_at" TIMESTAMP WITH TIME ZONE, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_73d1e40f4add7f4f6947acad3a8" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_74a36c6f923c86278b726e9881" ON "vehicle_types" ("is_deleted") `);
-        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_007a712afe075e18d9d822f6fb" ON "vehicle_types" ("name_normalized") WHERE is_deleted = false`);
         await queryRunner.query(`CREATE TABLE "vehicles_service_history" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "vehicle_id" uuid NOT NULL, "company_id" uuid NOT NULL, "order_id" uuid, "date" date NOT NULL, "mileage" integer, "description" text NOT NULL, "next_service_date" date, "notes" text, "is_deleted" boolean NOT NULL DEFAULT false, "deleted_at" TIMESTAMP WITH TIME ZONE, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_06dae9ee9f5e7e93139bf64ccbf" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_e96c683d729bb813d19ae173cb" ON "vehicles_service_history" ("next_service_date") `);
         await queryRunner.query(`CREATE INDEX "IDX_3866b386f2136abf529d03d122" ON "vehicles_service_history" ("is_deleted") `);
@@ -43,17 +36,30 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`CREATE UNIQUE INDEX "IDX_33467e9fe9f0278ffc281ccba9" ON "vehicles" ("vin") WHERE vin IS NOT NULL AND is_deleted = false`);
         await queryRunner.query(`CREATE INDEX "IDX_c1cda98f67cb9c79a1f1153e62" ON "vehicles" ("customer_id") `);
         await queryRunner.query(`CREATE INDEX "IDX_e11ef2dcd880132d31bd9f92c2" ON "vehicles" ("company_id") `);
+        await queryRunner.query(`CREATE TABLE "vehicle_types" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "name" character varying(100) NOT NULL, "name_normalized" character varying(110) NOT NULL, "description" text, "is_active" boolean NOT NULL DEFAULT true, "is_deleted" boolean NOT NULL DEFAULT false, "deleted_at" TIMESTAMP WITH TIME ZONE, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_73d1e40f4add7f4f6947acad3a8" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_74a36c6f923c86278b726e9881" ON "vehicle_types" ("is_deleted") `);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_007a712afe075e18d9d822f6fb" ON "vehicle_types" ("name_normalized") WHERE is_deleted = false`);
+        await queryRunner.query(`CREATE TABLE "work_schedules" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid NOT NULL, "userId" uuid NOT NULL, "dayOfWeek" integer NOT NULL, "startTime" TIME, "endTime" TIME, "isDayOff" boolean NOT NULL DEFAULT false, "breakStartTime" TIME, "breakEndTime" TIME, "efficiency" numeric(3,2) NOT NULL DEFAULT '1', "skillMatrix" jsonb DEFAULT ('[]')::jsonb, "shiftType" character varying(50) NOT NULL DEFAULT 'flexible', "maxConsecutiveDays" integer NOT NULL DEFAULT '5', "preferredDaysOff" jsonb DEFAULT ('[]')::jsonb, "isActive" boolean NOT NULL DEFAULT true, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "uq_work_schedule_company_user_day" UNIQUE ("companyId", "userId", "dayOfWeek"), CONSTRAINT "chk_ws_shift_duration_bounds" CHECK (("isDayOff" = true) OR ((EXTRACT(EPOCH FROM ("endTime"::time - "startTime"::time))/3600) BETWEEN 2 AND 12)), CONSTRAINT "chk_ws_break_duration_bounds" CHECK ((("breakStartTime" IS NULL AND "breakEndTime" IS NULL) OR ((EXTRACT(EPOCH FROM ("breakEndTime"::time - "breakStartTime"::time))/60) BETWEEN 15 AND 120))), CONSTRAINT "chk_ws_break_within_work" CHECK (("breakStartTime" IS NULL AND "breakEndTime" IS NULL) OR ("breakStartTime" >= "startTime" AND "breakEndTime" <= "endTime" AND "breakEndTime" > "breakStartTime")), CONSTRAINT "chk_ws_efficiency_bounds" CHECK (("efficiency" >= 0.5 AND "efficiency" <= 2.0)), CONSTRAINT "chk_ws_time_range" CHECK (("isDayOff" = true) OR ("endTime" > "startTime")), CONSTRAINT "PK_f5251879700e5ca0d2e353fa34f" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "idx_work_schedule_company_day" ON "work_schedules" ("companyId", "dayOfWeek") `);
+        await queryRunner.query(`CREATE INDEX "idx_work_schedule_company_active" ON "work_schedules" ("companyId", "isActive") `);
+        await queryRunner.query(`CREATE INDEX "idx_work_schedule_company" ON "work_schedules" ("companyId") `);
         await queryRunner.query(`CREATE TABLE "permissions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "name" character varying(100) NOT NULL, "code" character varying(100) NOT NULL, "description" text, "group" character varying(50), "created_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_8dad765629e83229da6feda1c1d" UNIQUE ("code"), CONSTRAINT "PK_920331560282b8bd21bb02290df" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TABLE "roles" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "name" character varying(50) NOT NULL, "description" text, "is_system" boolean NOT NULL DEFAULT false, "company_id" uuid, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_9acb61b0b5c438c8c68f6eb91a1" UNIQUE ("name", "company_id"), CONSTRAINT "PK_c1433d71a4838793a49dcad46ab" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TABLE "users" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "company_id" uuid, "email" character varying(255) NOT NULL, "password_hash" character varying(255) NOT NULL, "first_name" character varying(100) NOT NULL, "last_name" character varying(100) NOT NULL, "phone" character varying(50), "avatar_url" character varying(255), "specialization" character varying(100), "is_active" boolean NOT NULL DEFAULT true, "last_login_at" TIMESTAMP, "role_id" uuid NOT NULL, "two_factor_enabled" boolean NOT NULL DEFAULT false, "two_factor_secret" character varying(255), "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_97672ac88f789774dd47f7c8be3" UNIQUE ("email"), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TABLE "user_sessions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" uuid NOT NULL, "device_id" character varying(100) NOT NULL, "device_name" character varying(255), "refresh_token_hash" character varying(255) NOT NULL, "jti" character varying(64) NOT NULL, "user_agent" text NOT NULL, "ip_address" character varying(45) NOT NULL, "ip_subnet" character varying(64), "expires_at" TIMESTAMP NOT NULL, "is_active" boolean NOT NULL DEFAULT true, "last_used_at" TIMESTAMP, "device_fingerprint" character varying(64), "compromised_at" TIMESTAMP, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_e93e031a5fed190d4789b6bfd83" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TABLE "user_consents" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" uuid NOT NULL, "consent_type" character varying(50) NOT NULL, "policy_version" character varying(20) NOT NULL, "policy_text_hash" character varying(64) NOT NULL, "ip_address" character varying(45), "user_agent" text, "granted_at" TIMESTAMP NOT NULL DEFAULT now(), "revoked_at" TIMESTAMP, CONSTRAINT "PK_65e4c6d6204ad8719abf4b30326" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_6283f1222bdc2390cf16836ce7" ON "user_consents" ("user_id") `);
+        await queryRunner.query(`CREATE INDEX "IDX_fc51c44e296132242ed415f181" ON "user_consents" ("consent_type") `);
         await queryRunner.query(`CREATE TABLE "tariffs" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "name" character varying(100) NOT NULL, "name_normalized" character varying(100) NOT NULL, "description" text, "price_monthly" numeric(10,2) NOT NULL, "price_yearly" numeric(10,2) NOT NULL, "max_users" integer, "max_customers" integer, "max_vehicles" integer, "max_orders" integer, "features" jsonb, "is_active" boolean NOT NULL DEFAULT true, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "uq_tariffs_name_normalized" UNIQUE ("name_normalized"), CONSTRAINT "CHK_7039e890ed61e0a0268a7af775" CHECK ("max_orders" IS NULL OR "max_orders" >= -1), CONSTRAINT "CHK_6f1a9b629b540ebcc313ff6421" CHECK ("max_vehicles" IS NULL OR "max_vehicles" >= -1), CONSTRAINT "CHK_f9c0e14acdacdb56ae88d309e2" CHECK ("max_customers" IS NULL OR "max_customers" >= -1), CONSTRAINT "CHK_5da14a9b52f7dd21724b2985c3" CHECK ("max_users" IS NULL OR "max_users" >= -1), CONSTRAINT "CHK_dc6bd452fec211f4ef1686206e" CHECK ("price_monthly" >= 0 AND "price_yearly" >= 0), CONSTRAINT "PK_7f32baf8d8b4bb0cf4d7ac97741" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "idx_tariffs_name" ON "tariffs" ("name") `);
         await queryRunner.query(`CREATE INDEX "idx_tariffs_active" ON "tariffs" ("is_active") `);
         await queryRunner.query(`CREATE INDEX "idx_tariffs_created_at" ON "tariffs" ("created_at") `);
-        await queryRunner.query(`CREATE TABLE "user_consents" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" uuid NOT NULL, "consent_type" character varying(50) NOT NULL, "policy_version" character varying(20) NOT NULL, "policy_text_hash" character varying(64) NOT NULL, "ip_address" character varying(45), "user_agent" text, "granted_at" TIMESTAMP NOT NULL DEFAULT now(), "revoked_at" TIMESTAMP, CONSTRAINT "PK_65e4c6d6204ad8719abf4b30326" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_6283f1222bdc2390cf16836ce7" ON "user_consents" ("user_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_fc51c44e296132242ed415f181" ON "user_consents" ("consent_type") `);
+        await queryRunner.query(`CREATE TYPE "public"."suppliers_suppliertype_enum" AS ENUM('manufacturer', 'distributor', 'wholesaler', 'retailer', 'service_provider', 'other')`);
+        await queryRunner.query(`CREATE TABLE "suppliers" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid NOT NULL, "name" character varying(255) NOT NULL, "contactName" character varying(100), "email" character varying(255), "phone" character varying(50), "address" text, "city" character varying(100), "country" character varying(100), "taxNumber" character varying(50), "website" character varying(255), "supplierType" "public"."suppliers_suppliertype_enum" NOT NULL DEFAULT 'distributor', "paymentTerms" character varying(200), "deliveryTerms" character varying(200), "notes" text, "isActive" boolean NOT NULL DEFAULT true, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_b70ac51766a9e3144f778cfe81e" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "idx_suppliers_company_taxnumber_unique" ON "suppliers" ("companyId", "taxNumber") WHERE "taxNumber" IS NOT NULL`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "idx_suppliers_company_email_unique" ON "suppliers" ("companyId", "email") WHERE "email" IS NOT NULL`);
+        await queryRunner.query(`CREATE INDEX "idx_suppliers_isactive" ON "suppliers" ("isActive") `);
+        await queryRunner.query(`CREATE INDEX "idx_suppliers_companyid" ON "suppliers" ("companyId") `);
         await queryRunner.query(`CREATE TYPE "public"."subscription_status_enum" AS ENUM('active', 'pending', 'suspended', 'canceled', 'expired', 'inactive')`);
         await queryRunner.query(`CREATE TABLE "subscriptions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "company_id" uuid NOT NULL, "tariff_id" uuid NOT NULL, "start_date" TIMESTAMP WITH TIME ZONE NOT NULL, "end_date" TIMESTAMP WITH TIME ZONE NOT NULL, "status" "public"."subscription_status_enum" NOT NULL DEFAULT 'pending', "payment_method" character varying(50), "auto_renew" boolean NOT NULL DEFAULT false, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "CHK_dda3fb4d7663484b2e08a521eb" CHECK ("end_date" > "start_date"), CONSTRAINT "PK_a87248d73155605cf782be9ee5e" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_7e3cc01c420db5151aa2136035" ON "subscriptions" ("company_id") `);
@@ -83,12 +89,6 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`CREATE INDEX "IDX_e308eb9e8f2abc30eaa067959b" ON "subscription_consents" ("status") `);
         await queryRunner.query(`CREATE INDEX "IDX_860ee1954cafb7cde803ee9444" ON "subscription_consents" ("created_at") `);
         await queryRunner.query(`CREATE UNIQUE INDEX "uniq_active_consent_per_type" ON "subscription_consents" ("subscription_id", "consent_type") WHERE status = 'granted'`);
-        await queryRunner.query(`CREATE TYPE "public"."suppliers_suppliertype_enum" AS ENUM('manufacturer', 'distributor', 'wholesaler', 'retailer', 'service_provider', 'other')`);
-        await queryRunner.query(`CREATE TABLE "suppliers" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid NOT NULL, "name" character varying(255) NOT NULL, "contactName" character varying(100), "email" character varying(255), "phone" character varying(50), "address" text, "city" character varying(100), "country" character varying(100), "taxNumber" character varying(50), "website" character varying(255), "supplierType" "public"."suppliers_suppliertype_enum" NOT NULL DEFAULT 'distributor', "paymentTerms" character varying(200), "deliveryTerms" character varying(200), "notes" text, "isActive" boolean NOT NULL DEFAULT true, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_b70ac51766a9e3144f778cfe81e" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE UNIQUE INDEX "idx_suppliers_company_taxnumber_unique" ON "suppliers" ("companyId", "taxNumber") WHERE "taxNumber" IS NOT NULL`);
-        await queryRunner.query(`CREATE UNIQUE INDEX "idx_suppliers_company_email_unique" ON "suppliers" ("companyId", "email") WHERE "email" IS NOT NULL`);
-        await queryRunner.query(`CREATE INDEX "idx_suppliers_isactive" ON "suppliers" ("isActive") `);
-        await queryRunner.query(`CREATE INDEX "idx_suppliers_companyid" ON "suppliers" ("companyId") `);
         await queryRunner.query(`CREATE TABLE "part_categories" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid, "name" character varying(100) NOT NULL, "description" text, "code" character varying(50), "isActive" boolean NOT NULL DEFAULT true, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_6070cc11099e9ef60593846832c" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TABLE "parts" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid NOT NULL, "categoryId" uuid NOT NULL, "name" character varying(255) NOT NULL, "partNumber" character varying(100), "brand" character varying(100), "description" text, "costPrice" numeric(10,2) NOT NULL DEFAULT '0', "sellingPrice" numeric(10,2) NOT NULL DEFAULT '0', "isActive" boolean NOT NULL DEFAULT true, "imageUrl" character varying(500), "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "category_id" uuid, CONSTRAINT "chk_parts_sellingprice_nonneg" CHECK ("sellingPrice" >= 0), CONSTRAINT "chk_parts_costprice_nonneg" CHECK ("costPrice" >= 0), CONSTRAINT "PK_daa5595bb8933f49ac00c9ebc79" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE UNIQUE INDEX "idx_parts_company_partnumber_unique" ON "parts" ("companyId", "partNumber") WHERE "partNumber" IS NOT NULL`);
@@ -110,7 +110,6 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`CREATE INDEX "IDX_6a3c76ee765376431d8f927858" ON "subscription_compliance_logs" ("risk_level") `);
         await queryRunner.query(`CREATE INDEX "IDX_81fbd794573a01d5e004f85c84" ON "subscription_compliance_logs" ("created_at") `);
         await queryRunner.query(`CREATE INDEX "idx_comp_logs_company_created" ON "subscription_compliance_logs" ("company_id", "created_at") `);
-        await queryRunner.query(`CREATE TABLE "service_categories" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid, "name" character varying(100) NOT NULL, "description" text, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_fe4da5476c4ffe5aa2d3524ae68" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TABLE "services" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid NOT NULL, "categoryId" uuid NOT NULL, "name" character varying(255) NOT NULL, "description" text, "price" numeric(10,2) NOT NULL, "durationMinutes" integer NOT NULL, "isActive" boolean NOT NULL DEFAULT true, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_ba2d347a3168a296416c6c5ccb2" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TYPE "public"."schedule_exceptions_type_enum" AS ENUM('vacation', 'sick_leave', 'holiday', 'training', 'overtime', 'personal')`);
         await queryRunner.query(`CREATE TYPE "public"."schedule_exceptions_status_enum" AS ENUM('pending', 'approved', 'rejected')`);
@@ -119,6 +118,7 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`CREATE INDEX "idx_se_company_start_end" ON "schedule_exceptions" ("companyId", "startDate", "endDate") `);
         await queryRunner.query(`CREATE INDEX "idx_se_company_status" ON "schedule_exceptions" ("companyId", "status") `);
         await queryRunner.query(`CREATE INDEX "idx_se_company_user" ON "schedule_exceptions" ("companyId", "userId") `);
+        await queryRunner.query(`CREATE TABLE "service_categories" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid, "name" character varying(100) NOT NULL, "description" text, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_fe4da5476c4ffe5aa2d3524ae68" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TABLE "order_services" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "orderId" uuid NOT NULL, "serviceId" uuid NOT NULL, "price" numeric(10,2) NOT NULL, "quantity" integer NOT NULL DEFAULT '1', "discountPercent" numeric(5,2) NOT NULL DEFAULT '0', "totalAmount" numeric(10,2) NOT NULL, "status" character varying(20) NOT NULL DEFAULT 'planned', "mechanicId" uuid, "startTime" TIMESTAMP WITH TIME ZONE, "endTime" TIMESTAMP WITH TIME ZONE, "notes" text, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_74f048f792fe40516ac248ce060" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_7e886c578320ba8364b93266ec" ON "order_services" ("mechanicId") `);
         await queryRunner.query(`CREATE INDEX "IDX_714fa9ff7e2a619c3102352fd1" ON "order_services" ("serviceId") `);
@@ -167,11 +167,11 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`CREATE UNIQUE INDEX "uq_reservation_idempotency" ON "part_reservations" ("company_id", "idempotency_key") WHERE idempotency_key IS NOT NULL`);
         await queryRunner.query(`CREATE INDEX "IDX_94280c1d081a3948d2d28bc992" ON "part_reservations" ("part_id", "company_id") `);
         await queryRunner.query(`CREATE INDEX "IDX_4fb77c88df59423c18a762d436" ON "part_reservations" ("company_id") `);
-        await queryRunner.query(`CREATE TABLE "inventory" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid NOT NULL, "partId" uuid NOT NULL, "quantity" integer NOT NULL DEFAULT '0', "minQuantity" integer NOT NULL DEFAULT '0', "location" character varying(100), "lastRestockDate" date, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "part_id" uuid, CONSTRAINT "PK_82aa5da437c5bbfb80703b08309" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TABLE "inventory_alerts" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid NOT NULL, "part_id" uuid NOT NULL, "type" character varying(50) NOT NULL DEFAULT 'low_stock', "priority" character varying(20) NOT NULL DEFAULT 'medium', "title" character varying(200), "message" text, "currentQuantity" integer, "thresholdQuantity" integer, "metadata" jsonb, "isActive" boolean NOT NULL DEFAULT true, "isDismissed" boolean NOT NULL DEFAULT false, "dismissedBy" character varying(255), "dismissedAt" TIMESTAMP WITH TIME ZONE, "triggeredBy" character varying(255), "minQuantity" integer NOT NULL DEFAULT '0', "alertEnabled" boolean NOT NULL DEFAULT true, "alertEmails" text, "notified" boolean NOT NULL DEFAULT false, "lastNotificationDate" TIMESTAMP WITH TIME ZONE, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "chk_alert_threshold_qty_nonneg" CHECK ("thresholdQuantity" IS NULL OR "thresholdQuantity" >= 0), CONSTRAINT "chk_alert_current_qty_nonneg" CHECK ("currentQuantity" IS NULL OR "currentQuantity" >= 0), CONSTRAINT "PK_01e1629043f028ec1e59b514e1a" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "idx_inventory_alerts_createdat" ON "inventory_alerts" ("createdAt") `);
         await queryRunner.query(`CREATE INDEX "idx_inventory_alerts_partid" ON "inventory_alerts" ("part_id") `);
         await queryRunner.query(`CREATE INDEX "idx_inventory_alerts_companyid" ON "inventory_alerts" ("companyId") `);
+        await queryRunner.query(`CREATE TABLE "inventory" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid NOT NULL, "partId" uuid NOT NULL, "quantity" integer NOT NULL DEFAULT '0', "minQuantity" integer NOT NULL DEFAULT '0', "location" character varying(100), "lastRestockDate" date, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "part_id" uuid, CONSTRAINT "PK_82aa5da437c5bbfb80703b08309" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TABLE "inventory_alert_settings" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "companyId" uuid NOT NULL, "userId" uuid, "enableEmailNotifications" boolean NOT NULL DEFAULT true, "enablePushNotifications" boolean NOT NULL DEFAULT true, "emailAddresses" text array NOT NULL DEFAULT '{}', "lowStockThreshold" integer NOT NULL DEFAULT '5', "criticalStockThreshold" integer NOT NULL DEFAULT '2', "overstockMultiplier" integer NOT NULL DEFAULT '5', "enabledAlertTypes" text array NOT NULL DEFAULT '{low_stock,out_of_stock,overstock}', "alertFrequency" character varying(20) NOT NULL DEFAULT 'immediate', "autoDismissAfterRestock" boolean NOT NULL DEFAULT true, "autoDismissAfterHours" integer NOT NULL DEFAULT '72', "workingHoursStart" character varying(5), "workingHoursEnd" character varying(5), "workingDays" smallint array, "timezone" character varying(100), "lastNotificationSent" TIMESTAMP WITH TIME ZONE, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "uq_alert_settings_company_user" UNIQUE ("companyId", "userId"), CONSTRAINT "chk_alert_settings_auto_hours_range" CHECK ("autoDismissAfterHours" >= 1 AND "autoDismissAfterHours" <= 168), CONSTRAINT "chk_alert_settings_critical_nonneg" CHECK ("criticalStockThreshold" >= 0), CONSTRAINT "chk_alert_settings_low_nonneg" CHECK ("lowStockThreshold" >= 0), CONSTRAINT "PK_fa016443cf4910787bac3e53ffe" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "idx_alert_settings_companyid" ON "inventory_alert_settings" ("companyId") `);
         await queryRunner.query(`CREATE TABLE "audit_logs" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" uuid, "company_id" uuid, "action" character varying(150) NOT NULL, "level" character varying(16) NOT NULL DEFAULT 'info', "ip_address" character varying(45), "user_agent" text, "resource_id" character varying(150), "resource_type" character varying(150), "details" jsonb, "status" character varying(32) NOT NULL DEFAULT 'success', "service" character varying(64), "device_id" character varying(150), "chain_prev" character varying(128), "chain_curr" character varying(128) NOT NULL, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_1bb179d048bbc581caa3b013439" PRIMARY KEY ("id"))`);
@@ -232,8 +232,8 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "payments" ADD CONSTRAINT "FK_563a5e248518c623eebd987d43e" FOREIGN KEY ("invoice_id") REFERENCES "invoices"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "payments" ADD CONSTRAINT "FK_12fd861c33c885f01b9a7da7d93" FOREIGN KEY ("payment_method_id") REFERENCES "payment_methods"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "part_reservations" ADD CONSTRAINT "FK_60b524abd6aedb7d2c541c1b554" FOREIGN KEY ("part_id") REFERENCES "parts"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "inventory" ADD CONSTRAINT "FK_0e79b3e3545f78df8b05923d8c8" FOREIGN KEY ("part_id") REFERENCES "parts"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "inventory_alerts" ADD CONSTRAINT "FK_a92ba282988fc7002ba161f2471" FOREIGN KEY ("part_id") REFERENCES "parts"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "inventory" ADD CONSTRAINT "FK_0e79b3e3545f78df8b05923d8c8" FOREIGN KEY ("part_id") REFERENCES "parts"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "appointments" ADD CONSTRAINT "FK_d0cd63e762f524a499e28903e3e" FOREIGN KEY ("company_id") REFERENCES "companies"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "appointments" ADD CONSTRAINT "FK_2be3c78815aba227af1c3e8e413" FOREIGN KEY ("customer_id") REFERENCES "customers"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "appointments" ADD CONSTRAINT "FK_cd5792f585b901b5b379ccb8e67" FOREIGN KEY ("vehicle_id") REFERENCES "vehicles"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
@@ -249,8 +249,8 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "appointments" DROP CONSTRAINT "FK_cd5792f585b901b5b379ccb8e67"`);
         await queryRunner.query(`ALTER TABLE "appointments" DROP CONSTRAINT "FK_2be3c78815aba227af1c3e8e413"`);
         await queryRunner.query(`ALTER TABLE "appointments" DROP CONSTRAINT "FK_d0cd63e762f524a499e28903e3e"`);
-        await queryRunner.query(`ALTER TABLE "inventory_alerts" DROP CONSTRAINT "FK_a92ba282988fc7002ba161f2471"`);
         await queryRunner.query(`ALTER TABLE "inventory" DROP CONSTRAINT "FK_0e79b3e3545f78df8b05923d8c8"`);
+        await queryRunner.query(`ALTER TABLE "inventory_alerts" DROP CONSTRAINT "FK_a92ba282988fc7002ba161f2471"`);
         await queryRunner.query(`ALTER TABLE "part_reservations" DROP CONSTRAINT "FK_60b524abd6aedb7d2c541c1b554"`);
         await queryRunner.query(`ALTER TABLE "payments" DROP CONSTRAINT "FK_12fd861c33c885f01b9a7da7d93"`);
         await queryRunner.query(`ALTER TABLE "payments" DROP CONSTRAINT "FK_563a5e248518c623eebd987d43e"`);
@@ -311,11 +311,11 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`DROP TABLE "audit_logs"`);
         await queryRunner.query(`DROP INDEX "public"."idx_alert_settings_companyid"`);
         await queryRunner.query(`DROP TABLE "inventory_alert_settings"`);
+        await queryRunner.query(`DROP TABLE "inventory"`);
         await queryRunner.query(`DROP INDEX "public"."idx_inventory_alerts_companyid"`);
         await queryRunner.query(`DROP INDEX "public"."idx_inventory_alerts_partid"`);
         await queryRunner.query(`DROP INDEX "public"."idx_inventory_alerts_createdat"`);
         await queryRunner.query(`DROP TABLE "inventory_alerts"`);
-        await queryRunner.query(`DROP TABLE "inventory"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_4fb77c88df59423c18a762d436"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_94280c1d081a3948d2d28bc992"`);
         await queryRunner.query(`DROP INDEX "public"."uq_reservation_idempotency"`);
@@ -364,6 +364,7 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`DROP INDEX "public"."IDX_714fa9ff7e2a619c3102352fd1"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_7e886c578320ba8364b93266ec"`);
         await queryRunner.query(`DROP TABLE "order_services"`);
+        await queryRunner.query(`DROP TABLE "service_categories"`);
         await queryRunner.query(`DROP INDEX "public"."idx_se_company_user"`);
         await queryRunner.query(`DROP INDEX "public"."idx_se_company_status"`);
         await queryRunner.query(`DROP INDEX "public"."idx_se_company_start_end"`);
@@ -372,7 +373,6 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`DROP TYPE "public"."schedule_exceptions_status_enum"`);
         await queryRunner.query(`DROP TYPE "public"."schedule_exceptions_type_enum"`);
         await queryRunner.query(`DROP TABLE "services"`);
-        await queryRunner.query(`DROP TABLE "service_categories"`);
         await queryRunner.query(`DROP INDEX "public"."idx_comp_logs_company_created"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_81fbd794573a01d5e004f85c84"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_6a3c76ee765376431d8f927858"`);
@@ -394,12 +394,6 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`DROP INDEX "public"."idx_parts_company_partnumber_unique"`);
         await queryRunner.query(`DROP TABLE "parts"`);
         await queryRunner.query(`DROP TABLE "part_categories"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_suppliers_companyid"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_suppliers_isactive"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_suppliers_company_email_unique"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_suppliers_company_taxnumber_unique"`);
-        await queryRunner.query(`DROP TABLE "suppliers"`);
-        await queryRunner.query(`DROP TYPE "public"."suppliers_suppliertype_enum"`);
         await queryRunner.query(`DROP INDEX "public"."uniq_active_consent_per_type"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_860ee1954cafb7cde803ee9444"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_e308eb9e8f2abc30eaa067959b"`);
@@ -429,17 +423,30 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`DROP INDEX "public"."IDX_7e3cc01c420db5151aa2136035"`);
         await queryRunner.query(`DROP TABLE "subscriptions"`);
         await queryRunner.query(`DROP TYPE "public"."subscription_status_enum"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_fc51c44e296132242ed415f181"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_6283f1222bdc2390cf16836ce7"`);
-        await queryRunner.query(`DROP TABLE "user_consents"`);
+        await queryRunner.query(`DROP INDEX "public"."idx_suppliers_companyid"`);
+        await queryRunner.query(`DROP INDEX "public"."idx_suppliers_isactive"`);
+        await queryRunner.query(`DROP INDEX "public"."idx_suppliers_company_email_unique"`);
+        await queryRunner.query(`DROP INDEX "public"."idx_suppliers_company_taxnumber_unique"`);
+        await queryRunner.query(`DROP TABLE "suppliers"`);
+        await queryRunner.query(`DROP TYPE "public"."suppliers_suppliertype_enum"`);
         await queryRunner.query(`DROP INDEX "public"."idx_tariffs_created_at"`);
         await queryRunner.query(`DROP INDEX "public"."idx_tariffs_active"`);
         await queryRunner.query(`DROP INDEX "public"."idx_tariffs_name"`);
         await queryRunner.query(`DROP TABLE "tariffs"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_fc51c44e296132242ed415f181"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_6283f1222bdc2390cf16836ce7"`);
+        await queryRunner.query(`DROP TABLE "user_consents"`);
         await queryRunner.query(`DROP TABLE "user_sessions"`);
         await queryRunner.query(`DROP TABLE "users"`);
         await queryRunner.query(`DROP TABLE "roles"`);
         await queryRunner.query(`DROP TABLE "permissions"`);
+        await queryRunner.query(`DROP INDEX "public"."idx_work_schedule_company"`);
+        await queryRunner.query(`DROP INDEX "public"."idx_work_schedule_company_active"`);
+        await queryRunner.query(`DROP INDEX "public"."idx_work_schedule_company_day"`);
+        await queryRunner.query(`DROP TABLE "work_schedules"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_007a712afe075e18d9d822f6fb"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_74a36c6f923c86278b726e9881"`);
+        await queryRunner.query(`DROP TABLE "vehicle_types"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_e11ef2dcd880132d31bd9f92c2"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_c1cda98f67cb9c79a1f1153e62"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_33467e9fe9f0278ffc281ccba9"`);
@@ -453,9 +460,6 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`DROP INDEX "public"."IDX_3866b386f2136abf529d03d122"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_e96c683d729bb813d19ae173cb"`);
         await queryRunner.query(`DROP TABLE "vehicles_service_history"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_007a712afe075e18d9d822f6fb"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_74a36c6f923c86278b726e9881"`);
-        await queryRunner.query(`DROP TABLE "vehicle_types"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_e71c84a17f9c006260e2d487c0"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_bddf5fcb0c09ab5d6ccd46e8d9"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_eea946a495b5724fd8b31149aa"`);
@@ -475,10 +479,6 @@ export class InitSchema1756497937821 implements MigrationInterface {
         await queryRunner.query(`DROP INDEX "public"."IDX_b559ae26b6f801536d28109453"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_774de87b5d9acde9112a1645ef"`);
         await queryRunner.query(`DROP TABLE "companies"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_work_schedule_company"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_work_schedule_company_active"`);
-        await queryRunner.query(`DROP INDEX "public"."idx_work_schedule_company_day"`);
-        await queryRunner.query(`DROP TABLE "work_schedules"`);
     }
 
 }
