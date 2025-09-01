@@ -8,7 +8,12 @@ import type {
   OrderServiceResponse,
   OrderPartResponse,
   OrderStatus,
+  AddServiceToOrderRequest,
+  UpdateOrderServiceRequest,
+  AddPartToOrderRequest,
+  UpdateOrderPartRequest,
 } from "@/lib/types/orders";
+import type { PartAvailability } from "@/lib/types/parts";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
 
@@ -25,6 +30,15 @@ function buildQuery(params: Record<string, unknown>) {
   });
   const s = q.toString();
   return s ? `?${s}` : "";
+}
+
+function idempotencyKey(): string {
+  // Browser-safe UUID
+  try {
+    // @ts-expect-error crypto exists in modern browsers
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  } catch {}
+  return `idemp_${Math.random().toString(36).slice(2)}_${Date.now()}`;
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -61,6 +75,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 class OrdersAPI {
+  // Orders
   async getOrders(query: OrdersQuery = {}): Promise<PaginatedOrdersResponse> {
     const qs = buildQuery(query as Record<string, unknown>);
     return request<PaginatedOrdersResponse>(`/orders${qs}`);
@@ -102,14 +117,84 @@ class OrdersAPI {
     return request<OrderResponse>(`/orders/${id}/recalculate`, { method: "PATCH" });
   }
 
-  // Services
+  // Services (order lines)
   async getOrderServices(orderId: string): Promise<{ services: OrderServiceResponse[] }> {
     return request<{ services: OrderServiceResponse[] }>(`/orders/${orderId}/services`);
   }
 
-  // Parts
+  async addServiceToOrder(orderId: string, payload: AddServiceToOrderRequest): Promise<OrderServiceResponse> {
+    return request<OrderServiceResponse>(`/orders/${orderId}/services`, {
+      method: "POST",
+      headers: { "X-Idempotency-Key": idempotencyKey() },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateOrderService(orderId: string, serviceId: string, payload: UpdateOrderServiceRequest): Promise<OrderServiceResponse> {
+    return request<OrderServiceResponse>(`/orders/${orderId}/services/${serviceId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteOrderService(orderId: string, serviceId: string): Promise<void> {
+    await request<void>(`/orders/${orderId}/services/${serviceId}`, { method: "DELETE" });
+  }
+
+  async updateOrderServiceStatus(orderId: string, serviceId: string, status: 'planned' | 'in_progress' | 'completed'): Promise<OrderServiceResponse> {
+    const qs = buildQuery({ status });
+    return request<OrderServiceResponse>(`/orders/${orderId}/services/${serviceId}/status${qs}`, { method: "PATCH" });
+  }
+
+  async assignServiceMechanic(orderId: string, serviceId: string, mechanicId: string): Promise<OrderServiceResponse> {
+    const qs = buildQuery({ mechanicId });
+    return request<OrderServiceResponse>(`/orders/${orderId}/services/${serviceId}/mechanic${qs}`, { method: "PATCH" });
+  }
+
+  async startService(orderId: string, serviceId: string): Promise<OrderServiceResponse> {
+    return request<OrderServiceResponse>(`/orders/${orderId}/services/${serviceId}/start`, { method: "PATCH" });
+  }
+
+  async completeService(orderId: string, serviceId: string, notes?: string): Promise<OrderServiceResponse> {
+    return request<OrderServiceResponse>(`/orders/${orderId}/services/${serviceId}/complete`, {
+      method: "PATCH",
+      body: JSON.stringify({ notes }),
+    });
+  }
+
+  // Parts (order lines)
   async getOrderParts(orderId: string): Promise<{ parts: OrderPartResponse[] }> {
     return request<{ parts: OrderPartResponse[] }>(`/orders/${orderId}/parts`);
+  }
+
+  async addPartToOrder(orderId: string, payload: AddPartToOrderRequest): Promise<OrderPartResponse> {
+    return request<OrderPartResponse>(`/orders/${orderId}/parts`, {
+      method: "POST",
+      headers: { "X-Idempotency-Key": idempotencyKey() },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateOrderPart(orderId: string, partId: string, payload: UpdateOrderPartRequest): Promise<OrderPartResponse> {
+    return request<OrderPartResponse>(`/orders/${orderId}/parts/${partId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteOrderPart(orderId: string, partId: string): Promise<void> {
+    await request<void>(`/orders/${orderId}/parts/${partId}`, { method: "DELETE" });
+  }
+
+  async toggleCustomerProvided(orderId: string, partId: string, isCustomerProvided: boolean): Promise<OrderPartResponse> {
+    return request<OrderPartResponse>(`/orders/${orderId}/parts/${partId}/customer-provided`, {
+      method: "PATCH",
+      body: JSON.stringify({ isCustomerProvided }),
+    });
+  }
+
+  async checkPartAvailability(orderId: string, partId: string): Promise<PartAvailability> {
+    return request<PartAvailability>(`/orders/${orderId}/parts/${partId}/availability`);
   }
 }
 

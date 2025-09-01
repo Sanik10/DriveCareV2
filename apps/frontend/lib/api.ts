@@ -2,8 +2,9 @@
 'use client';
 
 import { LoginResponse, PaymentInitResponse, Invoice, Tariff } from './types';
+import { getApiBase } from '@/lib/api/core';
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '/api/v1';
+const BASE = getApiBase();
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<void> | null = null;
@@ -34,7 +35,7 @@ async function request<T>(
   if (!headers.has('Content-Type') && init.json) headers.set('Content-Type', 'application/json');
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${BASE}${path.startsWith('/') ? path : `/${path}`}`, {
     ...init,
     headers,
     credentials: 'include',
@@ -46,7 +47,7 @@ async function request<T>(
     const retryHeaders = new Headers(init.headers);
     if (!retryHeaders.has('Content-Type') && init.json) retryHeaders.set('Content-Type', 'application/json');
     if (accessToken) retryHeaders.set('Authorization', `Bearer ${accessToken}`);
-    const retry = await fetch(`${BASE}${path}`, {
+    const retry = await fetch(`${BASE}${path.startsWith('/') ? path : `/${path}`}`, {
       ...init,
       headers: retryHeaders,
       credentials: 'include',

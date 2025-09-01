@@ -110,7 +110,8 @@ export function validateConfig(config: Record<string, unknown>) {
     SANITIZE_NOTES_ENABLED: Joi.boolean().truthy('true').falsy('false').default(true),
     ORDER_MAX_PARTS_PER_ORDER: Joi.number().default(100),
     ORDER_MAX_SERVICES_PER_ORDER: Joi.number().default(50),
-    ORDERS_ENFORCE_LIMITS: Joi.boolean().truthy('true').falsy('false'),
+    ORDERS_ENFORCE_LIMITS: Joi.boolean().truthy('true').falsy('false').default(false),
+    ORDERS_TAX_RATE: Joi.number().min(0).max(1).precision(4).default(0.18),
 
     // Service History
     SERVICE_HISTORY_MAX_PAGE_SIZE: Joi.number().default(100),

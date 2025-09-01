@@ -1,5 +1,5 @@
-// path: src/modules/orders/order-services/services/order-services-business.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+// path: apps/backend/src/modules/orders/order-services/services/order-services-business.service.ts
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { OrderServicesDataService } from './order-services-data.service';
 import { OrderService } from '../../../../database/entities';
 import { AddServiceToOrderData, UpdateOrderServiceData } from '../types/order-services.types';
@@ -7,6 +7,7 @@ import { RequestWithUser } from '../../../auth/interfaces/request-with-user.inte
 import { OrderServiceStatus } from '../../../../database/entities/order-service.entity';
 import { AuditService, AuditAction } from '../../../../common/audit/audit.service';
 import { ValidationDataException, OrderServiceNotFoundException } from '../../../../common/exceptions/domain.exceptions';
+import { OrdersBusinessService } from '../../services/orders-business.service';
 
 @Injectable()
 export class OrderServicesBusinessService {
@@ -15,6 +16,8 @@ export class OrderServicesBusinessService {
   constructor(
     private readonly orderServicesDataService: OrderServicesDataService,
     private readonly auditService: AuditService,
+    @Inject(forwardRef(() => OrdersBusinessService))
+    private readonly ordersBusinessService: OrdersBusinessService,
   ) {}
 
   async addServiceToOrder(
@@ -67,6 +70,13 @@ export class OrderServicesBusinessService {
       },
     });
 
+    // Recalculate order totals
+    try {
+      await this.ordersBusinessService.recalculateOrderFinancials(orderId, user.id);
+    } catch (e: any) {
+      this.logger.error(`Recalculate after addServiceToOrder failed (order ${orderId}): ${e?.message || e}`);
+    }
+
     this.logger.log(`Service added to order: ${orderService.id}`);
     return orderService;
   }
@@ -103,6 +113,13 @@ export class OrderServicesBusinessService {
         changes: this.detectChanges(orderService, updateData),
       },
     });
+
+    // Recalculate order totals
+    try {
+      await this.ordersBusinessService.recalculateOrderFinancials(orderService.orderId, user?.id || 'system');
+    } catch (e: any) {
+      this.logger.error(`Recalculate after updateOrderService failed (order ${orderService.orderId}): ${e?.message || e}`);
+    }
 
     return updated;
   }
@@ -177,12 +194,10 @@ export class OrderServicesBusinessService {
     return updated;
   }
 
-  // Новый: начать выполнение услуги (делегирует в updateServiceStatus)
   async startService(id: string, user: RequestWithUser['user']): Promise<OrderService> {
     return this.updateServiceStatus(id, OrderServiceStatus.IN_PROGRESS, user);
   }
 
-  // Новый: завершить выполнение услуги (делегирует в updateServiceStatus), с добавлением notes
   async completeService(id: string, notes: string | undefined, user: RequestWithUser['user']): Promise<OrderService> {
     const updated = await this.updateServiceStatus(id, OrderServiceStatus.COMPLETED, user);
     if (notes) {
@@ -200,6 +215,8 @@ export class OrderServicesBusinessService {
       throw new ValidationDataException('status', 'Нельзя удалить завершенную услугу');
     }
 
+    const orderId = orderService.orderId;
+
     await this.orderServicesDataService.remove(id);
 
     await this.auditService.log(AuditAction.ORDER_SERVICE_REMOVED, {
@@ -214,6 +231,13 @@ export class OrderServicesBusinessService {
         status: orderService.status,
       },
     });
+
+    // Recalculate order totals
+    try {
+      await this.ordersBusinessService.recalculateOrderFinancials(orderId, user?.id || 'system');
+    } catch (e: any) {
+      this.logger.error(`Recalculate after removeServiceFromOrder failed (order ${orderId}): ${e?.message || e}`);
+    }
 
     this.logger.log(`Service removed from order: ${id}`);
   }

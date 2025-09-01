@@ -29,7 +29,7 @@ export const getDatabaseConfig = (configService: ConfigService): TypeOrmModuleOp
       migrations: [__dirname + '/migrations/*.{ts,js}'],
       migrationsTableName: 'migrations_history',
       migrationsRun: configService.get('DB_AUTO_MIGRATE', 'false') === 'true',
-      synchronize: false, // 🚨 НИКОГДА в production
+      synchronize: false,
       logging: ['error'],
       extra: {
         max: 25,

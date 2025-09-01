@@ -1,4 +1,5 @@
 // path: apps/frontend/lib/api/auth.ts
+import { buildApiUrl } from '@/lib/api/core';
 import type {
   LoginRequest,
   LoginResponse,
@@ -11,8 +12,6 @@ import type {
   UserInfo,
   ApiError
 } from '@/lib/types/auth'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
 
 interface SessionInfo {
   id: string
@@ -33,7 +32,7 @@ class AuthAPI {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${API_BASE}${endpoint}`
+    const url = buildApiUrl(endpoint)
     const cacheKey = `${options.method || 'GET'}:${endpoint}:${options.body || ''}`
     
     // Проверка кеша запросов для GET /auth/me

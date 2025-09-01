@@ -1,11 +1,12 @@
-// src/modules/orders/order-parts/services/order-parts-business.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+// path: apps/backend/src/modules/orders/order-parts/services/order-parts-business.service.ts
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { OrderPartsDataService } from './order-parts-data.service';
 import { OrderPart } from '../../../../database/entities';
 import { AddPartToOrderData, UpdateOrderPartData } from '../types/order-parts.types';
 import { RequestWithUser } from '../../../auth/interfaces/request-with-user.interface';
 import { AuditService, AuditAction } from '../../../../common/audit/audit.service';
 import { ValidationDataException, OrderPartNotFoundException } from '../../../../common/exceptions/domain.exceptions';
+import { OrdersBusinessService } from '../../services/orders-business.service';
 
 @Injectable()
 export class OrderPartsBusinessService {
@@ -14,6 +15,8 @@ export class OrderPartsBusinessService {
   constructor(
     private readonly orderPartsDataService: OrderPartsDataService,
     private readonly auditService: AuditService,
+    @Inject(forwardRef(() => OrdersBusinessService))
+    private readonly ordersBusinessService: OrdersBusinessService,
   ) {}
 
   async addPartToOrder(orderId: string, data: AddPartToOrderData, user: RequestWithUser['user']): Promise<OrderPart> {
@@ -73,6 +76,13 @@ export class OrderPartsBusinessService {
       },
     });
 
+    // Recalculate order totals
+    try {
+      await this.ordersBusinessService.recalculateOrderFinancials(orderId, user.id);
+    } catch (e: any) {
+      this.logger.error(`Recalculate after addPartToOrder failed (order ${orderId}): ${e?.message || e}`);
+    }
+
     this.logger.log(`Part added to order: ${orderPart.id}`);
     return orderPart;
   }
@@ -121,6 +131,13 @@ export class OrderPartsBusinessService {
         inventoryAdjusted: quantityDiff !== 0 && !orderPart.isCustomerProvided,
       },
     });
+
+    // Recalculate order totals
+    try {
+      await this.ordersBusinessService.recalculateOrderFinancials(orderPart.orderId, 'system');
+    } catch (e: any) {
+      this.logger.error(`Recalculate after updateOrderPart failed (order ${orderPart.orderId}): ${e?.message || e}`);
+    }
 
     this.logger.log(`Order part updated: ${id}`);
     return updatedOrderPart;
@@ -178,6 +195,13 @@ export class OrderPartsBusinessService {
       },
     });
 
+    // Recalculate order totals
+    try {
+      await this.ordersBusinessService.recalculateOrderFinancials(orderPart.orderId, 'system');
+    } catch (e: any) {
+      this.logger.error(`Recalculate after toggleCustomerProvided failed (order ${orderPart.orderId}): ${e?.message || e}`);
+    }
+
     this.logger.log(`Customer provided toggled for part: ${id} → ${isCustomerProvided}`);
     return updatedOrderPart;
   }
@@ -191,6 +215,8 @@ export class OrderPartsBusinessService {
     if (!orderPart.isCustomerProvided) {
       await this.releaseInventoryReservation(orderPart.partId, orderPart.quantity, orderPart.order?.companyId!);
     }
+
+    const orderId = orderPart.orderId;
 
     await this.orderPartsDataService.remove(id);
 
@@ -207,6 +233,13 @@ export class OrderPartsBusinessService {
         inventoryReleased: !orderPart.isCustomerProvided,
       },
     });
+
+    // Recalculate order totals
+    try {
+      await this.ordersBusinessService.recalculateOrderFinancials(orderId, 'system');
+    } catch (e: any) {
+      this.logger.error(`Recalculate after removePartFromOrder failed (order ${orderId}): ${e?.message || e}`);
+    }
 
     this.logger.log(`Part removed from order: ${id}`);
   }

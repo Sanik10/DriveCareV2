@@ -1,59 +1,57 @@
-<!-- path: docs/frontend/NEXT_STEPS.md -->
-# ▶️ Next Steps — что делаем дальше
+Короткий ответ: да, можно продолжать модуль “Заказы”, но он зависимый. Если цель — сначала закрыть “самодостаточные” (самобытные) модули, вот карта зависимостей и рекомендуемый порядок подключения на фронте.
 
-Обновлено: 28.08.2025
+Карта зависимостей (упрощённая)
+- Базовые (фундамент, самодостаточные)
+  - Auth/Security (сессии, 2FA) — без зависимостей
+  - Users — зависит только от Auth
+  - Companies — зависит от Auth
+  - Vehicles Catalogue (brands/models/types) — самодостаточный справочник (используется Vehicles)
+  - Services (каталог услуг) — самодостаточный справочник (используется Orders)
+  - Parts (каталог запчастей) — самодостаточный справочник (используется Orders/Inventory)
+  - Payment Methods — самодостаточный (используется Payments)
+  - Tariffs/Subscriptions — самодостаточный (используется для лимитов/гейтинга)
+  - Suppliers — самодостаточный (используется Inventory/Parts, но можно отдельно)
 
-## 1) Цвет и бренд‑присутствие (сделано частично)
-- [x] Brand‑bar в шапке (градиент primary→accent)
-- [x] Цвет ссылок → primary
-- [ ] Иконка/лого бренда в шапке (нужен файл SVG/PNG)
-- [ ] Акцентные подсветки для важных уведомлений (точечно)
+- Бизнес-объекты (частично зависят от базовых)
+  - Customers — базовый бизнес-объект (зависит от Auth/Companies)
+  - Vehicles — зависит от Customers + Vehicles Catalogue
+  - Work Schedules — зависит от Users (механики), но может жить отдельно как справочник графиков
 
-Если хочешь больше цвета — предложу вариант “accent header” (тонкая цветная полоса секции страницы) для некоторых экранов.
+- Сильно зависимые (сквозные процессы)
+  - Orders — зависит от Customers, Vehicles, Services, Parts/Inventory, Users (назначение механика)
+  - Inventory (остатки/резервы) — зависит от Parts; в заказах используется при добавлении запчастей
+  - Invoices — зависит от Orders (выставление счета из заказа)
+  - Payments — зависит от Invoices (+ Payment Methods)
+  - Service History — зависит от Orders (формируется на завершении)
 
-## 2) Регистрация (предлагаю добавить P0.9)
-Страницы:
-- /register/company — регистрация компании
-- (опц.) /register/invite — по приглашению
+Рекомендованный порядок подключения на фронте
+1) База (самодостаточные)
+- Auth/Security — уже есть
+- Customers — уже есть
+- Vehicles Catalogue — добавить простой UI справочника (бренды/модели/типы)
+- Vehicles — уже есть (желательно связать выбор модели/бренда с каталогом)
+- Services (каталог) — добавить список/поиск/CRUD
+- Parts (каталог) — добавить список/поиск/CRUD
+- Payment Methods — минимально чтение
+- Tariffs/Subscriptions — чтение (для статусов/лимитов)
+- Suppliers — опционально
 
-Нужны Swagger‑контракты:
-- POST `/api/v1/auth/register-company` → тело/ответ/ошибки
-- (опц.) POST `/api/v1/auth/register-invite`
+2) Бизнес-потоки
+- Orders 1.0 (P0)
+  - Сначала: список/канбан/деталь/создание (работает уже сейчас, т.к. Customers + Vehicles готовы)
+  - Затем: интеграция Services/Parts (диалоги добавления, что мы уже подключили), пересчет, статусы
+  - Inventory резервы подключены бэком — фронт уже работает (показываем availability)
+- Invoices (from order) → кнопка “Выставить счёт”
+- Payments (read-only) → статус оплаты
 
-UI:
-- Поля: имя компании, email, пароль (+ подтверждение), согласие
-- Результат: auto‑login или redirect на /login (уточнить поведение)
+Критично для “Заказов”
+- Нужны: Customers, Vehicles, Services (каталог), Parts (каталог). У тебя они в бэке уже есть. На фронте Customers/Vehicles подключены; Services/Parts мы частично подключили для диалогов. Можно продолжать Orders уже сейчас.
+- Флаги:
+  - ORDERS_ENFORCE_LIMITS=false на dev/stage (в prod=true) — чтобы не блокировать отладку
+  - ORDERS_TAX_RATE — ставка НДС (мы уже задействовали в Pricing Engine)
 
-## 3) Init‑payment — уточнить и внедрить
-- Подтвердить точный путь init‑payment, который возвращает `{ paymentId, invoiceId, redirectUrl }`
-- Обновить lib/api.ts и кнопку “Оплатить”
-- В Return подтверждаем, что query = invoiceId (или paymentId)
+Если хочешь строго идти “от самодостаточных”
+- Следующие модули к подключению: Services (каталог), Parts (каталог), Vehicles Catalogue (если не завернут на UI), Payment Methods (read-only), Tariffs/Subscriptions (read-only).
+- После них — Orders (мы уже подготовили фронт/бэк-связки: добавление услуг/запчастей/пересчет/статусы).
 
-## 4) Навбар/профиль
-- Иконка пользователя в правом углу, меню: Профиль (/auth/me), Выход (/auth/logout)
-- Отображаем email/роль из `me`
-
-Нужен Swagger:
-- GET `/api/v1/auth/me` → DTO
-
-## 5) /payments (журнал) — после подтверждения контрактов
-- Таблица: дата, сумма, валюта, статус, invoiceId, transactionId
-- Маппинг статусов: pending/processing/processed/failed/canceled/... → бейджи
-
-Нужен Swagger:
-- GET `/api/v1/payments` (форма ответа, пагинация)
-- GET `/api/v1/payments/:id` (деталь — P1)
-
-## 6) Техничка P1
-- TanStack Query/Table
-- ErrorBoundary + X‑Request‑ID
-- Sentry + Web Vitals
-- Dark theme toggle
-
-## 7) Что прислать сейчас
-- Swagger для:
-  - /auth/register-company (+ /auth/register-invite, если нужно)
-  - init‑payment (эндпоинт, тело, ответ)
-  - /auth/me
-  - /payments (list)
-- Лого (SVG/PNG), если есть, для шапки
+Хочешь — сразу добавлю страницы-списки для Services и Parts (каталоги) в /dashboard/services и /dashboard/parts с поиском/CRUD. Скажи — пришлю path-blocks для страниц, API-хелперов (часть уже есть), и простых форм диалогов.

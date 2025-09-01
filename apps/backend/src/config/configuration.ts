@@ -247,6 +247,12 @@ export const ordersConfig = registerAs('orders', () => ({
     maxPartsPerOrder: parseInt(process.env.ORDER_MAX_PARTS_PER_ORDER || '100', 10),
     maxServicesPerOrder: parseInt(process.env.ORDER_MAX_SERVICES_PER_ORDER || '50', 10),
   },
+  // Pricing & limits
+  enforceLimits: (process.env.ORDERS_ENFORCE_LIMITS || 'false') === 'true',
+  taxRate: (() => {
+    const v = parseFloat(process.env.ORDERS_TAX_RATE || '')
+    return isNaN(v) ? 0.18 : v
+  })(),
 }));
 
 // 👥 Customers Configuration

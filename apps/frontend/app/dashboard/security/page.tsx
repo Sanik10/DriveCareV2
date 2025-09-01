@@ -1,12 +1,12 @@
 // path: apps/frontend/app/dashboard/security/page.tsx
-"use client"
+'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { 
-  Shield, Smartphone, Monitor, Tablet, 
-  AlertTriangle, CheckCircle, Key, LogOut, RefreshCw, Home
+import {
+  Shield, Smartphone, Monitor, Tablet,
+  AlertTriangle, CheckCircle, Key, LogOut, RefreshCw, Home,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -24,6 +24,11 @@ interface ApiError {
   statusCode?: number
 }
 
+const isDebug = () => {
+  if (typeof window === 'undefined') return false
+  return window.localStorage.getItem('DEBUG_SECURITY') === '1'
+}
+
 export default function SecurityPage() {
   const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth()
   const router = useRouter()
@@ -37,145 +42,132 @@ export default function SecurityPage() {
     deviceName?: string
     isAllDevices?: boolean
   }>({ isOpen: false })
-  
-  const [isMounted, setIsMounted] = useState(false)
 
+  const [isMounted, setIsMounted] = useState(false)
   const loadingRef = useRef(false)
   const isMountedRef = useRef(false)
-  const componentId = useRef(Math.random().toString(36).substr(2, 9))
 
-  console.log(`[SecurityPage:${componentId.current}] Рендер:`, {
-    isAuthenticated,
-    authLoading,
-    hasUser: !!user,
-    userEmail: user?.email,
-    userTwoFA: user?.twoFactorEnabled,
-    loadingRefValue: loadingRef.current,
-    isMounted: isMountedRef.current,
-    clientMounted: isMounted
-  })
+  useEffect(() => setIsMounted(true), [])
 
+  // Redirect if not authenticated
   useEffect(() => {
-    setIsMounted(true)
-  }, [])
-
-  useEffect(() => {
-    const currentComponentId = componentId.current
-    
-    if (!isMounted) {
-      return
-    }
-    if (authLoading) {
-      console.log(`[SecurityPage:${currentComponentId}] Ожидание завершения проверки авторизации`)
-      return
-    }
+    if (!isMounted) return
+    if (authLoading) return
     if (!isAuthenticated && !user) {
-      console.log(`[SecurityPage:${currentComponentId}] Не авторизован после проверки, редиректим на login`)
+      if (isDebug()) console.log('[SecurityPage] Not authenticated, redirect to /login')
       router.push('/login')
-      return
     }
   }, [isAuthenticated, user, authLoading, router, isMounted])
 
-  const loadSessions = useCallback(async (forceRefresh = false) => {
-    const currentComponentId = componentId.current
-    
-    if (!isAuthenticated || !user || authLoading || !isMounted) {
-      console.log(`[SecurityPage:${currentComponentId}] Пропускаю загрузку - не готов или не авторизован`)
-      return
-    }
-
-    if (loadingRef.current && !forceRefresh) {
-      console.log(`[SecurityPage:${currentComponentId}] Пропускаю загрузку - уже выполняется`)
-      return
-    }
-
-    try {
-      loadingRef.current = true
-      setIsLoading(true)
-      
-      console.log(`[SecurityPage:${currentComponentId}] Начинаю загрузку сессий, forceRefresh:`, forceRefresh)
-      
-      const sessionsData = await securityAPI.getSessions(forceRefresh)
-      
-      if (!isMountedRef.current) {
-        console.log(`[SecurityPage:${currentComponentId}] Компонент размонтирован, пропускаем обновление состояния`)
-        return
+  const getDeviceIcon = useCallback(
+    (deviceType: string): React.ComponentType<{ className?: string }> => {
+      switch (deviceType?.toLowerCase()) {
+        case 'mobile':
+          return Smartphone
+        case 'tablet':
+          return Tablet
+        case 'desktop':
+        default:
+          return Monitor
       }
-      
-      const currentDeviceId = localStorage.getItem('deviceId') || 
-                            sessionStorage.getItem('deviceId')
-      
-      const sessionsWithCurrent = sessionsData.map(session => ({
-        ...session,
-        isCurrentDevice: session.deviceId === currentDeviceId
-      }))
-      
-      console.log(`[SecurityPage:${currentComponentId}] Сессии загружены:`, sessionsWithCurrent.length)
-      setSessions(sessionsWithCurrent)
-      
-    } catch (error: unknown) {
-      console.error(`[SecurityPage:${currentComponentId}] Ошибка загрузки сессий:`, error)
-      
-      if (!isMountedRef.current) {
-        return
-      }
-      
+    },
+    []
+  )
+
+  const formatLastActive = useCallback((date: Date) => {
+    const now = new Date()
+    const diff = now.getTime() - new Date(date).getTime()
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    const days = Math.floor(diff / 86400000)
+
+    if (minutes < 1) return 'Только что'
+    if (minutes < 60) return `${minutes} мин назад`
+    if (hours < 24) return `${hours} ч назад`
+    return `${days} дн назад`
+  }, [])
+
+  const loadSessions = useCallback(
+    async (forceRefresh = false) => {
+      if (!isAuthenticated || !user || authLoading || !isMounted) return
+      if (loadingRef.current && !forceRefresh) return
+
       try {
-        const errorData = JSON.parse((error as Error).message) as ApiError
-        if (errorData.statusCode === 401) {
-          console.log(`[SecurityPage:${currentComponentId}] 401 при загрузке сессий - токен невалидный, принудительный логаут`)
-          await logout()
-          router.push('/login')
-          return
-        }
-        if (errorData.statusCode === 429) {
-          console.warn(`[SecurityPage:${currentComponentId}] 429 при загрузке сессий, пропускаем`)
-          return
-        }
-        toast.error(errorData.message || 'Ошибка загрузки сессий')
-      } catch {
-        toast.error('Ошибка загрузки сессий')
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setIsLoading(false)
-      }
-      loadingRef.current = false
-    }
-  }, [isAuthenticated, user, authLoading, logout, router, isMounted])
+        loadingRef.current = true
+        setIsLoading(true)
+        if (isDebug()) console.log('[SecurityPage] Loading sessions, forceRefresh:', forceRefresh)
 
+        const sessionsData = await securityAPI.getSessions(forceRefresh)
+
+        if (!isMountedRef.current) return
+
+        const currentDeviceId =
+          (typeof window !== 'undefined' && (localStorage.getItem('deviceId') || sessionStorage.getItem('deviceId'))) ||
+          undefined
+
+        const sessionsWithCurrent: SessionDevice[] = sessionsData.map((session) => ({
+          ...session,
+          isCurrentDevice: currentDeviceId ? session.deviceId === currentDeviceId : false,
+        }))
+
+        setSessions(sessionsWithCurrent)
+      } catch (error: unknown) {
+        if (!isMountedRef.current) return
+
+        try {
+          const errorData = JSON.parse((error as Error).message) as ApiError
+          if (errorData.statusCode === 401) {
+            await logout()
+            router.push('/login')
+            return
+          }
+          if (errorData.statusCode === 429) {
+            if (isDebug()) console.warn('[SecurityPage] 429 Too Many Requests for sessions')
+            return
+          }
+          toast.error(errorData.message || 'Ошибка загрузки сессий')
+        } catch {
+          toast.error('Ошибка загрузки сессий')
+        }
+      } finally {
+        if (isMountedRef.current) setIsLoading(false)
+        loadingRef.current = false
+      }
+    },
+    [isAuthenticated, user, authLoading, logout, router, isMounted]
+  )
+
+  // Initial load and mount flags
   useEffect(() => {
-    const currentComponentId = componentId.current
     isMountedRef.current = true
-    
-    console.log(`[SecurityPage:${currentComponentId}] Компонент смонтирован`)
-    
+
     if (isAuthenticated && user && !authLoading && isMounted) {
-      console.log(`[SecurityPage:${currentComponentId}] Инициальная загрузка сессий`)
       loadSessions()
-      
-      const userTwoFAStatus = user.twoFactorEnabled || false
-      console.log(`[SecurityPage:${currentComponentId}] Устанавливаем статус 2FA:`, userTwoFAStatus)
-      setTwoFAEnabled(userTwoFAStatus)
+      setTwoFAEnabled(Boolean(user.twoFactorEnabled))
     }
 
     return () => {
-      console.log(`[SecurityPage:${currentComponentId}] Компонент размонтирован`)
       isMountedRef.current = false
       loadingRef.current = false
     }
   }, [isAuthenticated, user, authLoading, loadSessions, isMounted])
 
+  // Keep 2FA status in sync with user changes
   useEffect(() => {
     if (user && isMounted) {
-      const userTwoFAStatus = user.twoFactorEnabled || false
-      console.log(`[SecurityPage:${componentId.current}] Обновляем статус 2FA при изменении пользователя:`, userTwoFAStatus)
-      setTwoFAEnabled(userTwoFAStatus)
+      setTwoFAEnabled(Boolean(user.twoFactorEnabled))
     }
   }, [user, isMounted])
 
+  // Compute sessions count label BEFORE any early return
+  const sessionsCountLabel = useMemo(() => {
+    const n = sessions.length
+    if (n === 1) return 'устройство'
+    if (n >= 2 && n <= 4) return 'устройства'
+    return 'устройств'
+  }, [sessions.length])
+
   const handleRefresh = async () => {
-    console.log(`[SecurityPage:${componentId.current}] Ручное обновление`)
     setIsRefreshing(true)
     await loadSessions(true)
     setIsRefreshing(false)
@@ -184,12 +176,10 @@ export default function SecurityPage() {
 
   const handleLogoutDevice = async (deviceId: string) => {
     try {
-      console.log(`[SecurityPage:${componentId.current}] Отключение устройства:`, deviceId)
       await securityAPI.logoutDevice({ deviceId })
       toast.success('Устройство отключено')
       await loadSessions(true)
     } catch (error: unknown) {
-      console.error(`[SecurityPage:${componentId.current}] Ошибка отключения устройства:`, error)
       try {
         const errorData = JSON.parse((error as Error).message) as ApiError
         toast.error(errorData.message || 'Ошибка отключения устройства')
@@ -201,13 +191,11 @@ export default function SecurityPage() {
 
   const handleLogoutAllDevices = async () => {
     try {
-      console.log(`[SecurityPage:${componentId.current}] Отключение всех устройств`)
       await securityAPI.logoutAllDevices()
       toast.success('Все устройства отключены')
       await logout()
       router.push('/')
     } catch (error: unknown) {
-      console.error(`[SecurityPage:${componentId.current}] Ошибка отключения всех устройств:`, error)
       try {
         const errorData = JSON.parse((error as Error).message) as ApiError
         toast.error(errorData.message || 'Ошибка отключения устройств')
@@ -222,55 +210,25 @@ export default function SecurityPage() {
       isOpen: true,
       deviceId,
       deviceName,
-      isAllDevices: !deviceId
+      isAllDevices: !deviceId,
     })
   }
 
   const executeLogout = async () => {
     const { deviceId, isAllDevices } = logoutDialog
-    
     if (isAllDevices) {
       await handleLogoutAllDevices()
     } else if (deviceId) {
       await handleLogoutDevice(deviceId)
     }
-    
     setLogoutDialog({ isOpen: false })
   }
 
   const handle2FAStatusChange = async (enabled: boolean) => {
-    console.log(`[SecurityPage:${componentId.current}] Изменение статуса 2FA:`, enabled)
     setTwoFAEnabled(enabled)
   }
 
-  const getDeviceIcon = (deviceType: string): React.ComponentType<{ className?: string }> => {
-    switch (deviceType.toLowerCase()) {
-      case 'mobile':
-        return Smartphone
-      case 'tablet':
-        return Tablet
-      case 'desktop':
-      default:
-        return Monitor
-    }
-  }
-
-  const formatLastActive = (date: Date) => {
-    const now = new Date()
-    const diff = now.getTime() - new Date(date).getTime()
-    const minutes = Math.floor(diff / 60000)
-    const hours = Math.floor(diff / 3600000)
-    const days = Math.floor(diff / 86400000)
-
-    if (minutes < 1) return 'Только что'
-    if (minutes < 60) return `${minutes} мин назад`
-    if (hours < 24) return `${hours} ч назад`
-    return `${days} дн назад`
-  }
-
-  if (!isMounted) {
-    return null
-  }
+  if (!isMounted) return null
 
   if (authLoading) {
     return (
@@ -283,15 +241,14 @@ export default function SecurityPage() {
     )
   }
 
-  if (!isAuthenticated || !user) {
-    return null
-  }
+  if (!isAuthenticated || !user) return null
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-surface-1">
+      {/* Lightweight background glows */}
       <div className="fixed inset-0 bg-gradient-surface -z-10"></div>
-      <div className="fixed top-0 right-0 w-96 h-96 bg-gradient-primary opacity-5 rounded-full blur-3xl -z-10"></div>
-      <div className="fixed bottom-0 left-0 w-64 h-64 bg-secondary/10 rounded-full blur-3xl -z-10"></div>
+      <div className="fixed top-0 right-0 w-72 h-72 bg-gradient-primary opacity-5 rounded-full blur-3xl -z-10"></div>
+      <div className="fixed bottom-0 left-0 w-56 h-56 bg-secondary/10 rounded-full blur-3xl -z-10"></div>
 
       <header className="border-b border-border/50 backdrop-blur-sm">
         <div className="container mx-auto px-6 py-4">
@@ -317,20 +274,11 @@ export default function SecurityPage() {
                   В дашборд
                 </Button>
               </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={isRefreshing || loadingRef.current}
-              >
+              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing || loadingRef.current}>
                 <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                 Обновить
               </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => confirmLogout()}
-              >
+              <Button variant="destructive" size="sm" onClick={() => confirmLogout()}>
                 <LogOut className="w-4 h-4 mr-2" />
                 Выйти везде
               </Button>
@@ -341,10 +289,7 @@ export default function SecurityPage() {
 
       <main className="container mx-auto px-6 py-8">
         <div className="space-y-8">
-          <TwoFactorAuthCard 
-            enabled={twoFAEnabled}
-            onStatusChange={handle2FAStatusChange}
-          />
+          <TwoFactorAuthCard enabled={twoFAEnabled} onStatusChange={handle2FAStatusChange} />
 
           <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50">
             <div className="space-y-6">
@@ -359,7 +304,7 @@ export default function SecurityPage() {
                   </p>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {sessions.length} {sessions.length === 1 ? 'устройство' : 'устройств'}
+                  {sessions.length} {sessionsCountLabel}
                 </div>
               </div>
 
@@ -374,7 +319,7 @@ export default function SecurityPage() {
                   <Smartphone className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-muted-foreground">Активных сессий не найдено</p>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Это может означать что ваши сессии были отключены
+                    Это может означать, что ваши сессии были отключены
                   </p>
                 </div>
               ) : (
@@ -399,15 +344,13 @@ export default function SecurityPage() {
                 <Shield className="w-5 h-5 text-secondary" />
                 Рекомендации по безопасности
               </h3>
-              
+
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                   <div className="flex items-start gap-3">
                     <CheckCircle className="w-5 h-5 text-emerald-500 mt-0.5" />
                     <div>
-                      <h4 className="font-medium text-emerald-700 dark:text-emerald-400">
-                        Включите 2FA
-                      </h4>
+                      <h4 className="font-medium text-emerald-700 dark:text-emerald-400">Включите 2FA</h4>
                       <p className="text-sm text-emerald-600 dark:text-emerald-500 mt-1">
                         Двухфакторная аутентификация защитит ваш аккаунт даже при компрометации пароля
                       </p>
@@ -419,9 +362,7 @@ export default function SecurityPage() {
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5" />
                     <div>
-                      <h4 className="font-medium text-amber-700 dark:text-amber-400">
-                        Следите за сессиями
-                      </h4>
+                      <h4 className="font-medium text-amber-700 dark:text-amber-400">Следите за сессиями</h4>
                       <p className="text-sm text-amber-600 dark:text-amber-500 mt-1">
                         Регулярно проверяйте список активных устройств и отключайте неизвестные
                       </p>
@@ -433,9 +374,7 @@ export default function SecurityPage() {
                   <div className="flex items-start gap-3">
                     <Key className="w-5 h-5 text-blue-500 mt-0.5" />
                     <div>
-                      <h4 className="font-medium text-blue-700 dark:text-blue-400">
-                        Используйте сильные пароли
-                      </h4>
+                      <h4 className="font-medium text-blue-700 dark:text-blue-400">Используйте сильные пароли</h4>
                       <p className="text-sm text-blue-600 dark:text-blue-500 mt-1">
                         Минимум 8 символов с буквами, цифрами и специальными символами
                       </p>

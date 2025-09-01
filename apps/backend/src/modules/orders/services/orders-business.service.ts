@@ -1,4 +1,4 @@
-// src/modules/orders/services/orders-business.service.ts
+// path: apps/backend/src/modules/orders/services/orders-business.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { OrdersDataService } from './orders-data.service';
 import { Order } from '../../../database/entities';
@@ -7,6 +7,7 @@ import { AuditService } from '../../../common/audit/audit.service';
 import { OrderStatusTransitionException, ValidationDataException } from '../../../common/exceptions/domain.exceptions';
 import { OrdersValidationService } from './orders-validation.service';
 import { ORDERS_CONSTANTS } from '../constants/orders.constants';
+import { computeOrderTotals } from './pricing-engine';
 
 @Injectable()
 export class OrdersBusinessService {
@@ -188,20 +189,12 @@ export class OrdersBusinessService {
       throw new Error(`Order ${id} not found`);
     }
 
-    const servicesTotal =
-      order.orderServices?.reduce((sum, s) => sum + parseFloat(s.totalAmount.toString()), 0) || 0;
-    const partsTotal =
-      order.orderParts?.reduce((sum, p) => sum + parseFloat(p.totalAmount.toString()), 0) || 0;
-
-    const totalAmount = servicesTotal + partsTotal;
-    const discountAmount = order.discountAmount || 0;
-    const taxAmount = this.calculateTax(totalAmount - discountAmount);
-    const finalAmount = totalAmount - discountAmount + taxAmount;
+    const pricing = computeOrderTotals(order);
 
     const updatedOrder = await this.ordersDataService.update(id, {
-      totalAmount,
-      taxAmount,
-      finalAmount,
+      totalAmount: pricing.subtotal,
+      taxAmount: pricing.taxAmount,
+      finalAmount: pricing.finalAmount,
       updatedBy: actorUserId,
     });
 
@@ -212,10 +205,13 @@ export class OrdersBusinessService {
       userId: actorUserId,
       metadata: {
         orderNumber: order.orderNumber,
-        servicesTotal,
-        partsTotal,
-        totalAmount,
-        finalAmount,
+        servicesTotal: pricing.servicesTotal,
+        partsTotal: pricing.partsTotal,
+        subtotal: pricing.subtotal,
+        discountAmount: pricing.discountAmount,
+        taxAmount: pricing.taxAmount,
+        finalAmount: pricing.finalAmount,
+        taxRate: pricing.rates.taxRate,
       },
     });
 
@@ -234,6 +230,7 @@ export class OrdersBusinessService {
     return sanitized;
   }
 
+  // Kept for backwards compatibility (not used by new pricing engine directly)
   private calculateTax(amount: number): number {
     const rate = ORDERS_CONSTANTS.DEFAULTS.TAX_RATE;
     return Math.round(amount * rate * 100) / 100;

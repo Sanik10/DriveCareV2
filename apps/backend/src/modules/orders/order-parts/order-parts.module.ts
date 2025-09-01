@@ -1,5 +1,5 @@
-// path: src/modules/orders/order-parts/order-parts.module.ts
-import { Module } from '@nestjs/common';
+// path: apps/backend/src/modules/orders/order-parts/order-parts.module.ts
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { OrderPartsController } from './order-parts.controller';
 import { OrderPartsService } from './order-parts.service';
@@ -18,6 +18,7 @@ import {
 } from '../../../database/entities';
 import { AuditService } from '../../../common/audit/audit.service';
 import { SubscriptionLimitsService } from '../../subscriptions/services/subscription-limits.service';
+import { OrdersModule } from '../orders.module';
 
 @Module({
   imports: [
@@ -28,8 +29,10 @@ import { SubscriptionLimitsService } from '../../subscriptions/services/subscrip
       PartCategory,
       Inventory,
       Company,
-      Subscription, // 🔥 для SubscriptionLimitsService
+      Subscription, // for SubscriptionLimitsService
     ]),
+    // forwardRef to resolve circular dependency (OrderPartsBusinessService -> OrdersBusinessService)
+    forwardRef(() => OrdersModule),
   ],
   controllers: [OrderPartsController],
   providers: [
@@ -39,7 +42,7 @@ import { SubscriptionLimitsService } from '../../subscriptions/services/subscrip
     OrderPartsValidationService,
     OrderPartsMapperService,
     AuditService,
-    SubscriptionLimitsService, // 🔥 проверка лимитов подписки
+    SubscriptionLimitsService,
   ],
   exports: [OrderPartsService, OrderPartsDataService, OrderPartsMapperService],
 })

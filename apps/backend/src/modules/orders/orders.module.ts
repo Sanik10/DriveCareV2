@@ -26,7 +26,7 @@ import { SubscriptionLimitsService } from '../subscriptions/services/subscriptio
 
 import { OrderServicesModule } from './order-services/order-services.module';
 import { OrderPartsModule } from './order-parts/order-parts.module';
-import { AuthModule } from '../auth/auth.module'; // ✅ для JwtAuthGuard/SessionService/SecurityService
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -44,9 +44,10 @@ import { AuthModule } from '../auth/auth.module'; // ✅ для JwtAuthGuard/Ses
       Inventory,
       Subscription,
     ]),
-    OrderServicesModule,
-    OrderPartsModule,
-    forwardRef(() => AuthModule), // ✅ добавлено
+    // Use forwardRef on both sides to allow injecting OrdersBusinessService into line modules
+    forwardRef(() => OrderServicesModule),
+    forwardRef(() => OrderPartsModule),
+    forwardRef(() => AuthModule),
   ],
   controllers: [OrdersController],
   providers: [
@@ -62,6 +63,7 @@ import { AuthModule } from '../auth/auth.module'; // ✅ для JwtAuthGuard/Ses
     OrdersService,
     OrdersDataService,
     OrdersMapperService,
+    OrdersBusinessService, // export to inject into order-services/order-parts business layers
     OrderServicesModule,
     OrderPartsModule,
   ],
