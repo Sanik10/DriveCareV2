@@ -1,19 +1,19 @@
 // path: apps/frontend/app/dashboard/orders/page.tsx
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Building2, Plus, Search, RefreshCw, ChevronRight, LayoutGrid, List } from "lucide-react";
-import { useAuth } from "@/lib/hooks/use-auth";
-import { ordersAPI } from "@/lib/api/orders";
-import type { OrdersQuery, PaginatedOrdersResponse, OrderStatus, OrderResponse } from "@/lib/types/orders";
-import { OrderCreateDialog } from "@/components/orders/order-create-dialog";
-import { OrderKanban } from "@/components/orders/order-kanban";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { useEffect, useMemo, useState, type ComponentProps } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Building2, Plus, Search, RefreshCw, ChevronRight, LayoutGrid, List } from 'lucide-react';
+import { useAuth } from '@/lib/hooks/use-auth';
+import { ordersAPI } from '@/lib/api/orders';
+import type { OrdersQuery, PaginatedOrdersResponse, OrderStatus, OrderResponse } from '@/lib/types/orders';
+import { OrderCreateDialog } from '@/components/orders/order-create-dialog';
+import { OrderKanban } from '@/components/orders/order-kanban';
+import { StatusBadge } from '@/components/ui/status-badge';
 
 export default function OrdersListPage() {
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
@@ -24,13 +24,13 @@ export default function OrdersListPage() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PaginatedOrdersResponse | null>(null);
 
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<OrderStatus | "">("");
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<OrderStatus | ''>('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
   const [openCreate, setOpenCreate] = useState(false);
-  const [view, setView] = useState<"list" | "board">("board"); // по дефолту — Канбан
+  const [view, setView] = useState<'list' | 'board'>('board'); // по дефолту — Канбан
   const [kanbanRefreshKey, setKanbanRefreshKey] = useState(0);
 
   useEffect(() => setIsMounted(true), []);
@@ -42,17 +42,17 @@ export default function OrdersListPage() {
       page,
       limit,
     }),
-    [search, status, page, limit]
+    [search, status, page, limit],
   );
 
   useEffect(() => {
     if (!isMounted) return;
     if (authLoading) return;
     if (!isAuthenticated || !user) {
-      router.push("/login");
+      router.push('/login');
       return;
     }
-    if (view !== "list") return; // для списка — загрузка, канбан грузится сам внутри
+    if (view !== 'list') return; // для списка — загрузка, канбан грузится сам внутри
 
     let cancelled = false;
     const DEBOUNCE_MS = 300;
@@ -65,9 +65,9 @@ export default function OrdersListPage() {
       } catch (e) {
         try {
           const parsed = JSON.parse((e as Error).message) as { message?: string };
-          if (!cancelled) setError(parsed.message || "Ошибка загрузки заказов");
+          if (!cancelled) setError(parsed.message || 'Ошибка загрузки заказов');
         } catch {
-          if (!cancelled) setError("Ошибка загрузки заказов");
+          if (!cancelled) setError('Ошибка загрузки заказов');
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -81,7 +81,7 @@ export default function OrdersListPage() {
   }, [isMounted, authLoading, isAuthenticated, user, router, query, view]);
 
   const onCreated = async () => {
-    if (view === "list") {
+    if (view === 'list') {
       setPage(1);
       const res = await ordersAPI.getOrders({ ...query, page: 1 });
       setData(res);
@@ -122,23 +122,26 @@ export default function OrdersListPage() {
           <div className="flex items-center gap-2">
             <div className="inline-flex items-center rounded-md border border-border/50 p-0.5">
               <Button
-                variant={view === "board" ? "default" : "ghost"}
+                variant={view === 'board' ? 'default' : 'ghost'}
                 size="sm"
                 className="gap-1"
-                onClick={() => setView("board")}
+                onClick={() => setView('board')}
               >
                 <LayoutGrid className="w-4 h-4" /> Канбан
               </Button>
               <Button
-                variant={view === "list" ? "default" : "ghost"}
+                variant={view === 'list' ? 'default' : 'ghost'}
                 size="sm"
                 className="gap-1"
-                onClick={() => setView("list")}
+                onClick={() => setView('list')}
               >
                 <List className="w-4 h-4" /> Список
               </Button>
             </div>
-            <Button variant="outline" onClick={() => (view === "list" ? setPage(1) : setKanbanRefreshKey((k) => k + 1))}>
+            <Button
+              variant="outline"
+              onClick={() => (view === 'list' ? setPage(1) : setKanbanRefreshKey((k) => k + 1))}
+            >
               <RefreshCw className="w-4 h-4 mr-2" />
               Обновить
             </Button>
@@ -168,7 +171,7 @@ export default function OrdersListPage() {
               <select
                 value={status}
                 onChange={(e) => {
-                  setStatus(e.target.value as OrderStatus | "");
+                  setStatus(e.target.value as OrderStatus | '');
                   setPage(1);
                 }}
                 className="w-full h-9 rounded-md border border-border bg-background text-sm px-3"
@@ -181,7 +184,7 @@ export default function OrdersListPage() {
                 <option value="canceled">Отменен</option>
               </select>
             </div>
-            {view === "list" && (
+            {view === 'list' && (
               <div className="flex gap-2">
                 <select
                   value={limit}
@@ -205,7 +208,7 @@ export default function OrdersListPage() {
           </div>
         </Card>
 
-        {view === "board" ? (
+        {view === 'board' ? (
           <OrderKanban
             search={search}
             refreshKey={kanbanRefreshKey}
@@ -233,7 +236,7 @@ export default function OrdersListPage() {
           </Card>
         )}
 
-        {view === "list" && (
+        {view === 'list' && (
           <div className="flex items-center justify-between">
             <div className="text-sm text-muted-foreground">Всего: {data?.total || 0}</div>
             <div className="flex items-center gap-2">
@@ -257,27 +260,32 @@ export default function OrdersListPage() {
 }
 
 function OrderRow({ order }: { order: OrderResponse }) {
+  type StatusBadgeProps = ComponentProps<typeof StatusBadge>;
+  const badgeStatus = order.status as StatusBadgeProps['status'];
+
   return (
     <Link href={`/dashboard/orders/${order.id}`} className="block hover:bg-surface-1/60 transition-colors">
       <div className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-lg bg-gradient-primary/20 flex items-center justify-center">
-            <span className="text-primary text-sm font-semibold">{order.orderNumber.split("-").pop()}</span>
+            <span className="text-primary text-sm font-semibold">{order.orderNumber.split('-').pop()}</span>
           </div>
           <div>
             <div className="flex items-center gap-3">
               <span className="font-medium">{order.orderNumber}</span>
-              <StatusBadge status={order.status as any} />
+              <StatusBadge status={badgeStatus} />
             </div>
             <div className="text-xs text-muted-foreground mt-0.5">
-              {order.customer?.firstName || order.customer?.companyName || "Клиент"} ·{" "}
-              {order.vehicle?.licensePlate || order.vehicle?.vin || "Авто"}
+              {order.customer?.firstName || order.customer?.companyName || 'Клиент'} ·{' '}
+              {order.vehicle?.licensePlate || order.vehicle?.vin || 'Авто'}
             </div>
           </div>
         </div>
         <div className="text-right">
-          <div className="text-sm font-medium">{(order.finalAmount || 0).toLocaleString("ru-RU")} ₽</div>
-          <div className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString("ru-RU")}</div>
+          <div className="text-sm font-medium">{(order.finalAmount || 0).toLocaleString('ru-RU')} ₽</div>
+          <div className="text-xs text-muted-foreground">
+            {new Date(order.createdAt).toLocaleDateString('ru-RU')}
+          </div>
         </div>
         <ChevronRight className="w-4 h-4 text-muted-foreground ml-2" />
       </div>

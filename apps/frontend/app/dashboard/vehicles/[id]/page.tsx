@@ -1,5 +1,5 @@
 // path: apps/frontend/app/dashboard/vehicles/[id]/page.tsx
-"use client";
+'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -65,7 +65,9 @@ export default function VehicleDetailsPage() {
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isMounted, authLoading, isAuthenticated, user, router, id]);
 
   const handleRefresh = async () => {
@@ -134,7 +136,9 @@ export default function VehicleDetailsPage() {
       await navigator.clipboard.writeText(t);
       setCopyBlink(true);
       setTimeout(() => setCopyBlink(false), 600);
-    } catch {}
+    } catch (err) {
+      void err; // avoid no-empty rule while ignoring clipboard errors
+    }
   };
 
   const serviceInfo = (() => {
@@ -142,7 +146,7 @@ export default function VehicleDetailsPage() {
     if (vehicle.needsService) return 'ТО просрочено';
     if (typeof vehicle.daysUntilService === 'number') return `ТО через ${vehicle.daysUntilService} дн.`;
     return '';
-    })();
+  })();
 
   if (!isMounted) return null;
   if (authLoading) {
@@ -173,11 +177,7 @@ export default function VehicleDetailsPage() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            {vehicle?.customer?.id && (
-              <Button onClick={() => setOpenOrderCreate(true)}>
-                Создать заказ
-              </Button>
-            )}
+            {vehicle?.customer?.id && <Button onClick={() => setOpenOrderCreate(true)}>Создать заказ</Button>}
             <Link href="/dashboard">
               <Button variant="ghost">
                 <Home className="w-4 h-4 mr-2" /> В дашборд
@@ -228,7 +228,7 @@ export default function VehicleDetailsPage() {
                       </span>
                       <Clipboard className="w-3.5 h-3.5 opacity-60" />
                     </div>
-                    {serviceInfo && (
+                    {!!serviceInfo && (
                       <div className={vehicle.needsService ? 'text-xs text-rose-400 mt-1' : 'text-xs text-amber-400 mt-1'}>
                         {serviceInfo}
                       </div>
@@ -239,9 +239,14 @@ export default function VehicleDetailsPage() {
                 <div>
                   <div className="text-sm text-muted-foreground mb-1">Владелец</div>
                   {vehicle.customer ? (
-                    <Link href={`/dashboard/customers/${vehicle.customer.id}`} className="inline-flex items-center gap-2 text-sm hover:underline">
+                    <Link
+                      href={`/dashboard/customers/${vehicle.customer.id}`}
+                      className="inline-flex items-center gap-2 text-sm hover:underline"
+                    >
                       <User className="w-4 h-4" />
-                      {[vehicle.customer.firstName, vehicle.customer.lastName].filter(Boolean).join(' ') || vehicle.customer.companyName || 'Клиент'}
+                      {[vehicle.customer.firstName, vehicle.customer.lastName].filter(Boolean).join(' ') ||
+                        vehicle.customer.companyName ||
+                        'Клиент'}
                     </Link>
                   ) : (
                     <div className="text-sm text-muted-foreground">—</div>
@@ -252,12 +257,7 @@ export default function VehicleDetailsPage() {
                   <div className="text-sm text-muted-foreground mb-1">Пробег</div>
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
-                      <Input
-                        value={mileage}
-                        onChange={(e) => setMileage(e.target.value)}
-                        className="pr-10"
-                        placeholder="Пробег"
-                      />
+                      <Input value={mileage} onChange={(e) => setMileage(e.target.value)} className="pr-10" placeholder="Пробег" />
                       <Gauge className="absolute right-2 top-2.5 w-4 h-4 text-muted-foreground" />
                     </div>
                     <Button size="sm" onClick={handleUpdateMileage} disabled={updating}>
@@ -282,7 +282,6 @@ export default function VehicleDetailsPage() {
         onConfirm={handleDelete}
       />
 
-      {/* Create Order from Vehicle */}
       <OrderCreateDialog
         open={openOrderCreate}
         onOpenChange={setOpenOrderCreate}

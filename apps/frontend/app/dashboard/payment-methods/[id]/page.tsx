@@ -1,32 +1,33 @@
 // path: apps/frontend/app/dashboard/payment-methods/[id]/page.tsx
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { useAuth } from "@/lib/hooks/use-auth";
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { useAuth } from '@/lib/hooks/use-auth';
 
-import { CreditCard, ArrowLeft, Home, RefreshCw, Save, Power, Trash2 } from "lucide-react";
-import { paymentMethodsAPI } from "@/lib/api/payment-methods";
+import { CreditCard, ArrowLeft, Home, RefreshCw, Save, Power, Trash2, Lock, Wrench, Calculator } from 'lucide-react';
+import { paymentMethodsAPI } from '@/lib/api/payment-methods';
 import type {
   PaymentMethodResponse,
   PaymentMethodType,
   PaymentMethodUpdateRequest,
-} from "@/lib/types/payment-methods";
+} from '@/lib/types/payment-methods';
+import { toast } from 'sonner';
 
 const TYPES: { value: PaymentMethodType; label: string }[] = [
-  { value: "cash", label: "Наличные" },
-  { value: "card", label: "Банковская карта" },
-  { value: "bank_transfer", label: "Банковский перевод" },
-  { value: "installments", label: "Рассрочка" },
-  { value: "corporate", label: "Корпоративный" },
-  { value: "digital_wallet", label: "Цифровой кошелёк" },
-  { value: "cryptocurrency", label: "Криптовалюта" },
+  { value: 'cash', label: 'Наличные' },
+  { value: 'card', label: 'Банковская карта' },
+  { value: 'bank_transfer', label: 'Банковский перевод' },
+  { value: 'installments', label: 'Рассрочка' },
+  { value: 'corporate', label: 'Корпоративный' },
+  { value: 'digital_wallet', label: 'Цифровой кошелёк' },
+  { value: 'cryptocurrency', label: 'Криптовалюта' },
 ];
 
 export default function PaymentMethodEditPage() {
@@ -34,6 +35,9 @@ export default function PaymentMethodEditPage() {
   const id = useMemo(() => (Array.isArray(params?.id) ? params.id[0] : params?.id) as string, [params]);
   const router = useRouter();
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
+
+  const roleName = user?.role?.name || '';
+  const canManage = ['company_owner', 'company_admin', 'owner', 'admin'].includes(roleName);
 
   const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -43,33 +47,36 @@ export default function PaymentMethodEditPage() {
   const [openDelete, setOpenDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [testing, setTesting] = useState(false);
+  const [calcLoading, setCalcLoading] = useState(false);
+
   const [method, setMethod] = useState<PaymentMethodResponse | null>(null);
 
   // form
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [type, setType] = useState<PaymentMethodType>("card");
-  const [processingFeePercent, setProcessingFeePercent] = useState<string>("");
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [type, setType] = useState<PaymentMethodType>('card');
+  const [processingFeePercent, setProcessingFeePercent] = useState<string>('');
   const [isActive, setIsActive] = useState(true);
   const [requiresVerification, setRequiresVerification] = useState(false);
   const [supportsRefunds, setSupportsRefunds] = useState(true);
 
   // limits
-  const [minAmount, setMinAmount] = useState<string>("");
-  const [maxAmount, setMaxAmount] = useState<string>("");
-  const [dailyLimit, setDailyLimit] = useState<string>("");
+  const [minAmount, setMinAmount] = useState<string>('');
+  const [maxAmount, setMaxAmount] = useState<string>('');
+  const [dailyLimit, setDailyLimit] = useState<string>('');
 
   // installment
-  const showInstallment = type === "installments";
-  const [maxPeriodMonths, setMaxPeriodMonths] = useState<string>("");
-  const [interestRate, setInterestRate] = useState<string>("");
-  const [minDownPaymentPercent, setMinDownPaymentPercent] = useState<string>("");
+  const showInstallment = type === 'installments';
+  const [maxPeriodMonths, setMaxPeriodMonths] = useState<string>('');
+  const [interestRate, setInterestRate] = useState<string>('');
+  const [minDownPaymentPercent, setMinDownPaymentPercent] = useState<string>('');
 
-  // integration (секреты могут не приходить в ответе — оставляем пустыми)
-  const [gatewayType, setGatewayType] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [merchantId, setMerchantId] = useState("");
-  const [webhookUrl, setWebhookUrl] = useState("");
+  // integration (секреты не приходят — заполняются вручную при обновлении)
+  const [gatewayType, setGatewayType] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [merchantId, setMerchantId] = useState('');
+  const [webhookUrl, setWebhookUrl] = useState('');
   const [testMode, setTestMode] = useState(false);
 
   useEffect(() => setIsMounted(true), []);
@@ -77,7 +84,7 @@ export default function PaymentMethodEditPage() {
     if (!isMounted) return;
     if (authLoading) return;
     if (!isAuthenticated || !user) {
-      router.push("/login");
+      router.push('/login');
       return;
     }
     if (!id) return;
@@ -90,47 +97,42 @@ export default function PaymentMethodEditPage() {
         const m = await paymentMethodsAPI.getPaymentMethod(id);
         if (cancelled) return;
         setMethod(m);
-        // fill form
-        setName(m.name || "");
-        setDescription(m.description || "");
-        setType((m.type as PaymentMethodType) || "card");
-        setProcessingFeePercent(
-          typeof m.processingFeePercent === "number" ? String(m.processingFeePercent) : ""
-        );
+        // fill form (read-only fields будут disabled ниже при !canManage)
+        setName(m.name || '');
+        setDescription(m.description || '');
+        setType((m.type as PaymentMethodType) || 'card');
+        setProcessingFeePercent(typeof m.processingFeePercent === 'number' ? String(m.processingFeePercent) : '');
         setIsActive(!!m.isActive);
         setRequiresVerification(!!m.requiresVerification);
         setSupportsRefunds(m.supportsRefunds !== false);
 
-        setMinAmount(m.limits?.minAmount != null ? String(m.limits.minAmount) : "");
-        setMaxAmount(m.limits?.maxAmount != null ? String(m.limits.maxAmount) : "");
-        setDailyLimit(
-          m.limits?.dailyTransactionLimit != null ? String(m.limits.dailyTransactionLimit) : ""
-        );
+        setMinAmount(m.limits?.minAmount != null ? String(m.limits.minAmount) : '');
+        setMaxAmount(m.limits?.maxAmount != null ? String(m.limits.maxAmount) : '');
+        setDailyLimit(m.limits?.dailyTransactionLimit != null ? String(m.limits.dailyTransactionLimit) : '');
 
         if (m.installmentConfig) {
           setMaxPeriodMonths(
-            m.installmentConfig.maxPeriodMonths != null ? String(m.installmentConfig.maxPeriodMonths) : ""
+            m.installmentConfig.maxPeriodMonths != null ? String(m.installmentConfig.maxPeriodMonths) : '',
           );
-          setInterestRate(
-            m.installmentConfig.interestRate != null ? String(m.installmentConfig.interestRate) : ""
-          );
+          setInterestRate(m.installmentConfig.interestRate != null ? String(m.installmentConfig.interestRate) : '');
           setMinDownPaymentPercent(
             m.installmentConfig.minDownPaymentPercent != null
               ? String(m.installmentConfig.minDownPaymentPercent)
-              : ""
+              : '',
           );
         }
 
+        // Интеграция: приходят только безопасные поля состояния
         if (m.integrationStatus) {
-          setGatewayType(m.integrationStatus.gatewayType || "");
+          setGatewayType(m.integrationStatus.gatewayType || '');
           setTestMode(!!m.integrationStatus.testMode);
         }
       } catch (e) {
         try {
           const parsed = JSON.parse((e as Error).message) as { message?: string };
-          setError(parsed.message || "Ошибка загрузки способа оплаты");
+          setError(parsed.message || 'Ошибка загрузки способа оплаты');
         } catch {
-          setError("Ошибка загрузки способа оплаты");
+          setError('Ошибка загрузки способа оплаты');
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -164,9 +166,10 @@ export default function PaymentMethodEditPage() {
   };
 
   const onSave = async () => {
+    if (!canManage) return; // защита UI
     if (!id) return;
     if (!name.trim()) {
-      setError("Укажите название");
+      setError('Укажите название');
       return;
     }
     const payload: PaymentMethodUpdateRequest = {
@@ -193,9 +196,10 @@ export default function PaymentMethodEditPage() {
       if (Object.keys(inst).length > 0) payload.installmentConfig = inst;
     }
 
-    if (gatewayType.trim() || apiKey.trim() || merchantId.trim() || webhookUrl.trim()) {
+    // Интеграция — только для owner/admin
+    if (canManage && (gatewayType.trim() || apiKey.trim() || merchantId.trim() || webhookUrl.trim() || testMode)) {
       payload.integrationConfig = {
-        gatewayType: gatewayType.trim() || (method?.integrationStatus?.gatewayType || ""),
+        gatewayType: gatewayType.trim() || method?.integrationStatus?.gatewayType || '',
         apiKey: apiKey.trim() || undefined,
         merchantId: merchantId.trim() || undefined,
         webhookUrl: webhookUrl.trim() || undefined,
@@ -207,13 +211,13 @@ export default function PaymentMethodEditPage() {
     setError(null);
     try {
       await paymentMethodsAPI.update(id, payload);
-      router.push("/dashboard/payment-methods");
+      router.push('/dashboard/payment-methods');
     } catch (e) {
       try {
         const parsed = JSON.parse((e as Error).message) as { message?: string };
-        setError(parsed.message || "Не удалось обновить способ оплаты");
+        setError(parsed.message || 'Не удалось обновить способ оплаты');
       } catch {
-        setError("Не удалось обновить способ оплаты");
+        setError('Не удалось обновить способ оплаты');
       }
     } finally {
       setSaving(false);
@@ -221,6 +225,7 @@ export default function PaymentMethodEditPage() {
   };
 
   const onToggle = async () => {
+    if (!canManage) return; // защита UI
     if (!id) return;
     setToggling(true);
     setError(null);
@@ -230,9 +235,9 @@ export default function PaymentMethodEditPage() {
     } catch (e) {
       try {
         const parsed = JSON.parse((e as Error).message) as { message?: string };
-        setError(parsed.message || "Не удалось изменить статус");
+        setError(parsed.message || 'Не удалось изменить статус');
       } catch {
-        setError("Не удалось изменить статус");
+        setError('Не удалось изменить статус');
       }
     } finally {
       setToggling(false);
@@ -240,24 +245,96 @@ export default function PaymentMethodEditPage() {
   };
 
   const onDelete = async () => {
+    if (!canManage) return; // защита UI
     if (!id) return;
     setDeleting(true);
     setError(null);
     try {
       await paymentMethodsAPI.remove(id);
-      router.push("/dashboard/payment-methods");
+      router.push('/dashboard/payment-methods');
     } catch (e) {
       try {
         const parsed = JSON.parse((e as Error).message) as { message?: string };
-        setError(parsed.message || "Не удалось удалить способ оплаты");
+        setError(parsed.message || 'Не удалось удалить способ оплаты');
       } catch {
-        setError("Не удалось удалить способ оплаты");
+        setError('Не удалось удалить способ оплаты');
       }
     } finally {
       setDeleting(false);
       setOpenDelete(false);
     }
   };
+
+  const onTestIntegration = async () => {
+    if (!canManage || !id) return;
+    setTesting(true);
+    try {
+      const res = await paymentMethodsAPI.testIntegration(id);
+      const status = (res.status || '').toString().toLowerCase();
+      const message =
+        res.message ||
+        (status === 'ok'
+          ? 'Интеграция проверена: OK'
+          : status === 'warning'
+          ? 'Проверка завершена с предупреждениями'
+          : 'Ошибка интеграции');
+      if (res.ok || status === 'ok') {
+        toast.success(message);
+      } else if (status === 'warning') {
+        toast.warning(message);
+      } else {
+        toast.error(message);
+      }
+    } catch (e) {
+      try {
+        const parsed = JSON.parse((e as Error).message) as { message?: string };
+        toast.error(parsed.message || 'Не удалось выполнить проверку интеграции');
+      } catch {
+        toast.error('Не удалось выполнить проверку интеграции');
+      }
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const onCalculateFee = async () => {
+    if (!canManage || !id) return;
+    const amountStr = prompt('Введите сумму для расчёта комиссии (в рублях):', '1000');
+    if (amountStr == null) return;
+    const amount = Number(String(amountStr).replace(',', '.'));
+    if (!isFinite(amount) || amount <= 0) {
+      toast.error('Некорректная сумма');
+      return;
+    }
+    setCalcLoading(true);
+    try {
+      const res = await paymentMethodsAPI.calculateFee(id, amount);
+      const currency = res.currency || 'RUB';
+      const fmt = (n: number) => {
+        try {
+          return n.toLocaleString('ru-RU', { style: 'currency', currency });
+        } catch {
+          return `${n.toFixed(2)} ${currency}`;
+        }
+      };
+      toast.success(
+        `Комиссия: ${fmt(res.fee)}${typeof res.percent === 'number' ? ` (${res.percent.toFixed(2)}%)` : ''}. Итого: ${fmt(
+          res.total
+        )}`
+      );
+    } catch (e) {
+      try {
+        const parsed = JSON.parse((e as Error).message) as { message?: string };
+        toast.error(parsed.message || 'Не удалось рассчитать комиссию');
+      } catch {
+        toast.error('Не удалось рассчитать комиссию');
+      }
+    } finally {
+      setCalcLoading(false);
+    }
+  };
+
+  const readOnly = !canManage;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-surface-1">
@@ -277,10 +354,14 @@ export default function PaymentMethodEditPage() {
               <div className="p-2 rounded-lg bg-indigo-500/20">
                 <CreditCard className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <h1 className="text-xl font-bold">
-                Редактирование способа оплаты
-              </h1>
+              <h1 className="text-xl font-bold">Редактирование способа оплаты</h1>
             </div>
+            {!canManage && (
+              <span className="ml-3 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Lock className="w-3.5 h-3.5" />
+                Только просмотр
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Link href="/dashboard">
@@ -291,16 +372,31 @@ export default function PaymentMethodEditPage() {
             <Button variant="outline" onClick={handleRefresh}>
               <RefreshCw className="w-4 h-4 mr-2" /> Обновить
             </Button>
-            <Button variant={isActive ? "outline" : "default"} onClick={onToggle} disabled={toggling}>
-              <Power className="w-4 h-4 mr-2" /> {isActive ? "Отключить" : "Активировать"}
-            </Button>
-            <Button variant="destructive" onClick={() => setOpenDelete(true)}>
-              <Trash2 className="w-4 h-4 mr-2" /> Удалить
-            </Button>
-            <Button onClick={onSave} disabled={saving}>
-              <Save className="w-4 h-4 mr-2" />
-              Сохранить
-            </Button>
+            {canManage && (
+              <>
+                <Button variant={isActive ? 'outline' : 'default'} onClick={onToggle} disabled={toggling}>
+                  <Power className="w-4 h-4 mr-2" /> {isActive ? 'Отключить' : 'Активировать'}
+                </Button>
+
+                <Button variant="outline" onClick={onTestIntegration} disabled={testing} title="Проверить подключение и конфигурацию">
+                  {testing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Wrench className="w-4 h-4 mr-2" />}
+                  Проверить интеграцию
+                </Button>
+
+                <Button variant="outline" onClick={onCalculateFee} disabled={calcLoading} title="Рассчитать комиссию для суммы">
+                  {calcLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Calculator className="w-4 h-4 mr-2" />}
+                  Рассчитать комиссию
+                </Button>
+
+                <Button variant="destructive" onClick={() => setOpenDelete(true)}>
+                  <Trash2 className="w-4 h-4 mr-2" /> Удалить
+                </Button>
+                <Button onClick={onSave} disabled={saving}>
+                  <Save className="w-4 h-4 mr-2" />
+                  Сохранить
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -323,13 +419,13 @@ export default function PaymentMethodEditPage() {
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-muted-foreground">Название</label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} />
+                  <Input value={name} onChange={(e) => setName(e.target.value)} disabled={readOnly} />
                 </div>
                 <div>
                   <label className="text-sm text-muted-foreground">Тип</label>
                   <select
                     value={type}
-                    onChange={(e) => {}}
+                    onChange={() => {}}
                     className="w-full h-9 rounded-md border border-border bg-background text-sm px-3"
                     disabled
                     title="Тип менять нельзя"
@@ -343,7 +439,12 @@ export default function PaymentMethodEditPage() {
                 </div>
                 <div className="md:col-span-2">
                   <label className="text-sm text-muted-foreground">Описание</label>
-                  <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Опционально" />
+                  <Input
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Опционально"
+                    disabled={readOnly}
+                  />
                 </div>
                 <div>
                   <label className="text-sm text-muted-foreground">Комиссия, %</label>
@@ -351,19 +452,47 @@ export default function PaymentMethodEditPage() {
                     value={processingFeePercent}
                     onChange={(e) => setProcessingFeePercent(e.target.value)}
                     placeholder="Напр., 2.5"
+                    disabled={readOnly}
                   />
                 </div>
                 <div className="flex items-center gap-2 pt-6">
-                  <input id="isActive" type="checkbox" className="h-4 w-4" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-                  <label htmlFor="isActive" className="text-sm">Активен</label>
+                  <input
+                    id="isActive"
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                    disabled={readOnly}
+                  />
+                  <label htmlFor="isActive" className="text-sm">
+                    Активен
+                  </label>
                 </div>
                 <div className="flex items-center gap-2 pt-6">
-                  <input id="requiresVerification" type="checkbox" className="h-4 w-4" checked={requiresVerification} onChange={(e) => setRequiresVerification(e.target.checked)} />
-                  <label htmlFor="requiresVerification" className="text-sm">Требует верификации</label>
+                  <input
+                    id="requiresVerification"
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={requiresVerification}
+                    onChange={(e) => setRequiresVerification(e.target.checked)}
+                    disabled={readOnly}
+                  />
+                  <label htmlFor="requiresVerification" className="text-sm">
+                    Требует верификации
+                  </label>
                 </div>
                 <div className="flex items-center gap-2 pt-6">
-                  <input id="supportsRefunds" type="checkbox" className="h-4 w-4" checked={supportsRefunds} onChange={(e) => setSupportsRefunds(e.target.checked)} />
-                  <label htmlFor="supportsRefunds" className="text-sm">Поддерживает возвраты</label>
+                  <input
+                    id="supportsRefunds"
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={supportsRefunds}
+                    onChange={(e) => setSupportsRefunds(e.target.checked)}
+                    disabled={readOnly}
+                  />
+                  <label htmlFor="supportsRefunds" className="text-sm">
+                    Поддерживает возвраты
+                  </label>
                 </div>
               </div>
             </section>
@@ -374,35 +503,43 @@ export default function PaymentMethodEditPage() {
               <div className="grid md:grid-cols-3 gap-4">
                 <div>
                   <label className="text-sm text-muted-foreground">Мин. сумма</label>
-                  <Input value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+                  <Input value={minAmount} onChange={(e) => setMinAmount(e.target.value)} disabled={readOnly} />
                 </div>
                 <div>
                   <label className="text-sm text-muted-foreground">Макс. сумма</label>
-                  <Input value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
+                  <Input value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} disabled={readOnly} />
                 </div>
                 <div>
                   <label className="text-sm text-muted-foreground">Транзакций в день</label>
-                  <Input value={dailyLimit} onChange={(e) => setDailyLimit(e.target.value)} />
+                  <Input value={dailyLimit} onChange={(e) => setDailyLimit(e.target.value)} disabled={readOnly} />
                 </div>
               </div>
             </section>
 
             {/* Рассрочка */}
-            {type === "installments" && (
+            {type === 'installments' && (
               <section>
                 <div className="text-lg font-semibold mb-4">Настройки рассрочки</div>
                 <div className="grid md:grid-cols-3 gap-4">
                   <div>
                     <label className="text-sm text-muted-foreground">Макс. период (мес)</label>
-                    <Input value={maxPeriodMonths} onChange={(e) => setMaxPeriodMonths(e.target.value)} />
+                    <Input
+                      value={maxPeriodMonths}
+                      onChange={(e) => setMaxPeriodMonths(e.target.value)}
+                      disabled={readOnly}
+                    />
                   </div>
                   <div>
                     <label className="text-sm text-muted-foreground">Процентная ставка</label>
-                    <Input value={interestRate} onChange={(e) => setInterestRate(e.target.value)} />
+                    <Input value={interestRate} onChange={(e) => setInterestRate(e.target.value)} disabled={readOnly} />
                   </div>
                   <div>
                     <label className="text-sm text-muted-foreground">Мин. первый взнос, %</label>
-                    <Input value={minDownPaymentPercent} onChange={(e) => setMinDownPaymentPercent(e.target.value)} />
+                    <Input
+                      value={minDownPaymentPercent}
+                      onChange={(e) => setMinDownPaymentPercent(e.target.value)}
+                      disabled={readOnly}
+                    />
                   </div>
                 </div>
               </section>
@@ -411,28 +548,76 @@ export default function PaymentMethodEditPage() {
             {/* Интеграция */}
             <section>
               <div className="text-lg font-semibold mb-4">Интеграция</div>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-muted-foreground">Платёжный шлюз</label>
-                  <Input value={gatewayType} onChange={(e) => setGatewayType(e.target.value)} placeholder="Напр., yookassa, tinkoff" />
+              {canManage ? (
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm text-muted-foreground">Платёжный шлюз</label>
+                    <Input
+                      value={gatewayType}
+                      onChange={(e) => setGatewayType(e.target.value)}
+                      placeholder="Напр., yookassa, tinkoff"
+                      disabled={readOnly}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 pt-6">
+                    <input
+                      id="testMode"
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={testMode}
+                      onChange={(e) => setTestMode(e.target.checked)}
+                      disabled={readOnly}
+                    />
+                    <label htmlFor="testMode" className="text-sm">
+                      Тестовый режим
+                    </label>
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">API Key</label>
+                    <Input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder="Оставьте пустым, чтобы не менять"
+                      disabled={readOnly}
+                      autoComplete="new-password"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Merchant ID</label>
+                    <Input
+                      value={merchantId}
+                      onChange={(e) => setMerchantId(e.target.value)}
+                      placeholder="Оставьте пустым, чтобы не менять"
+                      disabled={readOnly}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm text-muted-foreground">Webhook URL</label>
+                    <Input
+                      value={webhookUrl}
+                      onChange={(e) => setWebhookUrl(e.target.value)}
+                      placeholder="Оставьте пустым, чтобы не менять"
+                      disabled={readOnly}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 pt-6">
-                  <input id="testMode" type="checkbox" className="h-4 w-4" checked={testMode} onChange={(e) => setTestMode(e.target.checked)} />
-                  <label htmlFor="testMode" className="text-sm">Тестовый режим</label>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  Интеграционные параметры скрыты. Обратитесь к администратору компании.
                 </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">API Key</label>
-                  <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Оставьте пустым, чтобы не менять" />
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">Merchant ID</label>
-                  <Input value={merchantId} onChange={(e) => setMerchantId(e.target.value)} placeholder="Оставьте пустым, чтобы не менять" />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-sm text-muted-foreground">Webhook URL</label>
-                  <Input value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} placeholder="Оставьте пустым, чтобы не менять" />
-                </div>
-              </div>
+              )}
             </section>
           </Card>
         )}

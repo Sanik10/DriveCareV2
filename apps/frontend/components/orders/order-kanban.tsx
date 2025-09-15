@@ -1,23 +1,23 @@
 // path: apps/frontend/components/orders/order-kanban.tsx
-"use client";
+'use client';
 
-import * as React from "react";
-import { ordersAPI } from "@/lib/api/orders";
-import type { OrderResponse, OrdersQuery, OrderStatus } from "@/lib/types/orders";
-import { Button } from "@/components/ui/button";
-import { StatusBadge, orderStatusLabel } from "@/components/ui/status-badge";
-import { RefreshCw, Clock, User, ArrowRight, Sparkles, AlertTriangle, GripVertical } from "lucide-react";
-import { useAuth } from "@/lib/hooks/use-auth";
-import { cn } from "@/lib/utils";
+import * as React from 'react';
+import { ordersAPI } from '@/lib/api/orders';
+import type { OrderResponse, OrdersQuery, OrderStatus } from '@/lib/types/orders';
+import { Button } from '@/components/ui/button';
+import { StatusBadge, orderStatusLabel } from '@/components/ui/status-badge';
+import { RefreshCw, Clock, User, ArrowRight, Sparkles, AlertTriangle, GripVertical } from 'lucide-react';
+import { useAuth } from '@/lib/hooks/use-auth';
+import { cn } from '@/lib/utils';
 
-type BoardStatus = "new" | "in_progress" | "awaiting_parts" | "completed" | "canceled";
+type BoardStatus = 'new' | 'in_progress' | 'awaiting_parts' | 'completed' | 'canceled';
 
 const COLUMNS: { key: BoardStatus; title: string; wip?: number }[] = [
-  { key: "new", title: "Новые", wip: 8 },
-  { key: "in_progress", title: "В работе", wip: 10 },
-  { key: "awaiting_parts", title: "Ожидают запчасти", wip: 6 },
-  { key: "completed", title: "Завершены" },
-  { key: "canceled", title: "Отменены" },
+  { key: 'new', title: 'Новые', wip: 8 },
+  { key: 'in_progress', title: 'В работе', wip: 10 },
+  { key: 'awaiting_parts', title: 'Ожидают запчасти', wip: 6 },
+  { key: 'completed', title: 'Завершены' },
+  { key: 'canceled', title: 'Отменены' },
 ];
 
 const COL_MIN_WIDTH = 340;
@@ -28,9 +28,17 @@ type Props = {
   refreshKey?: number;
 };
 
+function getUserId(u: unknown): string | undefined {
+  if (u && typeof u === 'object' && 'id' in u) {
+    const maybe = (u as { id?: unknown }).id;
+    return typeof maybe === 'string' ? maybe : undefined;
+  }
+  return undefined;
+}
+
 export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
   const { user } = useAuth();
-  const currentUserId = (user as any)?.id as string | undefined;
+  const currentUserId = getUserId(user);
 
   const [loading, setLoading] = React.useState(false);
   const [columns, setColumns] = React.useState<Record<BoardStatus, OrderResponse[]>>({
@@ -58,14 +66,20 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
       const res = await ordersAPI.getOrders(query);
       return res;
     },
-    [search]
+    [search],
   );
 
   const loadAll = React.useCallback(async () => {
     setLoading(true);
     try {
       const results = await Promise.all(COLUMNS.map((col) => fetchColumn(col.key, 1)));
-      const nextCols: Record<BoardStatus, OrderResponse[]> = { new: [], in_progress: [], awaiting_parts: [], completed: [], canceled: [] };
+      const nextCols: Record<BoardStatus, OrderResponse[]> = {
+        new: [],
+        in_progress: [],
+        awaiting_parts: [],
+        completed: [],
+        canceled: [],
+      };
       const nextPages: Record<BoardStatus, { page: number; totalPages: number }> = { ...pages };
       COLUMNS.forEach((c, i) => {
         nextCols[c.key] = results[i].items;
@@ -76,7 +90,7 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [fetchColumn]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchColumn, pages]);
 
   React.useEffect(() => {
     void loadAll();
@@ -84,31 +98,31 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
 
   React.useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
-      if (e.code === "Space") setFocusMode(true);
+      if (e.code === 'Space') setFocusMode(true);
     };
     const onUp = (e: KeyboardEvent) => {
-      if (e.code === "Space") setFocusMode(false);
+      if (e.code === 'Space') setFocusMode(false);
     };
-    window.addEventListener("keydown", onDown);
-    window.addEventListener("keyup", onUp);
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
     return () => {
-      window.removeEventListener("keydown", onDown);
-      window.removeEventListener("keyup", onUp);
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
     };
   }, []);
 
   // Drag & Drop: перетаскиваем только через handle, не всю карточку
   const onDragStart = (e: React.DragEvent, orderId: string) => {
-    e.dataTransfer.setData("text/plain", orderId);
-    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData('text/plain', orderId);
+    e.dataTransfer.effectAllowed = 'move';
   };
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
+    e.dataTransfer.dropEffect = 'move';
   };
   const onDrop = async (e: React.DragEvent, targetStatus: BoardStatus) => {
     e.preventDefault();
-    const id = e.dataTransfer.getData("text/plain");
+    const id = e.dataTransfer.getData('text/plain');
     if (!id) return;
     const fromStatus = (Object.keys(columns) as BoardStatus[]).find((s) => columns[s].some((o) => o.id === id));
     if (!fromStatus || fromStatus === targetStatus) return;
@@ -118,11 +132,11 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
 
     try {
       // Бизнес-правило: для перевода в работу требуется исполнитель
-      if (targetStatus === "in_progress" && !order.assignedToUser && currentUserId) {
+      if (targetStatus === 'in_progress' && !order.assignedToUser && currentUserId) {
         try {
           await ordersAPI.assignMechanic(id, currentUserId);
         } catch {
-          // игнорируем: если не удалось, ниже покажем ошибку при смене статуса
+          // проигнорируем, статус сменим ниже (или покажем ошибку)
         }
       }
       const updated = await ordersAPI.updateOrderStatus(id, targetStatus as OrderStatus);
@@ -134,15 +148,15 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
       });
       setErrorMsg(null);
     } catch (err) {
-      let msg = "Не удалось изменить статус заказа";
+      let msg = 'Не удалось изменить статус заказа';
       try {
         const parsed = JSON.parse((err as Error).message) as { message?: string };
         if (parsed?.message) msg = parsed.message;
       } catch {
         // noop
       }
-      if (targetStatus === "in_progress") {
-        msg ||= "Нельзя начать работу: назначьте исполнителя или добавьте хотя бы одну услугу/запчасть";
+      if (targetStatus === 'in_progress') {
+        msg ||= 'Нельзя начать работу: назначьте исполнителя или добавьте хотя бы одну услугу/запчасть';
       }
       setErrorMsg(msg);
       setDenyCardId(id);
@@ -161,7 +175,7 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
   };
 
   const filtered = (list: OrderResponse[]) => {
-    const q = (search || "").trim().toLowerCase();
+    const q = (search || '').trim().toLowerCase();
     if (!q) return list;
     return list.filter((o) => {
       const parts = [
@@ -189,7 +203,7 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
         <Sparkles className="w-3.5 h-3.5" />
         Подсказка: перетаскивайте карточку за «ручку» слева. Удерживайте пробел — режим фокуса.
         <Button variant="outline" size="sm" className="ml-auto" onClick={() => loadAll()} disabled={loading}>
-          <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
+          <RefreshCw className={cn('w-4 h-4 mr-2', loading && 'animate-spin')} />
           Обновить
         </Button>
       </div>
@@ -202,10 +216,7 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
       )}
 
       <div className="relative overflow-x-auto pb-1">
-        <div
-          className="flex gap-3 pr-2"
-          style={{ minWidth: `${COLUMNS.length * COL_MIN_WIDTH + 24}px` }}
-        >
+        <div className="flex gap-3 pr-2" style={{ minWidth: `${COLUMNS.length * COL_MIN_WIDTH + 24}px` }}>
           {COLUMNS.map((col) => {
             const list = filtered(columns[col.key]);
             const count = list.length;
@@ -213,13 +224,16 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
             const wipRatio = wip ? Math.min(1, count / wip) : 0;
             const headerGlow = wip && count > wip;
 
+            type StatusBadgeProps = React.ComponentProps<typeof StatusBadge>;
+            const badgeStatus = col.key as StatusBadgeProps['status'];
+
             return (
               <div
                 key={col.key}
                 className={cn(
-                  "rounded-xl border border-border/60 bg-card/70 backdrop-blur-sm p-3 flex flex-col",
-                  "transition-shadow",
-                  headerGlow && "ring-1 ring-rose-400/30"
+                  'rounded-xl border border-border/60 bg-card/70 backdrop-blur-sm p-3 flex flex-col',
+                  'transition-shadow',
+                  headerGlow && 'ring-1 ring-rose-400/30',
                 )}
                 style={{ minWidth: COL_MIN_WIDTH }}
                 onDragOver={onDragOver}
@@ -228,26 +242,26 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
                 <div className="mb-2">
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold">{col.title}</div>
-                    <StatusBadge status={col.key as any} />
+                    <StatusBadge status={badgeStatus} />
                   </div>
                   <div className="mt-1 flex items-center gap-2">
-                    <div className={cn("h-1 rounded-full w-full bg-surface-1/60 overflow-hidden", wip ? "opacity-100" : "opacity-0")}>
+                    <div className={cn('h-1 rounded-full w-full bg-surface-1/60 overflow-hidden', wip ? 'opacity-100' : 'opacity-0')}>
                       <div
                         className={cn(
-                          "h-full rounded-full transition-all",
-                          wipRatio < 0.7 ? "bg-emerald-500/60" : wipRatio < 1 ? "bg-amber-500/60" : "bg-rose-500/70"
+                          'h-full rounded-full transition-all',
+                          wipRatio < 0.7 ? 'bg-emerald-500/60' : wipRatio < 1 ? 'bg-amber-500/60' : 'bg-rose-500/70',
                         )}
                         style={{ width: `${Math.min(100, wipRatio * 100)}%` }}
                       />
                     </div>
                     <div className="text-[11px] text-muted-foreground">
                       {count}
-                      {wip ? ` / ${wip}` : ""}
+                      {wip ? ` / ${wip}` : ''}
                     </div>
                   </div>
                 </div>
 
-                <div className={cn("flex-1 space-y-2 overflow-auto pr-1", focusMode && "transition-opacity")}>
+                <div className={cn('flex-1 space-y-2 overflow-auto pr-1', focusMode && 'transition-opacity')}>
                   {list.length === 0 ? (
                     <div className="text-xs text-muted-foreground mt-3">Нет карточек</div>
                   ) : (
@@ -306,7 +320,7 @@ function KanbanCard({
   const dueRatio = eta ? Math.min(1, elapsedMs / totalMs) : order.progressPercentage ? Math.min(1, order.progressPercentage / 100) : 0;
   const overdue = eta ? now > eta : false;
 
-  const ring = `conic-gradient(${overdue ? "#ef4444" : "#22c55e"} ${Math.round(dueRatio * 360)}deg, rgba(255,255,255,0.08) 0deg)`;
+  const ring = `conic-gradient(${overdue ? '#ef4444' : '#22c55e'} ${Math.round(dueRatio * 360)}deg, rgba(255,255,255,0.08) 0deg)`;
   const glowOpacity = overdue ? 0.35 : Math.max(0.1, dueRatio * 0.25);
 
   const matchesSearch = React.useMemo(() => {
@@ -329,18 +343,22 @@ function KanbanCard({
     return parts.some((p) => p.includes(q));
   }, [order, search]);
 
+  type StatusBadgeProps = React.ComponentProps<typeof StatusBadge>;
+  const badgeStatus = order.status as StatusBadgeProps['status'];
+  const labelStatus = order.status as Parameters<typeof orderStatusLabel>[0];
+
   return (
     <div
       className={cn(
-        "relative group rounded-lg border border-border/50 bg-surface-1/60 backdrop-blur-sm p-3 transition-shadow",
-        "hover:shadow-md",
-        focusMode && !matchesSearch && "opacity-30",
-        deny && "border-rose-500/60 ring-1 ring-rose-500/30"
+        'relative group rounded-lg border border-border/50 bg-surface-1/60 backdrop-blur-sm p-3 transition-shadow',
+        'hover:shadow-md',
+        focusMode && !matchesSearch && 'opacity-30',
+        deny && 'border-rose-500/60 ring-1 ring-rose-500/30',
       )}
       onClick={() => onOpen?.(order.id)}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => (e.key === "Enter" ? onOpen?.(order.id) : undefined)}
+      onKeyDown={(e) => (e.key === 'Enter' ? onOpen?.(order.id) : undefined)}
     >
       {/* Glow */}
       <div
@@ -349,7 +367,7 @@ function KanbanCard({
       />
       <div
         className="absolute -inset-1 rounded-lg opacity-0 group-hover:opacity-30 transition-opacity pointer-events-none"
-        style={{ background: "radial-gradient(120px 80px at 10% 10%, rgba(99,102,241,0.15), transparent)" }}
+        style={{ background: 'radial-gradient(120px 80px at 10% 10%, rgba(99,102,241,0.15), transparent)' }}
       />
       <div
         className="absolute -inset-px rounded-lg pointer-events-none"
@@ -374,25 +392,27 @@ function KanbanCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <div className="text-sm font-semibold truncate">{order.orderNumber}</div>
-            <StatusBadge status={order.status as any} />
+            <StatusBadge status={badgeStatus} />
           </div>
           <div className="mt-1 text-[11px] text-muted-foreground truncate">
-            <span className="font-medium">{order.customer?.firstName || order.customer?.companyName || "Клиент"}</span>
-            {" · "}
-            <span>{order.vehicle?.licensePlate || order.vehicle?.vin || "Авто"}</span>
+            <span className="font-medium">
+              {order.customer?.firstName || order.customer?.companyName || 'Клиент'}
+            </span>
+            {' · '}
+            <span>{order.vehicle?.licensePlate || order.vehicle?.vin || 'Авто'}</span>
           </div>
         </div>
       </div>
 
       <div className="mt-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full" style={{ background: ring }} title={hasETA ? "Прогресс по сроку" : "Прогресс"} />
+          <div className="w-6 h-6 rounded-full" style={{ background: ring }} title={hasETA ? 'Прогресс по сроку' : 'Прогресс'} />
           <div className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
             <Clock className="w-3.5 h-3.5" />
-            {overdue ? "Просрочен" : hasETA ? orderStatusLabel(order.status as any) : "Без срока"}
+            {overdue ? 'Просрочен' : hasETA ? orderStatusLabel(labelStatus) : 'Без срока'}
           </div>
         </div>
-        <div className="text-sm font-medium">{(order.finalAmount || 0).toLocaleString("ru-RU")} ₽</div>
+        <div className="text-sm font-medium">{(order.finalAmount || 0).toLocaleString('ru-RU')} ₽</div>
       </div>
 
       {order.assignedToUser && (
@@ -403,7 +423,14 @@ function KanbanCard({
 
       {/* Быстрое действие (видно при ховере): открыть */}
       <div className="mt-2 hidden group-hover:flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onOpen?.(order.id); }}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen?.(order.id);
+          }}
+        >
           Открыть <ArrowRight className="w-3.5 h-3.5 ml-1" />
         </Button>
       </div>

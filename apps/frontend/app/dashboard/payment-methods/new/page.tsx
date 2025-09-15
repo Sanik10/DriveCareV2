@@ -1,64 +1,64 @@
 // path: apps/frontend/app/dashboard/payment-methods/new/page.tsx
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useAuth } from "@/lib/hooks/use-auth";
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useAuth } from '@/lib/hooks/use-auth';
 
-import { CreditCard, ArrowLeft, Home, Save } from "lucide-react";
-import { paymentMethodsAPI } from "@/lib/api/payment-methods";
-import type {
-  PaymentMethodType,
-  PaymentMethodCreateRequest,
-} from "@/lib/types/payment-methods";
+import { CreditCard, ArrowLeft, Home, Save, Lock } from 'lucide-react';
+import { paymentMethodsAPI } from '@/lib/api/payment-methods';
+import type { PaymentMethodType, PaymentMethodCreateRequest } from '@/lib/types/payment-methods';
 
 const TYPES: { value: PaymentMethodType; label: string }[] = [
-  { value: "cash", label: "Наличные" },
-  { value: "card", label: "Банковская карта" },
-  { value: "bank_transfer", label: "Банковский перевод" },
-  { value: "installments", label: "Рассрочка" },
-  { value: "corporate", label: "Корпоративный" },
-  { value: "digital_wallet", label: "Цифровой кошелёк" },
-  { value: "cryptocurrency", label: "Криптовалюта" },
+  { value: 'cash', label: 'Наличные' },
+  { value: 'card', label: 'Банковская карта' },
+  { value: 'bank_transfer', label: 'Банковский перевод' },
+  { value: 'installments', label: 'Рассрочка' },
+  { value: 'corporate', label: 'Корпоративный' },
+  { value: 'digital_wallet', label: 'Цифровой кошелёк' },
+  { value: 'cryptocurrency', label: 'Криптовалюта' },
 ];
 
 export default function PaymentMethodCreatePage() {
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
+  const roleName = user?.role?.name || '';
+  const canManage = ['company_owner', 'company_admin', 'owner', 'admin'].includes(roleName);
+
   const [isMounted, setIsMounted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [type, setType] = useState<PaymentMethodType>("card");
-  const [processingFeePercent, setProcessingFeePercent] = useState<string>("");
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [type, setType] = useState<PaymentMethodType>('card');
+  const [processingFeePercent, setProcessingFeePercent] = useState<string>('');
   const [isActive, setIsActive] = useState(true);
   const [requiresVerification, setRequiresVerification] = useState(false);
   const [supportsRefunds, setSupportsRefunds] = useState(true);
 
   // limits
-  const [minAmount, setMinAmount] = useState<string>("");
-  const [maxAmount, setMaxAmount] = useState<string>("");
-  const [dailyLimit, setDailyLimit] = useState<string>("");
+  const [minAmount, setMinAmount] = useState<string>('');
+  const [maxAmount, setMaxAmount] = useState<string>('');
+  const [dailyLimit, setDailyLimit] = useState<string>('');
 
   // installment
-  const showInstallment = type === "installments";
-  const [maxPeriodMonths, setMaxPeriodMonths] = useState<string>("");
-  const [interestRate, setInterestRate] = useState<string>("");
-  const [minDownPaymentPercent, setMinDownPaymentPercent] = useState<string>("");
+  const showInstallment = type === 'installments';
+  const [maxPeriodMonths, setMaxPeriodMonths] = useState<string>('');
+  const [interestRate, setInterestRate] = useState<string>('');
+  const [minDownPaymentPercent, setMinDownPaymentPercent] = useState<string>('');
 
   // integration
-  const [gatewayType, setGatewayType] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [merchantId, setMerchantId] = useState("");
-  const [webhookUrl, setWebhookUrl] = useState("");
+  const [gatewayType, setGatewayType] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [merchantId, setMerchantId] = useState('');
+  const [webhookUrl, setWebhookUrl] = useState('');
   const [testMode, setTestMode] = useState(false);
 
   useEffect(() => setIsMounted(true), []);
@@ -66,9 +66,14 @@ export default function PaymentMethodCreatePage() {
     if (!isMounted) return;
     if (authLoading) return;
     if (!isAuthenticated || !user) {
-      router.push("/login");
+      router.push('/login');
+      return;
     }
-  }, [isMounted, authLoading, isAuthenticated, user, router]);
+    // Только owner/admin могут создавать метод
+    if (!canManage) {
+      router.push('/dashboard/payment-methods');
+    }
+  }, [isMounted, authLoading, isAuthenticated, user, router, canManage]);
 
   if (!isMounted) return null;
   if (authLoading) {
@@ -78,15 +83,15 @@ export default function PaymentMethodCreatePage() {
       </div>
     );
   }
-  if (!isAuthenticated || !user) return null;
+  if (!isAuthenticated || !user || !canManage) return null;
 
   const onSubmit = async () => {
     if (!name.trim()) {
-      setError("Укажите название способа оплаты");
+      setError('Укажите название способа оплаты');
       return;
     }
     if (!type) {
-      setError("Выберите тип способа оплаты");
+      setError('Выберите тип способа оплаты');
       return;
     }
 
@@ -133,13 +138,13 @@ export default function PaymentMethodCreatePage() {
     setError(null);
     try {
       await paymentMethodsAPI.create(payload);
-      router.push("/dashboard/payment-methods");
+      router.push('/dashboard/payment-methods');
     } catch (e) {
       try {
         const parsed = JSON.parse((e as Error).message) as { message?: string };
-        setError(parsed.message || "Не удалось создать способ оплаты");
+        setError(parsed.message || 'Не удалось создать способ оплаты');
       } catch {
-        setError("Не удалось создать способ оплаты");
+        setError('Не удалось создать способ оплаты');
       }
     } finally {
       setSaving(false);
@@ -165,6 +170,11 @@ export default function PaymentMethodCreatePage() {
                 <CreditCard className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               </div>
               <h1 className="text-xl font-bold">Новый способ оплаты</h1>
+              {!canManage && (
+                <span className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Lock className="w-3.5 h-3.5" /> Только для администраторов
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -220,16 +230,40 @@ export default function PaymentMethodCreatePage() {
                 />
               </div>
               <div className="flex items-center gap-2 pt-6">
-                <input id="isActive" type="checkbox" className="h-4 w-4" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-                <label htmlFor="isActive" className="text-sm">Активен</label>
+                <input
+                  id="isActive"
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                />
+                <label htmlFor="isActive" className="text-sm">
+                  Активен
+                </label>
               </div>
               <div className="flex items-center gap-2 pt-6">
-                <input id="requiresVerification" type="checkbox" className="h-4 w-4" checked={requiresVerification} onChange={(e) => setRequiresVerification(e.target.checked)} />
-                <label htmlFor="requiresVerification" className="text-sm">Требует верификации</label>
+                <input
+                  id="requiresVerification"
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={requiresVerification}
+                  onChange={(e) => setRequiresVerification(e.target.checked)}
+                />
+                <label htmlFor="requiresVerification" className="text-sm">
+                  Требует верификации
+                </label>
               </div>
               <div className="flex items-center gap-2 pt-6">
-                <input id="supportsRefunds" type="checkbox" className="h-4 w-4" checked={supportsRefunds} onChange={(e) => setSupportsRefunds(e.target.checked)} />
-                <label htmlFor="supportsRefunds" className="text-sm">Поддерживает возвраты</label>
+                <input
+                  id="supportsRefunds"
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={supportsRefunds}
+                  onChange={(e) => setSupportsRefunds(e.target.checked)}
+                />
+                <label htmlFor="supportsRefunds" className="text-sm">
+                  Поддерживает возвраты
+                </label>
               </div>
             </div>
           </section>
@@ -280,7 +314,14 @@ export default function PaymentMethodCreatePage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm text-muted-foreground">Платёжный шлюз</label>
-                <Input value={gatewayType} onChange={(e) => setGatewayType(e.target.value)} placeholder="Напр., yookassa, tinkoff" />
+                <Input
+                  value={gatewayType}
+                  onChange={(e) => setGatewayType(e.target.value)}
+                  placeholder="Напр., yookassa, tinkoff"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
               </div>
               <div className="flex items-center gap-2 pt-6">
                 <input id="testMode" type="checkbox" className="h-4 w-4" checked={testMode} onChange={(e) => setTestMode(e.target.checked)} />
@@ -288,15 +329,37 @@ export default function PaymentMethodCreatePage() {
               </div>
               <div>
                 <label className="text-sm text-muted-foreground">API Key</label>
-                <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Опционально" />
+                <Input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Опционально"
+                  autoComplete="new-password"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
               </div>
               <div>
                 <label className="text-sm text-muted-foreground">Merchant ID</label>
-                <Input value={merchantId} onChange={(e) => setMerchantId(e.target.value)} placeholder="Опционально" />
+                <Input
+                  value={merchantId}
+                  onChange={(e) => setMerchantId(e.target.value)}
+                  placeholder="Опционально"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
               </div>
               <div className="md:col-span-2">
                 <label className="text-sm text-muted-foreground">Webhook URL</label>
-                <Input value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} placeholder="Опционально" />
+                <Input
+                  value={webhookUrl}
+                  onChange={(e) => setWebhookUrl(e.target.value)}
+                  placeholder="Опционально"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
               </div>
             </div>
           </section>

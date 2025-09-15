@@ -1,67 +1,90 @@
 // path: apps/frontend/app/dashboard/page.tsx
-'use client'
+'use client';
 
-import { useEffect, useRef, useState, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  Building2, Users, Wrench, Calendar, FileText,
-  Package, Settings, Car, Truck, Shield, TrendingUp,
-  DollarSign, Clock, CheckCircle, AlertTriangle,
-  Activity, BarChart3, Zap, Star, CreditCard,
-} from 'lucide-react'
-import Link from 'next/link'
+  Building2,
+  Users,
+  Wrench,
+  Calendar,
+  FileText,
+  Package,
+  Settings,
+  Car,
+  Truck,
+  Shield,
+  TrendingUp,
+  DollarSign,
+  Clock,
+  CheckCircle,
+  AlertTriangle,
+  Activity,
+  BarChart3,
+  Zap,
+  Star,
+  CreditCard,
+} from 'lucide-react';
+import Link from 'next/link';
 
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { useAuth } from '@/lib/hooks/use-auth'
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { useAuth } from '@/lib/hooks/use-auth';
+import styles from './dashboard.module.css';
+
+type NavigatorExtra = Navigator & {
+  connection?: { saveData?: boolean };
+  deviceMemory?: number;
+  hardwareConcurrency?: number;
+};
 
 function detectLowPerf(): boolean {
-  if (typeof window === 'undefined') return false
-  const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
-  const nav = navigator as any
-  const saveData = nav?.connection?.saveData ?? false
-  const lowMemory = typeof nav?.deviceMemory === 'number' ? nav.deviceMemory <= 4 : false
-  const lowCPU = typeof nav?.hardwareConcurrency === 'number' ? nav.hardwareConcurrency <= 4 : false
+  if (typeof window === 'undefined') return false;
+  const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  const nav = navigator as NavigatorExtra;
+  const saveData = nav?.connection?.saveData ?? false;
+  const lowMemory = typeof nav?.deviceMemory === 'number' ? nav.deviceMemory <= 4 : false;
+  const lowCPU = typeof nav?.hardwareConcurrency === 'number' ? nav.hardwareConcurrency <= 4 : false;
 
   // Allow manual override via localStorage: set item 'VFX' to 'off' or 'on'
-  const override = (typeof window !== 'undefined' && window.localStorage?.getItem('VFX')) || null
-  if (override === 'off') return true
-  if (override === 'on') return false
+  const override = (typeof window !== 'undefined' && window.localStorage?.getItem('VFX')) || null;
+  if (override === 'off') return true;
+  if (override === 'on') return false;
 
-  return prefersReducedMotion || saveData || lowMemory || lowCPU
+  return prefersReducedMotion || saveData || lowMemory || lowCPU;
 }
 
 export default function DashboardPage() {
-  const { user, isLoading, isAuthenticated, error, logout, checkAuth, clearError } = useAuth()
-  const router = useRouter()
-  const redirectAttempted = useRef(false)
-  const [isMounted, setIsMounted] = useState(false)
-  const [vfxDisabled, setVfxDisabled] = useState(false)
+  const { user, isLoading, isAuthenticated, error, logout, checkAuth, clearError } = useAuth();
+  const router = useRouter();
+  const redirectAttempted = useRef(false);
+  const [isMounted, setIsMounted] = useState(false);
+  const [vfxDisabled, setVfxDisabled] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true)
+    setIsMounted(true);
     // Determine if visual effects should be disabled for performance
-    setVfxDisabled(detectLowPerf())
-  }, [])
+    setVfxDisabled(detectLowPerf());
+  }, []);
 
   useEffect(() => {
-    if (!isMounted) return
+    if (!isMounted) return;
     if (!isLoading && !isAuthenticated && !user && !error && !redirectAttempted.current) {
-      redirectAttempted.current = true
-      router.push('/login')
+      redirectAttempted.current = true;
+      router.push('/login');
     }
-  }, [isMounted, isLoading, isAuthenticated, user, error, router])
+  }, [isMounted, isLoading, isAuthenticated, user, error, router]);
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      redirectAttempted.current = false
+      redirectAttempted.current = false;
     }
-  }, [isAuthenticated, user])
+  }, [isAuthenticated, user]);
 
   const handleRetry = () => {
-    clearError()
-    checkAuth(true)
-  }
+    clearError();
+    checkAuth(true);
+  };
 
   // Memoized quick stats must be declared before any early return
   const quickStats = useMemo(
@@ -72,9 +95,9 @@ export default function DashboardPage() {
       { icon: TrendingUp, label: 'Рост', value: '+23%', color: 'accent' as const },
     ],
     []
-  )
+  );
 
-  if (!isMounted) return null
+  if (!isMounted) return null;
 
   if (isLoading) {
     return (
@@ -91,11 +114,11 @@ export default function DashboardPage() {
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center space-y-6">
             <div className="relative">
-              <div className="w-16 h-16 border-3 border-primary/30 border-t-primary rounded-full animate-spin mx-auto"></div>
+              <div className="w-16 h-16 border-3 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
               <div
                 className="absolute inset-0 w-16 h-16 border-2 border-secondary/20 border-b-secondary rounded-full animate-spin mx-auto"
                 style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}
-              ></div>
+              />
             </div>
             <div className="space-y-2">
               <p className="text-lg font-medium">Загрузка DriveCare</p>
@@ -104,7 +127,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -136,11 +159,11 @@ export default function DashboardPage() {
           </Card>
         </div>
       </div>
-    )
+    );
   }
 
   if (!user) {
-    return null
+    return null;
   }
 
   return (
@@ -162,7 +185,7 @@ export default function DashboardPage() {
         <div className="fixed inset-0 -z-10 pointer-events-none">
           {/* Main glow nodes (reduced count) */}
           <div
-            className="absolute rounded-full data-hub-main"
+            className={`absolute rounded-full ${styles.dataHubMain}`}
             style={{
               width: '160px',
               height: '160px',
@@ -175,7 +198,7 @@ export default function DashboardPage() {
             }}
           />
           <div
-            className="absolute rounded-full data-node-1"
+            className={`absolute rounded-full ${styles.dataNode1}`}
             style={{
               width: '110px',
               height: '110px',
@@ -190,7 +213,7 @@ export default function DashboardPage() {
 
           {/* Minimal data stream */}
           <div
-            className="absolute data-stream-1"
+            className={`absolute ${styles.dataStream1}`}
             style={{
               width: '140px',
               height: '2px',
@@ -217,7 +240,7 @@ export default function DashboardPage() {
               <div>
                 <h1 className="text-2xl font-bold text-gradient-primary">DriveCare</h1>
                 <p className="text-sm text-muted-foreground flex items-center gap-2">
-                  <Activity className="w-3 h-3 dashboard-pulse" />
+                  <Activity className={`w-3 h-3 ${styles.dashboardPulse}`} />
                   Панель управления
                 </p>
               </div>
@@ -226,15 +249,12 @@ export default function DashboardPage() {
             <div className="flex items-center gap-4">
               <div className="text-right">
                 <p className="text-sm font-medium flex items-center gap-2">
-                  <span className="w-2 h-2 bg-primary rounded-full user-status-indicator"></span>
+                  <span className={`w-2 h-2 bg-primary rounded-full ${styles.userStatusIndicator}`} />
                   {user.firstName} {user.lastName}
                 </p>
                 <p className="text-xs text-muted-foreground">{user.role?.name || 'Пользователь'}</p>
               </div>
-              <Button
-                onClick={logout}
-                className="rounded-2xl btn-ghost-fixed transition-all duration-300 hover:scale-105"
-              >
+              <Button onClick={logout} className="rounded-2xl btn-ghost-fixed transition-all duration-300 hover:scale-105">
                 Выйти
               </Button>
             </div>
@@ -250,17 +270,19 @@ export default function DashboardPage() {
             <div className="space-y-3">
               {!vfxDisabled && (
                 <div className="flex items-center justify-center gap-3 mb-4">
-                  <Star className="w-6 h-6 text-primary welcome-star" />
-                  <div className="w-12 h-0.5 bg-gradient-to-r from-primary to-secondary welcome-line"></div>
-                  <TrendingUp className="w-6 h-6 text-secondary welcome-trend" />
+                  <Star className={`w-6 h-6 text-primary ${styles.welcomeStar}`} />
+                  <div
+                    className={`w-12 h-0.5 bg-gradient-to-r from-primary to-secondary ${styles.welcomeLine}`}
+                  />
+                  <TrendingUp className={`w-6 h-6 text-secondary ${styles.welcomeTrend}`} />
                 </div>
               )}
               <h2 className="text-4xl font-bold">
                 Добро пожаловать, <span className="text-gradient-primary">{user.firstName}</span>!
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-                Ваша система управления автосервисом готова к работе. Начните с настройки основных
-                разделов и просмотра аналитики.
+                Ваша система управления автосервисом готова к работе. Начните с настройки основных разделов и просмотра
+                аналитики.
               </p>
             </div>
           </div>
@@ -268,7 +290,7 @@ export default function DashboardPage() {
           {/* Quick Stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             {quickStats.map((s, idx) => {
-              const Icon = s.icon
+              const Icon = s.icon;
               const colorClass =
                 s.color === 'primary'
                   ? 'text-primary bg-primary/20'
@@ -276,7 +298,7 @@ export default function DashboardPage() {
                   ? 'text-secondary bg-secondary/20'
                   : s.color === 'accent'
                   ? 'text-accent bg-accent/20'
-                  : 'text-emerald-500 bg-emerald-500/20'
+                  : 'text-emerald-500 bg-emerald-500/20';
               return (
                 <Card
                   key={idx}
@@ -306,7 +328,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </Card>
-              )
+              );
             })}
           </div>
 
@@ -314,7 +336,9 @@ export default function DashboardPage() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Security */}
             <Link href="/dashboard/security">
-              <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group cursor-pointer rounded-3xl surface-glow dashboard-card-priority">
+              <Card
+                className={`p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group cursor-pointer rounded-3xl surface-glow ${styles.dashboardCardPriority}`}
+              >
                 <div className="space-y-4">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-primary flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-glass">
                     <Shield className="w-7 h-7 text-white" />
@@ -365,14 +389,9 @@ export default function DashboardPage() {
                   </div>
                   <div className="space-y-2">
                     <h3 className="font-semibold text-lg">Клиенты</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      База клиентов и история обслуживания
-                    </p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">База клиентов и история обслуживания</p>
                   </div>
-                  <Button
-                    size="sm"
-                    className="w-full rounded-2xl bg-accent/10 hover:bg-accent/20 text-accent border-accent/30"
-                  >
+                  <Button size="sm" className="w-full rounded-2xl bg-accent/10 hover:bg-accent/20 text-accent border-accent/30">
                     Открыть
                   </Button>
                 </div>
@@ -388,9 +407,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="space-y-2">
                     <h3 className="font-semibold text-lg">Автомобили</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Учет автомобилей и техническая информация
-                    </p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">Учет автомобилей и техническая информация</p>
                   </div>
                   <Button
                     size="sm"
@@ -411,9 +428,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="space-y-2">
                     <h3 className="font-semibold text-lg">Способы оплаты</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Методы оплаты и интеграции
-                    </p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">Методы оплаты и интеграции</p>
                   </div>
                   <Button
                     size="sm"
@@ -425,55 +440,56 @@ export default function DashboardPage() {
               </Card>
             </Link>
 
-            {/* Appointments */}
-            <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow dashboard-card-coming-soon">
-              <div className="space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
-                  <Calendar className="w-7 h-7 text-purple-500" />
+            {/* Invoices */}
+            <Link href="/dashboard/invoices">
+              <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group cursor-pointer rounded-3xl surface-glow">
+                <div className="space-y-4">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
+                    <FileText className="w-7 h-7 text-indigo-500" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="font-semibold text-lg">Счета</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">Выставление счетов и управление оплатой</p>
+                  </div>
+                  <Button size="sm" className="w-full rounded-2xl">
+                    Открыть
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-lg">Записи</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Планирование и управление записями
-                  </p>
+              </Card>
+            </Link>
+
+            {/* Appointments (подключено к дэшборду) */}
+            <Link href="/dashboard/appointments">
+              <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group cursor-pointer rounded-3xl surface-glow">
+                <div className="space-y-4">
+                  <div className="w-14 h-14 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
+                    <Calendar className="w-7 h-7 text-purple-500" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="font-semibold text-lg">Записи</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">Планирование и управление записями</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="w-full rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-500 border-purple-500/30"
+                  >
+                    Открыть
+                  </Button>
                 </div>
-                <Button size="sm" className="w-full rounded-2xl" disabled>
-                  <Clock className="w-3 h-3 mr-2" />
-                  Скоро
-                </Button>
-              </div>
-            </Card>
+              </Card>
+            </Link>
 
             {/* Inventory */}
-            <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow dashboard-card-coming-soon">
+            <Card
+              className={`p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow ${styles.dashboardCardComingSoon}`}
+            >
               <div className="space-y-4">
                 <div className="w-14 h-14 rounded-2xl bg-orange-500/20 border border-orange-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
                   <Package className="w-7 h-7 text-orange-500" />
                 </div>
                 <div className="space-y-2">
                   <h3 className="font-semibold text-lg">Склад</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Управление запасами и остатками
-                  </p>
-                </div>
-                <Button size="sm" className="w-full rounded-2xl" disabled>
-                  <Clock className="w-3 h-3 mr-2" />
-                  Скоро
-                </Button>
-              </div>
-            </Card>
-
-            {/* Financial */}
-            <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow dashboard-card-coming-soon">
-              <div className="space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
-                  <FileText className="w-7 h-7 text-indigo-500" />
-                </div>
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-lg">Счета и платежи</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Выставление счетов и учет платежей
-                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">Управление запасами и остатками</p>
                 </div>
                 <Button size="sm" className="w-full rounded-2xl" disabled>
                   <Clock className="w-3 h-3 mr-2" />
@@ -483,16 +499,16 @@ export default function DashboardPage() {
             </Card>
 
             {/* Suppliers */}
-            <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow dashboard-card-coming-soon">
+            <Card
+              className={`p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow ${styles.dashboardCardComingSoon}`}
+            >
               <div className="space-y-4">
                 <div className="w-14 h-14 rounded-2xl bg-slate-500/20 border border-slate-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
                   <Truck className="w-7 h-7 text-slate-500" />
                 </div>
                 <div className="space-y-2">
                   <h3 className="font-semibold text-lg">Поставщики</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Управление поставщиками запчастей
-                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">Управление поставщиками запчастей</p>
                 </div>
                 <Button size="sm" className="w-full rounded-2xl" disabled>
                   <Clock className="w-3 h-3 mr-2" />
@@ -502,16 +518,16 @@ export default function DashboardPage() {
             </Card>
 
             {/* Settings */}
-            <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow dashboard-card-coming-soon">
+            <Card
+              className={`p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow ${styles.dashboardCardComingSoon}`}
+            >
               <div className="space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-teal-500/20 border border-teal-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
+                <div className="w-14 h-14 rounded-2xl bg-teал-500/20 border border-teal-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
                   <Settings className="w-7 h-7 text-teal-500" />
                 </div>
                 <div className="space-y-2">
                   <h3 className="font-semibold text-lg">Настройки</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Настройка компании и пользователей
-                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">Настройка компании и пользователей</p>
                 </div>
                 <Button size="sm" className="w-full rounded-2xl" disabled>
                   <Clock className="w-3 h-3 mr-2" />
@@ -524,7 +540,9 @@ export default function DashboardPage() {
           {/* Development Notice */}
           <Card className="p-8 glass border-border/30 text-center rounded-3xl surface-glow">
             <div className="space-y-6">
-              <div className="w-20 h-20 rounded-full bg-gradient-primary/20 flex items-center justify-center mx-auto dev-notice-glow">
+              <div
+                className={`w-20 h-20 rounded-full bg-gradient-primary/20 flex items-center justify-center mx-auto ${styles.devNoticeGlow}`}
+              >
                 <Building2 className="w-10 h-10 text-primary" />
               </div>
               <div className="space-y-3">
@@ -533,8 +551,8 @@ export default function DashboardPage() {
                   DriveCare в активной разработке
                 </h3>
                 <p className="text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-                  Мы работаем над полнофункциональной системой управления автосервисом. Новые
-                  возможности добавляются каждую неделю.
+                  Мы работаем над полнофункциональной системой управления автосервисом. Новые возможности добавляются
+                  каждую неделю.
                 </p>
               </div>
               <div className="flex items-center justify-center gap-4">
@@ -555,108 +573,6 @@ export default function DashboardPage() {
           </Card>
         </div>
       </main>
-
-      {/* Optimized Dashboard Data Visualization CSS */}
-      <style jsx global>{`
-        .data-hub-main {
-          animation: data-hub-pulse 6s ease-in-out infinite;
-        }
-        .data-node-1 {
-          animation: data-processing-1 8s ease-in-out infinite;
-        }
-        .data-stream-1 {
-          animation: data-flow-1 4s ease-in-out infinite;
-        }
-
-        .dashboard-pulse {
-          animation: activity-pulse 2s ease-in-out infinite;
-        }
-        .user-status-indicator {
-          animation: status-active 3s ease-in-out infinite;
-        }
-        .welcome-star {
-          animation: star-twinkle 4s ease-in-out infinite;
-        }
-        .welcome-trend {
-          animation: trend-float 3s ease-in-out infinite;
-        }
-        .welcome-line {
-          animation: line-expand 2s ease-out infinite;
-        }
-
-        .dashboard-card-priority {
-          position: relative;
-          overflow: hidden;
-        }
-        .dashboard-card-priority::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: -100%;
-          width: 100%;
-          height: 100%;
-          background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.1), transparent);
-          animation: priority-highlight 6s ease-in-out infinite;
-        }
-        .dashboard-card-coming-soon {
-          opacity: 0.9;
-          position: relative;
-        }
-        .dev-notice-glow {
-          animation: dev-glow 4s ease-in-out infinite;
-        }
-
-        @keyframes data-hub-pulse {
-          0%, 100% { transform: scale(1); filter: blur(36px); }
-          50% { transform: scale(1.12); filter: blur(40px); }
-        }
-        @keyframes data-processing-1 {
-          0%, 100% { transform: translate3d(0, 0, 0); }
-          50% { transform: translate3d(-8px, -10px, 0); }
-        }
-        @keyframes data-flow-1 {
-          0%, 100% { opacity: 0.25; transform: scaleX(1) scaleY(1); }
-          50% { opacity: 0.6; transform: scaleX(1.05) scaleY(1.3); }
-        }
-
-        @keyframes activity-pulse {
-          0%, 100% { opacity: 0.6; }
-          50% { opacity: 1; }
-        }
-        @keyframes status-active {
-          0%, 100% { transform: scale(1); opacity: 0.8; }
-          50% { transform: scale(1.2); opacity: 1; }
-        }
-        @keyframes star-twinkle {
-          0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.7; }
-          50% { transform: scale(1.2) rotate(180deg); opacity: 1; }
-        }
-        @keyframes trend-float {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-4px); }
-        }
-        @keyframes line-expand {
-          0% { width: 12px; background: linear-gradient(90deg, rgba(99,102,241,.3) 0%, rgba(14,165,233,.6) 100%); }
-          50% { width: 48px; background: linear-gradient(90deg, rgba(99,102,241,.8) 0%, rgba(14,165,233,.9) 100%); }
-          100% { width: 12px; background: linear-gradient(90deg, rgba(99,102,241,.3) 0%, rgba(14,165,233,.6) 100%); }
-        }
-        @keyframes priority-highlight {
-          0% { left: -100%; } 50% { left: 100%; } 100% { left: 100%; }
-        }
-        @keyframes dev-glow {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.2); }
-          50% { box-shadow: 0 0 0 20px rgba(99, 102, 241, 0); }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .data-hub-main, .data-node-1, .data-stream-1,
-          .dashboard-pulse, .user-status-indicator,
-          .welcome-star, .welcome-trend, .welcome-line,
-          .dashboard-card-priority::before, .dev-notice-glow {
-            animation: none !important;
-          }
-        }
-      `}</style>
     </div>
-  )
+  );
 }

@@ -21,6 +21,27 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@app/*": [
+        "./app/*"
+      ],
+      "@shared/*": [
+        "./shared/*"
+      ],
+      "@entities/*": [
+        "./entities/*"
+      ],
+      "@features/*": [
+        "./features/*"
+      ],
+      "@widgets/*": [
+        "./widgets/*"
+      ],
+      "@providers/*": [
+        "./providers/*"
+      ],
+      "@store/*": [
+        "./store/*"
       ]
     },
     "plugins": [

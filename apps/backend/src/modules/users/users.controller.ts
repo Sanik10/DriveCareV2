@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/users/users.controller.ts
 import {
   Controller,
   Get,

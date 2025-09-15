@@ -29,10 +29,7 @@ export class AppointmentsService {
     private readonly appointmentsMapperService: AppointmentsMapperService,
   ) {}
 
-  async createForUser(
-    createAppointmentDto: CreateAppointmentDto,
-    user: RequestWithUser['user'],
-  ): Promise<AppointmentResponseDto> {
+  async createForUser(createAppointmentDto: CreateAppointmentDto, user: RequestWithUser['user']): Promise<AppointmentResponseDto> {
     this.logger.log(`Создание записи для пользователя: ${user.id}`);
 
     const createData = {
@@ -47,10 +44,7 @@ export class AppointmentsService {
     return this.appointmentsMapperService.mapToResponseDto(appointment, { role: user.role });
   }
 
-  async findAllForUser(
-    user: RequestWithUser['user'],
-    filter: AppointmentFilter = {},
-  ): Promise<PaginatedAppointmentsResponseDto> {
+  async findAllForUser(user: RequestWithUser['user'], filter: AppointmentFilter = {}): Promise<PaginatedAppointmentsResponseDto> {
     this.logger.log(`Поиск записей для пользователя: ${user.id}`);
 
     if (user.role === 'superadmin' && !filter.companyId) {
@@ -111,11 +105,7 @@ export class AppointmentsService {
     return this.appointmentsMapperService.mapToResponseDto(updatedAppointment);
   }
 
-  async completeAppointment(
-    id: string,
-    user: RequestWithUser['user'],
-    completionData?: any,
-  ): Promise<AppointmentResponseDto> {
+  async completeAppointment(id: string, user: RequestWithUser['user'], completionData?: any): Promise<AppointmentResponseDto> {
     this.logger.log(`Завершение записи: ${id} пользователем ${user.id}`);
     const updatedAppointment = await this.appointmentsBusinessService.completeAppointment(id, user.id, completionData);
     return this.appointmentsMapperService.mapToResponseDto(updatedAppointment);
@@ -128,37 +118,16 @@ export class AppointmentsService {
     return this.appointmentsMapperService.mapToResponseDto(updatedAppointment);
   }
 
-  async rescheduleAppointment(
-    id: string,
-    newStartTime: Date,
-    newEndTime: Date,
-    user: RequestWithUser['user'],
-  ): Promise<AppointmentResponseDto> {
+  async rescheduleAppointment(id: string, newStartTime: Date, newEndTime: Date, user: RequestWithUser['user']): Promise<AppointmentResponseDto> {
     this.logger.log(`Перенос записи: ${id} на ${newStartTime.toISOString()} пользователем ${user.id}`);
 
     await this.appointmentsValidationService.validateReschedulePermissions(id, user.id);
 
     const existing = await this.appointmentsValidationService.validateAppointmentExists(id);
-    await this.appointmentsValidationService.validateTimeSlot(
-      existing.mechanicId,
-      newStartTime,
-      newEndTime,
-      id,
-      existing.companyId,
-    );
-    await this.appointmentsValidationService.validateMechanicAvailability(
-      existing.mechanicId,
-      newStartTime,
-      newEndTime,
-    );
+    await this.appointmentsValidationService.validateTimeSlot(existing.mechanicId, newStartTime, newEndTime, id, existing.companyId);
+    await this.appointmentsValidationService.validateMechanicAvailability(existing.mechanicId, newStartTime, newEndTime);
 
-    const updatedAppointment = await this.appointmentsBusinessService.rescheduleAppointment(
-      id,
-      newStartTime,
-      newEndTime,
-      user.id,
-    );
-
+    const updatedAppointment = await this.appointmentsBusinessService.rescheduleAppointment(id, newStartTime, newEndTime, user.id);
     return this.appointmentsMapperService.mapToResponseDto(updatedAppointment);
   }
 
@@ -170,14 +139,14 @@ export class AppointmentsService {
 
     const req: SmartSchedulingRequest = { ...smartScheduleDto };
     const companyId = user.companyId!;
-    const date = req.preferredDate ? new Date(req.preferredDate) : new Date();
-    date.setHours(0, 0, 0, 0);
+    const baseDate = req.preferredDate ? new Date(req.preferredDate) : new Date();
+    baseDate.setHours(0, 0, 0, 0);
 
     const windowStartStr = req.preferredTimeStart || APPOINTMENTS_CONSTANTS.BUSINESS_RULES.WORKING_HOURS_START;
     const windowEndStr = req.preferredTimeEnd || APPOINTMENTS_CONSTANTS.BUSINESS_RULES.WORKING_HOURS_END;
 
-    const dayStart = new Date(date);
-    const dayEnd = new Date(date);
+    const dayStart = new Date(baseDate);
+    const dayEnd = new Date(baseDate);
     const [wsH, wsM] = windowStartStr.split(':').map((x) => parseInt(x, 10));
     const [weH, weM] = windowEndStr.split(':').map((x) => parseInt(x, 10));
     dayStart.setHours(wsH, wsM, 0, 0);
@@ -188,15 +157,11 @@ export class AppointmentsService {
     const totalDuration = (smartScheduleDto.serviceIds?.length || 1) * durationPerService;
 
     // Кандидаты мастеров
-    const mechanics =
-      req.preferredMechanicId ? [req.preferredMechanicId] : await this.appointmentsDataService.getMechanicIdsByCompany(companyId);
+    const mechanics = req.preferredMechanicId
+      ? [req.preferredMechanicId]
+      : await this.appointmentsDataService.getMechanicIdsByCompany(companyId);
 
-    const availableSlots: {
-      mechanicId: string;
-      startTime: Date;
-      endTime: Date;
-      confidence: number;
-    }[] = [];
+    const availableSlots: { mechanicId: string; startTime: Date; endTime: Date; confidence: number }[] = [];
 
     // Сканируем доступные слоты по всем мастерам в пределах дня
     for (const mechanicId of mechanics) {
@@ -206,24 +171,19 @@ export class AppointmentsService {
         const slotEnd = new Date(cursor.getTime() + totalDuration * 60000);
 
         // Проверка пересечений
-        const conflicts = await this.appointmentsDataService.findConflicts(
-          mechanicId,
-          slotStart,
-          slotEnd,
-          undefined,
-          companyId,
-        );
+        const conflicts = await this.appointmentsDataService.findConflicts(mechanicId, slotStart, slotEnd, undefined, companyId);
 
         if (conflicts.length === 0) {
           // Оценка доверия (простейшая, с учётом приоритета)
           const priorityWeight =
-            smartScheduleDto.priority === 'urgent'
+            (smartScheduleDto.priority as any) === 'URGENT'
               ? 1.0
-              : smartScheduleDto.priority === 'high'
+              : (smartScheduleDto.priority as any) === 'HIGH'
               ? 0.9
-              : smartScheduleDto.priority === 'normal'
+              : (smartScheduleDto.priority as any) === 'NORMAL'
               ? 0.8
               : 0.7;
+
           availableSlots.push({
             mechanicId,
             startTime: slotStart,
@@ -237,17 +197,17 @@ export class AppointmentsService {
       }
     }
 
-    // Сортируем по уверенности и времени
-    availableSlots.sort((a, b) => (b.confidence - a.confidence) || (a.startTime.getTime() - b.startTime.getTime()));
+    // Сортировка по уверенности и времени
+    availableSlots.sort((a, b) => b.confidence - a.confidence || a.startTime.getTime() - b.startTime.getTime());
 
     // Формируем DTO
     const toDto = (s: { mechanicId: string; startTime: Date; endTime: Date; confidence: number }) => ({
       mechanicId: s.mechanicId,
-      mechanicName: '', // можно обогатить при необходимости
+      mechanicName: '',
       startTime: s.startTime,
       endTime: s.endTime,
       confidence: s.confidence,
-      totalCost: 0, // без интеграции с каталогом услуг
+      totalCost: 0,
       estimatedDuration: totalDuration,
       conflicts: [],
       recommendationReason: req.preferredMechanicId ? 'Предпочитаемый мастер' : 'Доступное окно',
@@ -257,33 +217,42 @@ export class AppointmentsService {
     const recommended = availableSlots.slice(0, maxAlt).map(toDto);
     const alternatives = availableSlots.slice(maxAlt, maxAlt * 2).map(toDto);
 
-    // Следующая доступная дата: если нет слотов сегодня — двигаемся вперёд
-    let nextAvailableDate = new Date(date);
+    // Следующая доступная дата
+    let nextAvailableDate = new Date(baseDate);
     if (availableSlots.length === 0) {
       const maxDays = smartScheduleDto.maxWaitingDays || APPOINTMENTS_CONSTANTS.DEFAULTS.BOOKING_ADVANCE_DAYS;
       for (let i = 1; i <= maxDays; i++) {
-        const d = new Date(date);
-        d.setDate(date.getDate() + i);
-        // Берём рабочие дни (исключая воскресенье)
-        if (d.getDay() === 0) continue;
+        const d = new Date(baseDate);
+        d.setDate(baseDate.getDate() + i);
+        if (!smartScheduleDto.allowWeekends && (d.getDay() === 0 || d.getDay() === 6)) {
+          continue; // пропускаем выходные, если не разрешены
+        }
         nextAvailableDate = d;
         break;
       }
     }
 
+    const estimatedWaitTime =
+      availableSlots.length > 0 ? 0 : Math.max(0, Math.round((nextAvailableDate.getTime() - baseDate.getTime()) / (24 * 60 * 60 * 1000)));
+
     return {
       recommendedSlots: recommended,
       alternatives,
       nextAvailableDate,
-      estimatedWaitTime: availableSlots.length > 0 ? 0 : 1,
+      estimatedWaitTime,
       generalRecommendation: availableSlots.length > 0 ? 'Найдены подходящие слоты' : 'Рекомендуем выбрать ближайшую доступную дату',
     };
   }
 
   /**
-   * Проверка доступности слотов (на дату)
+   * Проверка доступности слотов (на дату, с учётом опционального окна времени)
    */
-  async checkAvailability(serviceIds: string[], date: Date, user: RequestWithUser['user']): Promise<
+  async checkAvailability(
+    serviceIds: string[],
+    date: Date,
+    user: RequestWithUser['user'],
+    timeRange?: { start: string; end: string },
+  ): Promise<
     Array<{
       mechanicId: string;
       startTime: Date;
@@ -297,8 +266,12 @@ export class AppointmentsService {
     const day = new Date(date);
     day.setHours(0, 0, 0, 0);
 
-    const windowStartStr = APPOINTMENTS_CONSTANTS.BUSINESS_RULES.WORKING_HOURS_START;
-    const windowEndStr = APPOINTMENTS_CONSTANTS.BUSINESS_RULES.WORKING_HOURS_END;
+    const windowStartStr = (timeRange?.start && /^\d{2}:\d{2}$/.test(timeRange.start))
+      ? timeRange.start
+      : APPOINTMENTS_CONSTANTS.BUSINESS_RULES.WORKING_HOURS_START;
+    const windowEndStr = (timeRange?.end && /^\d{2}:\d{2}$/.test(timeRange.end))
+      ? timeRange.end
+      : APPOINTMENTS_CONSTANTS.BUSINESS_RULES.WORKING_HOURS_END;
 
     const dayStart = new Date(day);
     const dayEnd = new Date(day);
@@ -320,13 +293,7 @@ export class AppointmentsService {
         const slotStart = new Date(cursor);
         const slotEnd = new Date(cursor.getTime() + totalDuration * 60000);
 
-        const conflicts = await this.appointmentsDataService.findConflicts(
-          mechanicId,
-          slotStart,
-          slotEnd,
-          undefined,
-          companyId,
-        );
+        const conflicts = await this.appointmentsDataService.findConflicts(mechanicId, slotStart, slotEnd, undefined, companyId);
 
         if (conflicts.length === 0) {
           slots.push({
@@ -367,10 +334,7 @@ export class AppointmentsService {
   /**
    * Список записей клиента (в пределах компании пользователя)
    */
-  async findByCustomer(
-    customerId: string,
-    user: RequestWithUser['user'],
-  ): Promise<AppointmentResponseDto[]> {
+  async findByCustomer(customerId: string, user: RequestWithUser['user']): Promise<AppointmentResponseDto[]> {
     this.logger.log(`Записи клиента ${customerId} для пользователя ${user.id}`);
 
     if (user.role === 'superadmin' && !user.companyId) {
@@ -385,15 +349,8 @@ export class AppointmentsService {
   /**
    * Список записей мастера за период (в пределах компании пользователя)
    */
-  async findByMechanic(
-    mechanicId: string,
-    dateFrom: Date,
-    dateTo: Date,
-    user: RequestWithUser['user'],
-  ): Promise<AppointmentResponseDto[]> {
-    this.logger.log(
-      `Записи мастера ${mechanicId} c ${dateFrom.toISOString()} по ${dateTo.toISOString()} для пользователя ${user.id}`,
-    );
+  async findByMechanic(mechanicId: string, dateFrom: Date, dateTo: Date, user: RequestWithUser['user']): Promise<AppointmentResponseDto[]> {
+    this.logger.log(`Записи мастера ${mechanicId} c ${dateFrom.toISOString()} по ${dateTo.toISOString()} для пользователя ${user.id}`);
 
     if (user.role === 'superadmin' && !user.companyId) {
       throw new BadRequestException('companyId is required for superadmin');
@@ -411,9 +368,7 @@ export class AppointmentsService {
     this.logger.log(`Добавление рейтинга ${rating} для записи ${id}`);
 
     if (Number.isNaN(rating) || rating < APPOINTMENTS_CONSTANTS.RATING.MIN_RATING || rating > APPOINTMENTS_CONSTANTS.RATING.MAX_RATING) {
-      throw new BadRequestException(
-        `rating должен быть целым числом в диапазоне ${APPOINTMENTS_CONSTANTS.RATING.MIN_RATING}..${APPOINTMENTS_CONSTANTS.RATING.MAX_RATING}`,
-      );
+      throw new BadRequestException(`rating должен быть целым числом в диапазоне ${APPOINTMENTS_CONSTANTS.RATING.MIN_RATING}..${APPOINTMENTS_CONSTANTS.RATING.MAX_RATING}`);
     }
 
     const appointment = await this.appointmentsValidationService.validateAppointmentExists(id);

@@ -2,6 +2,7 @@
 import type { Metadata } from 'next'
 import { geistSans, geistMono } from './fonts'
 import { ThemeProvider } from '@/app/providers/theme-provider'
+import { AuthBootstrap } from '@/app/providers/AuthBootstrap'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -23,6 +24,8 @@ export default function RootLayout({
           defaultTheme="dark"
           storageKey="drivecare-ui-theme"
         >
+          {/* Запускаем boot refresh/синхронизацию вкладок максимально рано */}
+          <AuthBootstrap />
           {children}
         </ThemeProvider>
       </body>

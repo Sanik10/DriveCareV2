@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/appointments/dto/response/smart-schedule-response.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AppointmentPriority } from '../../../../database/entities';
 

@@ -54,9 +54,7 @@ export class AppointmentsMapperService implements IAppointmentsMapperService {
     };
 
     // Role-based PII masking (152‑ФЗ): механикам/диагностам скрываем PII по умолчанию
-    const shouldMask =
-      options?.maskPII === true ||
-      ['mechanic', 'diagnostic'].includes((options?.role || '').toLowerCase());
+    const shouldMask = options?.maskPII === true || ['mechanic', 'diagnostic'].includes((options?.role || '').toLowerCase());
 
     return shouldMask ? this.maskPII(dto) : dto;
   }
@@ -164,8 +162,7 @@ export class AppointmentsMapperService implements IAppointmentsMapperService {
   private maskEmail(email: string): string {
     const [user, domain] = email.split('@');
     if (!domain) return '***';
-    const maskedUser =
-      user.length <= 2 ? '*'.repeat(user.length) : user[0] + '*'.repeat(user.length - 2) + user[user.length - 1];
+    const maskedUser = user.length <= 2 ? '*'.repeat(user.length) : user[0] + '*'.repeat(user.length - 2) + user[user.length - 1];
     return `${maskedUser}@${domain}`;
   }
 
@@ -177,8 +174,8 @@ export class AppointmentsMapperService implements IAppointmentsMapperService {
   }
 
   private stripLicensePlate(vehicleInfo: string): string {
-    // Удаляем хвост в скобках: "Model (A123BC77)" -> "Model"
-    return vehicleInfo.replace(/\s*KATEX_INLINE_OPEN[^)]+KATEX_INLINE_CLOSE\s*$/, '').trim();
+    // Удаляем скобки с содержимым в конце строки: "Model (A123BC77)" -> "Model"
+    return vehicleInfo.replace(/\s*\([^)]*\)\s*$/, '').trim();
   }
 
   private formatCustomerName(appointment: Appointment): string {
@@ -295,7 +292,7 @@ export class AppointmentsMapperService implements IAppointmentsMapperService {
 
     if (startTime <= now) return undefined;
 
-    return Math.round((startTime.getTime() - now.getTime()) / (1000 * 60)); // в минутах
+    return Math.round((startTime.getTime() - now.getTime()) / (1000 * 60));
   }
 
   private getCurrentStep(appointment: Appointment): string {
@@ -363,19 +360,19 @@ export class AppointmentsMapperService implements IAppointmentsMapperService {
   private getStatusColor(status: AppointmentStatus): string {
     switch (status) {
       case AppointmentStatus.DRAFT:
-        return '#808080'; // gray
+        return '#808080';
       case AppointmentStatus.SCHEDULED:
-        return '#1E90FF'; // dodger blue
+        return '#1E90FF';
       case AppointmentStatus.CONFIRMED:
-        return '#2E8B57'; // sea green
+        return '#2E8B57';
       case AppointmentStatus.IN_PROGRESS:
-        return '#FF8C00'; // dark orange
+        return '#FF8C00';
       case AppointmentStatus.COMPLETED:
-        return '#800080'; // purple
+        return '#800080';
       case AppointmentStatus.CANCELED:
-        return '#DC143C'; // crimson
+        return '#DC143C';
       case AppointmentStatus.NO_SHOW:
-        return '#8B0000'; // dark red
+        return '#8B0000';
       default:
         return '#808080';
     }

@@ -1,170 +1,266 @@
 // path: apps/frontend/lib/api/dashboard.ts
-import { ApiError } from '@/lib/types/auth'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
+import { apiRequest } from '@/lib/api/core';
 
 interface DashboardStats {
-  totalOrders: number
-  pendingOrders: number
-  completedOrders: number
-  totalRevenue: number
-  monthlyRevenue: number
-  lowStockItems: number
-  activeCustomers: number
-  appointmentsToday: number
+  totalOrders: number;
+  pendingOrders: number;
+  completedOrders: number;
+  totalRevenue: number;
+  monthlyRevenue: number;
+  lowStockItems: number;
+  activeCustomers: number;
+  appointmentsToday: number;
 }
 
 interface DashboardData {
-  stats: DashboardStats
+  stats: DashboardStats;
   recentOrders: Array<{
-    id: string
-    customerName: string
-    vehicleInfo: string
-    status: string
-    amount: number
-    createdAt: string
-  }>
+    id: string;
+    customerName: string;
+    vehicleInfo: string;
+    status: string;
+    amount: number;
+    createdAt: string;
+  }>;
   recentActivities: Array<{
-    id: string
-    type: string
-    description: string
-    timestamp: string
-    user: string
-  }>
+    id: string;
+    type: string;
+    description: string;
+    timestamp: string;
+    user: string;
+  }>;
   lowStockAlerts: Array<{
-    id: string
-    partName: string
-    currentStock: number
-    minThreshold: number
-    supplier: string
-  }>
+    id: string;
+    partName: string;
+    currentStock: number;
+    minThreshold: number;
+    supplier: string;
+  }>;
+}
+
+type Paginated<T> = { items: T[]; total: number; page: number; limit: number; totalPages: number };
+type OrderItem = {
+  id: string;
+  status: string;
+  createdAt?: string;
+  totalAmount?: number;
+  customer?: { id: string; name?: string; fullName?: string };
+  vehicle?: { id: string; brand?: string; model?: string; plateNumber?: string };
+};
+
+type BalanceByCurrency = Record<string, { received: number; refunded: number; net: number; pending: number }>;
+
+type CompanyBalance = {
+  companyId?: string;
+  totalReceived?: number;
+  totalRefunded?: number;
+  netBalance?: number;
+  pendingAmount?: number;
+  disputedAmount?: number;
+  balanceByCurrency?: BalanceByCurrency;
+  lastUpdated?: string | Date;
+  totalTransactions?: number;
+  averageTransactionAmount?: number;
+  last30DaysBalance?: number;
+  monthlyGrowthPercentage?: number;
+};
+
+type LowStockItemApi = {
+  partId: string;
+  partName: string;
+  partNumber?: string;
+  currentQuantity: number;
+  minQuantity: number;
+  shortage: number;
+  categoryName: string;
+  location?: string;
+  lastMovementDate?: string | Date;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  estimatedRunOutDays?: number;
+};
+
+type LegacyLowStockItem = {
+  id?: string | number;
+  partId?: string | number;
+  partName?: string;
+  name?: string;
+  currentStock?: number;
+  stock?: number;
+  minThreshold?: number;
+  minStock?: number;
+  supplier?: { name?: string };
+  supplierName?: string;
+};
+
+type LowStockApi =
+  | { alerts?: LowStockItemApi[]; totalAlerts?: number }
+  | { items?: LegacyLowStockItem[]; total?: number };
+
+function safeNum(v: unknown, fallback = 0): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 class DashboardAPI {
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const url = `${API_BASE}${endpoint}`
-    const token = localStorage.getItem('accessToken')
-    
-    const response = await fetch(url, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-      credentials: 'include',
-      ...options,
-    })
+  async getStats(): Promise<DashboardStats> {
+    const defaultBalance: CompanyBalance = { totalReceived: 0, netBalance: 0, last30DaysBalance: 0 };
 
-    const responseBody = await response.text()
-    
-    if (!response.ok) {
-      console.error(`Dashboard API Error ${response.status}:`, responseBody)
-      
-      let error: ApiError
-      try {
-        error = JSON.parse(responseBody) as ApiError
-      } catch {
-        error = {
-          message: responseBody || 'Неизвестная ошибка',
-          statusCode: response.status
-        }
+    const [allOrders, completedOrders, inProgressOrders, awaitingPartsOrders, balance, lowStock] =
+      await Promise.allSettled([
+        apiRequest<Paginated<OrderItem>>('/orders?limit=1'),
+        apiRequest<Paginated<OrderItem>>('/orders?status=completed&limit=1'),
+        apiRequest<Paginated<OrderItem>>('/orders?status=in_progress&limit=1'),
+        apiRequest<Paginated<OrderItem>>('/orders?status=awaiting_parts&limit=1'),
+        apiRequest<CompanyBalance>('/payments/analytics/balance'),
+        apiRequest<LowStockApi>('/inventory/alerts/low-stock'),
+      ]);
+
+    const totalOrders = allOrders.status === 'fulfilled' ? safeNum(allOrders.value.total) : 0;
+    const completed = completedOrders.status === 'fulfilled' ? safeNum(completedOrders.value.total) : 0;
+    const inProgress = inProgressOrders.status === 'fulfilled' ? safeNum(inProgressOrders.value.total) : 0;
+    const awaiting = awaitingPartsOrders.status === 'fulfilled' ? safeNum(awaitingPartsOrders.value.total) : 0;
+
+    const pendingOrders = inProgress + awaiting;
+
+    const balValue: CompanyBalance = balance.status === 'fulfilled' ? balance.value : defaultBalance;
+
+    const totalRevenue = safeNum(balValue.totalReceived ?? balValue.netBalance ?? 0);
+    const monthlyRevenue = safeNum(balValue.last30DaysBalance ?? 0);
+
+    let lowStockItems = 0;
+    if (lowStock.status === 'fulfilled') {
+      const val = lowStock.value;
+      if ('alerts' in val && Array.isArray((val as { alerts?: unknown[] }).alerts)) {
+        const alerts = (val as { alerts: LowStockItemApi[] }).alerts;
+        lowStockItems = alerts.length;
+      } else if ('items' in val && Array.isArray((val as { items?: unknown[] }).items)) {
+        const items = (val as { items: LegacyLowStockItem[] }).items;
+        lowStockItems = items.length;
+      } else if ('total' in (val as { total?: number })) {
+        lowStockItems = safeNum((val as { total?: number }).total);
+      } else if ('totalAlerts' in (val as { totalAlerts?: number })) {
+        lowStockItems = safeNum((val as { totalAlerts?: number }).totalAlerts);
       }
-      
-      throw new Error(JSON.stringify(error))
     }
 
+    // Эти метрики заполним позже
+    const activeCustomers = 0;
+    const appointmentsToday = 0;
+
+    return {
+      totalOrders,
+      pendingOrders,
+      completedOrders: completed,
+      totalRevenue,
+      monthlyRevenue,
+      lowStockItems,
+      activeCustomers,
+      appointmentsToday,
+    };
+  }
+
+  async getRecentOrders(): Promise<DashboardData['recentOrders']> {
     try {
-      return JSON.parse(responseBody) as T
+      const data = await apiRequest<Paginated<OrderItem>>('/orders?limit=5');
+      return (data.items || []).map((o) => ({
+        id: o.id,
+        customerName: o.customer?.name || o.customer?.fullName || 'Клиент',
+        vehicleInfo:
+          [o.vehicle?.brand, o.vehicle?.model, o.vehicle?.plateNumber].filter(Boolean).join(' • ') || 'ТС',
+        status: o.status,
+        amount: safeNum(o.totalAmount),
+        createdAt: o.createdAt || '',
+      }));
     } catch {
-      return responseBody as T
+      return [];
+    }
+  }
+
+  async getLowStockAlerts(): Promise<DashboardData['lowStockAlerts']> {
+    try {
+      const data = await apiRequest<LowStockApi>('/inventory/alerts/low-stock');
+
+      // Новая форма: alerts[]
+      if ('alerts' in data && Array.isArray((data as { alerts?: unknown[] }).alerts)) {
+        const alerts = (data as { alerts: LowStockItemApi[] }).alerts;
+        return alerts.map((it) => ({
+          id: String(it.partId),
+          partName: it.partName,
+          currentStock: safeNum(it.currentQuantity),
+          minThreshold: safeNum(it.minQuantity),
+          supplier: '',
+        }));
+      }
+
+      // Fallback: items[]
+      if ('items' in data && Array.isArray((data as { items?: unknown[] }).items)) {
+        const items = (data as { items: LegacyLowStockItem[] }).items;
+        return items.map((it) => ({
+          id: String(it.id ?? it.partId ?? Math.random()),
+          partName: String(it.partName ?? it.name ?? 'Запчасть'),
+          currentStock: safeNum(it.currentStock ?? it.stock ?? 0),
+          minThreshold: safeNum(it.minThreshold ?? it.minStock ?? 0),
+          supplier: String(it.supplier?.name ?? it.supplierName ?? ''),
+        }));
+      }
+
+      return [];
+    } catch {
+      return [];
     }
   }
 
   async getDashboardData(): Promise<DashboardData> {
-    return this.request<DashboardData>('/dashboard')
+    const [stats, recentOrders, lowStockAlerts] = await Promise.all([
+      this.getStats(),
+      this.getRecentOrders(),
+      this.getLowStockAlerts(),
+    ]);
+
+    return {
+      stats,
+      recentOrders,
+      recentActivities: [],
+      lowStockAlerts,
+    };
   }
 
-  async getStats(): Promise<DashboardStats> {
-    return this.request<DashboardStats>('/dashboard/stats')
-  }
-
-  // Заглушки для будущих методов
-  async getRecentOrders(): Promise<DashboardData['recentOrders']> {
-    return []
-  }
-
-  async getRecentActivities(): Promise<DashboardData['recentActivities']> {
-    return []
-  }
-
-  async getLowStockAlerts(): Promise<DashboardData['lowStockAlerts']> {
-    return []
-  }
-
-  // Методы для обработки ошибок
-  private handleError(error: unknown): never {
-    console.error('Dashboard API Error:', error)
-    
-    if (error instanceof Error) {
-      try {
-        const errorData = JSON.parse(error.message) as ApiError
-        throw new Error(errorData.message || 'Ошибка API')
-      } catch (parseError: unknown) {
-        console.error('Error parsing API error:', parseError)
-        throw new Error('Неизвестная ошибка API')
-      }
-    }
-    
-    throw new Error('Неизвестная ошибка')
-  }
-
-  // Методы с обработкой ошибок
   async getDashboardDataSafe(): Promise<DashboardData | null> {
     try {
-      return await this.getDashboardData()
+      return await this.getDashboardData();
     } catch (error: unknown) {
-      this.handleError(error)
+      console.error('Dashboard API Error:', error);
+      return null;
     }
   }
 
   async getStatsSafe(): Promise<DashboardStats | null> {
     try {
-      return await this.getStats()
+      return await this.getStats();
     } catch (error: unknown) {
-      this.handleError(error)
+      console.error('Dashboard API Error:', error);
+      return null;
     }
   }
 
   async getRecentOrdersSafe(): Promise<DashboardData['recentOrders']> {
     try {
-      return await this.getRecentOrders()
+      return await this.getRecentOrders();
     } catch (error: unknown) {
-      console.error('Error fetching recent orders:', error)
-      return []
-    }
-  }
-
-  async getRecentActivitiesSafe(): Promise<DashboardData['recentActivities']> {
-    try {
-      return await this.getRecentActivities()
-    } catch (error: unknown) {
-      console.error('Error fetching recent activities:', error)
-      return []
+      console.error('Error fetching recent orders:', error);
+      return [];
     }
   }
 
   async getLowStockAlertsSafe(): Promise<DashboardData['lowStockAlerts']> {
     try {
-      return await this.getLowStockAlerts()
+      return await this.getLowStockAlerts();
     } catch (error: unknown) {
-      console.error('Error fetching low stock alerts:', error)
-      return []
+      console.error('Error fetching low stock alerts:', error);
+      return [];
     }
   }
 }
 
-export const dashboardAPI = new DashboardAPI()
-export type { DashboardData, DashboardStats }
+export const dashboardAPI = new DashboardAPI();
+export type { DashboardData, DashboardStats };

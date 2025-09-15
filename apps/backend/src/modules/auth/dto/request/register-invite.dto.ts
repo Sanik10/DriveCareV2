@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/auth/dto/request/register-invite.dto.ts
 import { IsEmail, IsNotEmpty, IsOptional, IsUUID, MinLength, MaxLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';

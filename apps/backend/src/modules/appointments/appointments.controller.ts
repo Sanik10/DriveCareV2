@@ -1,4 +1,4 @@
-// path: src/appointments/appointments.controller.ts
+// path: apps/backend/src/modules/appointments/appointments.controller.ts
 import {
   Controller,
   Get,
@@ -51,11 +51,11 @@ export class AppointmentsController {
   @Post()
   @AuthWithOwnership()
   @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Создание новой записи',
-    description: 'Создание записи на обслуживание для клиента. Доступно владельцам, админам и менеджерам.'
+    description: 'Создание записи на обслуживание для клиента. Доступно владельцам, админам и менеджерам.',
   })
-  @ApiBody({ 
+  @ApiBody({
     type: CreateAppointmentDto,
     examples: {
       regularService: {
@@ -70,8 +70,8 @@ export class AppointmentsController {
           serviceIds: ['service-1-uuid', 'service-2-uuid'],
           priority: 'normal',
           description: 'Плановое ТО-1',
-          contactPhone: '+7 (495) 123-45-67'
-        }
+          contactPhone: '+7 (495) 123-45-67',
+        },
       },
       urgentRepair: {
         summary: 'Срочный ремонт',
@@ -85,10 +85,10 @@ export class AppointmentsController {
           serviceIds: ['urgent-repair-uuid'],
           priority: 'urgent',
           description: 'Не заводится двигатель',
-          customerNotes: 'Автомобиль на эвакуаторе'
-        }
-      }
-    }
+          customerNotes: 'Автомобиль на эвакуаторе',
+        },
+      },
+    },
   })
   @ApiResponse({ status: HttpStatus.CREATED, type: AppointmentResponseDto })
   @ApiConflictResponse({ description: 'Конфликт времени записи' })
@@ -105,9 +105,9 @@ export class AppointmentsController {
 
   @Get()
   @AuthWithOwnership()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Получение списка записей',
-    description: 'Получение списка записей с фильтрацией и пагинацией. Каждый видит только записи своей компании.'
+    description: 'Получение списка записей с фильтрацией и пагинацией. Каждый видит только записи своей компании.',
   })
   @ApiQuery({ name: 'search', required: false, description: 'Поиск по клиенту, описанию' })
   @ApiQuery({ name: 'status', required: false, description: 'Фильтр по статусу' })
@@ -131,7 +131,8 @@ export class AppointmentsController {
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query('limit', new DefaultValuePipe(APPOINTMENTS_CONSTANTS.DEFAULTS.PAGE_SIZE), ParseIntPipe) limit: number = APPOINTMENTS_CONSTANTS.DEFAULTS.PAGE_SIZE,
+    @Query('limit', new DefaultValuePipe(APPOINTMENTS_CONSTANTS.DEFAULTS.PAGE_SIZE), ParseIntPipe)
+    limit: number = APPOINTMENTS_CONSTANTS.DEFAULTS.PAGE_SIZE,
     @Query('sortField', new DefaultValuePipe('startTime')) sortField: string = 'startTime',
     @Query('sortOrder', new DefaultValuePipe('asc')) sortOrder: 'asc' | 'desc' = 'asc',
   ): Promise<PaginatedAppointmentsResponseDto> {
@@ -155,9 +156,9 @@ export class AppointmentsController {
   @Get(':id')
   @AuthWithOwnership()
   @AppointmentResource()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Получение записи по ID',
-    description: 'Получение детальной информации о записи с проверкой принадлежности к компании.'
+    description: 'Получение детальной информации о записи с проверкой принадлежности к компании.',
   })
   @ApiParam({ name: 'id', description: 'ID записи' })
   @ApiResponse({ status: HttpStatus.OK, type: AppointmentResponseDto })
@@ -173,9 +174,9 @@ export class AppointmentsController {
   @AuthWithOwnership()
   @AppointmentResource()
   @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Обновление записи',
-    description: 'Обновление информации о записи с проверкой принадлежности к компании.'
+    description: 'Обновление информации о записи с проверкой принадлежности к компании.',
   })
   @ApiParam({ name: 'id', description: 'ID записи' })
   @ApiBody({ type: UpdateAppointmentDto })
@@ -186,10 +187,7 @@ export class AppointmentsController {
   @ApiUnauthorizedResponse({ description: 'Требуется авторизация' })
   @ApiForbiddenResponse({ description: 'Недостаточно прав или нет доступа к записи' })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  async update(
-    @Param('id') id: string,
-    @Body() updateAppointmentDto: UpdateAppointmentDto,
-  ): Promise<AppointmentResponseDto> {
+  async update(@Param('id') id: string, @Body() updateAppointmentDto: UpdateAppointmentDto): Promise<AppointmentResponseDto> {
     return this.appointmentsService.update(id, updateAppointmentDto);
   }
 
@@ -198,9 +196,9 @@ export class AppointmentsController {
   @AuthWithOwnership()
   @AppointmentResource()
   @Roles('owner', 'admin')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Мягкое удаление записи',
-    description: 'Деактивация записи (мягкое удаление). Доступно владельцам и админам.'
+    description: 'Деактивация записи (мягкое удаление). Доступно владельцам и админам.',
   })
   @ApiParam({ name: 'id', description: 'ID записи' })
   @ApiResponse({ status: HttpStatus.NO_CONTENT })
@@ -217,9 +215,9 @@ export class AppointmentsController {
   @AuthWithOwnership()
   @AppointmentResource()
   @Roles('superadmin')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Полное удаление записи (только суперадмин)',
-    description: 'ОПАСНАЯ ОПЕРАЦИЯ! Полное удаление записи из базы данных.'
+    description: 'ОПАСНАЯ ОПЕРАЦИЯ! Полное удаление записи из базы данных.',
   })
   @ApiParam({ name: 'id', description: 'ID записи' })
   @ApiResponse({ status: HttpStatus.NO_CONTENT })
@@ -236,34 +234,28 @@ export class AppointmentsController {
   @Post('smart-schedule')
   @AuthWithOwnership()
   @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: '🧠 Умное планирование записи',
-    description: 'Интеллектуальный поиск оптимального времени для записи с учетом предпочтений клиента и загрузки мастеров.'
+    description: 'Интеллектуальный поиск оптимального времени для записи с учетом предпочтений клиента и загрузки мастеров.',
   })
   @ApiBody({ type: SmartScheduleDto })
   @ApiResponse({ status: HttpStatus.OK, type: SmartScheduleResponseDto })
   @Throttle({ default: { limit: 15, ttl: 60000 } })
-  async smartSchedule(
-    @Body() smartScheduleDto: SmartScheduleDto,
-    @Req() req: RequestWithUser,
-  ): Promise<SmartScheduleResponseDto> {
+  async smartSchedule(@Body() smartScheduleDto: SmartScheduleDto, @Req() req: RequestWithUser): Promise<SmartScheduleResponseDto> {
     return this.appointmentsService.smartSchedule(smartScheduleDto, req.user);
   }
 
   @Post('check-availability')
   @AuthWithOwnership()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Проверка доступности слотов',
-    description: 'Проверка доступных временных слотов для указанных услуг.'
+    description: 'Проверка доступных временных слотов для указанных услуг.',
   })
   @ApiBody({ type: CheckAvailabilityDto })
   @ApiResponse({ status: HttpStatus.OK })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  async checkAvailability(
-    @Body() checkDto: CheckAvailabilityDto,
-    @Req() req: RequestWithUser,
-  ): Promise<any[]> {
-    return this.appointmentsService.checkAvailability(checkDto.serviceIds, checkDto.date, req.user);
+  async checkAvailability(@Body() checkDto: CheckAvailabilityDto, @Req() req: RequestWithUser): Promise<any[]> {
+    return this.appointmentsService.checkAvailability(checkDto.serviceIds, checkDto.date, req.user, checkDto.timeRange);
   }
 
   // STATUS OPERATIONS
@@ -272,17 +264,14 @@ export class AppointmentsController {
   @AuthWithOwnership()
   @AppointmentResource()
   @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Подтверждение записи',
-    description: 'Подтверждение записи и отправка уведомления клиенту.'
+    description: 'Подтверждение записи и отправка уведомления клиенту.',
   })
   @ApiParam({ name: 'id', description: 'ID записи' })
   @ApiResponse({ status: HttpStatus.OK, type: AppointmentResponseDto })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  async confirm(
-    @Param('id') id: string,
-    @Req() req: RequestWithUser,
-  ): Promise<AppointmentResponseDto> {
+  async confirm(@Param('id') id: string, @Req() req: RequestWithUser): Promise<AppointmentResponseDto> {
     return this.appointmentsService.confirmAppointment(id, req.user);
   }
 
@@ -290,18 +279,14 @@ export class AppointmentsController {
   @AuthWithOwnership()
   @AppointmentResource()
   @Roles('owner', 'admin', 'manager', 'mechanic')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Завершение записи',
-    description: 'Отметка о завершении работ по записи.'
+    description: 'Отметка о завершении работ по записи.',
   })
   @ApiParam({ name: 'id', description: 'ID записи' })
   @ApiResponse({ status: HttpStatus.OK, type: AppointmentResponseDto })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  async complete(
-    @Param('id') id: string,
-    @Req() req: RequestWithUser,
-    @Body() completionData?: any,
-  ): Promise<AppointmentResponseDto> {
+  async complete(@Param('id') id: string, @Req() req: RequestWithUser, @Body() completionData?: any): Promise<AppointmentResponseDto> {
     return this.appointmentsService.completeAppointment(id, req.user, completionData);
   }
 
@@ -309,18 +294,14 @@ export class AppointmentsController {
   @AuthWithOwnership()
   @AppointmentResource()
   @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Отмена записи',
-    description: 'Отмена записи с указанием причины.'
+    description: 'Отмена записи с указанием причины.',
   })
   @ApiParam({ name: 'id', description: 'ID записи' })
   @ApiResponse({ status: HttpStatus.OK, type: AppointmentResponseDto })
   @Throttle({ default: { limit: 15, ttl: 60000 } })
-  async cancel(
-    @Param('id') id: string,
-    @Query('reason') reason: string,
-    @Req() req: RequestWithUser,
-  ): Promise<AppointmentResponseDto> {
+  async cancel(@Param('id') id: string, @Query('reason') reason: string, @Req() req: RequestWithUser): Promise<AppointmentResponseDto> {
     return this.appointmentsService.cancelAppointment(id, req.user, reason);
   }
 
@@ -328,9 +309,9 @@ export class AppointmentsController {
   @AuthWithOwnership()
   @AppointmentResource()
   @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Перенос записи',
-    description: 'Перенос записи на новое время.'
+    description: 'Перенос записи на новое время.',
   })
   @ApiParam({ name: 'id', description: 'ID записи' })
   @ApiResponse({ status: HttpStatus.OK, type: AppointmentResponseDto })
@@ -341,12 +322,7 @@ export class AppointmentsController {
     @Query('endTime') endTime: string,
     @Req() req: RequestWithUser,
   ): Promise<AppointmentResponseDto> {
-    return this.appointmentsService.rescheduleAppointment(
-      id, 
-      new Date(startTime), 
-      new Date(endTime), 
-      req.user
-    );
+    return this.appointmentsService.rescheduleAppointment(id, new Date(startTime), new Date(endTime), req.user);
   }
 
   // ANALYTICS & TRACKING
@@ -354,9 +330,9 @@ export class AppointmentsController {
   @Get(':id/tracking')
   @AuthWithOwnership()
   @AppointmentResource()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: '📊 Real-time отслеживание записи',
-    description: 'Получение информации о текущем статусе и прогрессе выполнения записи.'
+    description: 'Получение информации о текущем статусе и прогрессе выполнения записи.',
   })
   @ApiParam({ name: 'id', description: 'ID записи' })
   @ApiResponse({ status: HttpStatus.OK, type: AppointmentTrackingDto })
@@ -367,25 +343,22 @@ export class AppointmentsController {
 
   @Get('customer/:customerId')
   @AuthWithOwnership()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Записи клиента',
-    description: 'Получение всех записей конкретного клиента.'
+    description: 'Получение всех записей конкретного клиента.',
   })
   @ApiParam({ name: 'customerId', description: 'ID клиента' })
   @ApiResponse({ status: HttpStatus.OK, type: [AppointmentResponseDto] })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
-  async findByCustomer(
-    @Param('customerId') customerId: string,
-    @Req() req: RequestWithUser,
-  ): Promise<AppointmentResponseDto[]> {
+  async findByCustomer(@Param('customerId') customerId: string, @Req() req: RequestWithUser): Promise<AppointmentResponseDto[]> {
     return this.appointmentsService.findByCustomer(customerId, req.user);
   }
 
   @Get('mechanic/:mechanicId')
   @AuthWithOwnership()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Записи мастера',
-    description: 'Получение записей конкретного мастера в указанном диапазоне дат.'
+    description: 'Получение записей конкретного мастера в указанном диапазоне дат.',
   })
   @ApiParam({ name: 'mechanicId', description: 'ID мастера' })
   @ApiQuery({ name: 'dateFrom', required: true, description: 'Дата начала' })
@@ -398,20 +371,15 @@ export class AppointmentsController {
     @Query('dateTo') dateTo: string,
     @Req() req: RequestWithUser,
   ): Promise<AppointmentResponseDto[]> {
-    return this.appointmentsService.findByMechanic(
-      mechanicId, 
-      new Date(dateFrom), 
-      new Date(dateTo), 
-      req.user
-    );
+    return this.appointmentsService.findByMechanic(mechanicId, new Date(dateFrom), new Date(dateTo), req.user);
   }
 
   @Get('stats/dashboard')
   @AuthWithOwnership()
   @Roles('owner', 'admin', 'manager')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Статистика записей',
-    description: 'Получение статистики записей для дашборда.'
+    description: 'Получение статистики записей для дашборда.',
   })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async getStats(@Req() req: RequestWithUser): Promise<any> {
@@ -421,18 +389,14 @@ export class AppointmentsController {
   @Post(':id/rating')
   @AuthWithOwnership()
   @AppointmentResource()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Добавление оценки',
-    description: 'Добавление оценки и отзыва к завершенной записи.'
+    description: 'Добавление оценки и отзыва к завершенной записи.',
   })
   @ApiParam({ name: 'id', description: 'ID записи' })
   @ApiResponse({ status: HttpStatus.OK, type: AppointmentResponseDto })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  async addRating(
-    @Param('id') id: string,
-    @Query('rating', ParseIntPipe) rating: number,
-    @Query('feedback') feedback?: string,
-  ): Promise<AppointmentResponseDto> {
+  async addRating(@Param('id') id: string, @Query('rating', ParseIntPipe) rating: number, @Query('feedback') feedback?: string): Promise<AppointmentResponseDto> {
     return this.appointmentsService.addRating(id, rating, feedback);
   }
 }

@@ -1,12 +1,12 @@
 // path: apps/backend/src/modules/payments/payments.module.ts
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Payment, Invoice, PaymentMethod } from '../../database/entities';
+import { Payment, Invoice, PaymentMethod, Order, OrderService, OrderPart } from '../../database/entities';
 
 import { InvoicesModule } from '../invoices/invoices.module';
 import { PaymentMethodsModule } from '../payment-methods/payment-methods.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
-import { AuthModule } from '../auth/auth.module'; // ✅ нужен для JwtAuthGuard/SessionService/SecurityService
+import { AuthModule } from '../auth/auth.module';
 import { RedisModule } from '../../common/redis/redis.module';
 
 import { PaymentsController } from './payments.controller';
@@ -26,7 +26,7 @@ import { AuditService } from '../../common/audit/audit.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, Invoice, PaymentMethod]),
+    TypeOrmModule.forFeature([Payment, Invoice, PaymentMethod, Order, OrderService, OrderPart]),
     forwardRef(() => InvoicesModule),
     forwardRef(() => PaymentMethodsModule),
     SubscriptionsModule,
@@ -41,15 +41,10 @@ import { AuditService } from '../../common/audit/audit.service';
     PaymentsValidationService,
     PaymentsMapperService,
     AuditService,
-    // Webhooks
     WebhookIpAclGuard,
     WebhookIdempotencyService,
     YooKassaPaymentsClient,
   ],
-  exports: [
-    PaymentsService,
-    PaymentsDataService,
-    PaymentsValidationService,
-  ],
+  exports: [PaymentsService, PaymentsDataService, PaymentsValidationService],
 })
 export class PaymentsModule {}

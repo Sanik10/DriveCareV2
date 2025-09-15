@@ -1,102 +1,60 @@
 // path: apps/frontend/lib/api.ts
 'use client';
 
-import { LoginResponse, PaymentInitResponse, Invoice, Tariff } from './types';
-import { getApiBase } from '@/lib/api/core';
-
-const BASE = getApiBase();
-
-let accessToken: string | null = null;
-let refreshPromise: Promise<void> | null = null;
-
-async function refresh() {
-  if (!refreshPromise) {
-    refreshPromise = fetch(`${BASE}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-    })
-      .then(async (r) => {
-        if (!r.ok) throw new Error('Refresh failed');
-        const data: LoginResponse = await r.json();
-        accessToken = data.accessToken ?? null;
-      })
-      .finally(() => {
-        refreshPromise = null;
-      });
-  }
-  return refreshPromise;
-}
-
-async function request<T>(
-  path: string,
-  init: RequestInit & { json?: unknown } = {}
-): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (!headers.has('Content-Type') && init.json) headers.set('Content-Type', 'application/json');
-  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
-
-  const res = await fetch(`${BASE}${path.startsWith('/') ? path : `/${path}`}`, {
-    ...init,
-    headers,
-    credentials: 'include',
-    body: init.json ? JSON.stringify(init.json) : init.body,
-  });
-
-  if (res.status === 401) {
-    await refresh();
-    const retryHeaders = new Headers(init.headers);
-    if (!retryHeaders.has('Content-Type') && init.json) retryHeaders.set('Content-Type', 'application/json');
-    if (accessToken) retryHeaders.set('Authorization', `Bearer ${accessToken}`);
-    const retry = await fetch(`${BASE}${path.startsWith('/') ? path : `/${path}`}`, {
-      ...init,
-      headers: retryHeaders,
-      credentials: 'include',
-      body: init.json ? JSON.stringify(init.json) : init.body,
-    });
-    if (!retry.ok) throw new Error(`Request failed: ${retry.status}`);
-    return retry.json();
-  }
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `Request failed: ${res.status}`);
-  }
-
-  return res.json();
-}
+import { LoginResponse, Invoice, Tariff } from './types';
+import { apiRequest, setAccessToken, clearAccessToken, getAccessToken } from '@/lib/api/core';
+import { paymentsAPI } from '@/lib/api/payments';
 
 export const api = {
   auth: {
     async login(payload: { email: string; password: string }) {
-      const data = await request<LoginResponse>('/auth/login', { method: 'POST', json: payload });
-      accessToken = data.accessToken ?? null;
+      const data = await apiRequest<LoginResponse>('/auth/login', {
+        method: 'POST',
+        json: payload,
+      });
+      setAccessToken(data.accessToken ?? null);
       return data;
     },
     async logout() {
-      await request('/auth/logout', { method: 'POST' });
-      accessToken = null;
+      await apiRequest('/auth/logout', { method: 'POST' });
+      clearAccessToken();
     },
     getAccessToken() {
-      return accessToken;
+      return getAccessToken();
     },
   },
+
   invoices: {
-    list: () => request<Invoice[]>('/invoices', { method: 'GET' }),
-    get: (id: string) => request<Invoice>(`/invoices/${id}`, { method: 'GET' }),
+    list: () => apiRequest<Invoice[]>('/invoices', { method: 'GET' }),
+    get: (id: string) => apiRequest<Invoice>(`/invoices/${id}`, { method: 'GET' }),
   },
+
   payments: {
-    init: (invoiceId: string) =>
-      request<PaymentInitResponse | unknown>('/payments', { method: 'POST', json: { invoiceId } }) as Promise<PaymentInitResponse>,
+    /**
+     * Инициирует онлайн‑оплату инвойса и возвращает redirectUrl (через PaymentInitResponse).
+     * Поддерживает выбор paymentMethodId (multi-provider).
+     * Оставлен как удобная обёртка; внутри проксируем на paymentsAPI.initOnline.
+     */
+    init: (invoiceId: string, amount?: number, paymentMethodId?: string, returnUrl?: string) => {
+      const ret =
+        returnUrl ||
+        (typeof window !== 'undefined'
+          ? `${window.location.origin}/dashboard/payments/result`
+          : '/dashboard/payments/result');
+
+      return paymentsAPI.initOnline(invoiceId, amount, paymentMethodId, ret);
+    },
   },
+
   tariffs: {
     list: async () => {
       try {
-        return await request<Tariff[]>('/tariffs/active', { method: 'GET' });
+        return await apiRequest<Tariff[]>('/tariffs/active', { method: 'GET' });
       } catch {
         try {
-          return await request<Tariff[]>('/tariffs/popular', { method: 'GET' });
+          return await apiRequest<Tariff[]>('/tariffs/popular', { method: 'GET' });
         } catch {
-          return await request<Tariff[]>('/tariffs?page=1&limit=6', { method: 'GET' });
+          return await apiRequest<Tariff[]>('/tariffs?page=1&limit=6', { method: 'GET' });
         }
       }
     },

@@ -20,12 +20,9 @@ export interface Tariff {
   features?: string[];
 }
 
-export interface PaymentInitResponse {
-  paymentId: string;
-  invoiceId: string;
-  provider?: string;
-  redirectUrl: string;
-}
+// В целях единообразия и отсутствия дублирования типов оплаты,
+// реэкспортируем PaymentInitResponse из специализированного модуля платежей.
+export type { PaymentInitResponse } from './types/payments';
 
 export interface User {
   id: string;

@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/auth/dto/response/register-company-response.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CompanyInfo {

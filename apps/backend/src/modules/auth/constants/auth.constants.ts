@@ -1,25 +1,27 @@
+// path: apps/backend/src/modules/auth/constants/auth.constants.ts
+
 // ✅ ИСПРАВЛЕНО: Вынесена функция санитизации наружу
-function sanitizeForRedisKey(input: string): string {
+export function sanitizeForRedisKey(input: string): string {
   return input.replace(/[^a-zA-Z0-9@._-]/g, '_');
 }
 
 export const AUTH_CONSTANTS = {
   REDIS_KEYS: {
-    REFRESH_TOKEN: (userId: string, deviceId: string) => 
+    REFRESH_TOKEN: (userId: string, deviceId: string) =>
       `refresh_token:${sanitizeForRedisKey(userId)}:${sanitizeForRedisKey(deviceId)}`,
-    FAILED_LOGIN: (ipAddress: string, email: string) => 
+    FAILED_LOGIN: (ipAddress: string, email: string) =>
       `login:failed:${sanitizeForRedisKey(ipAddress)}:${sanitizeForRedisKey(email)}`,
-    BLOCKED_LOGIN: (ipAddress: string, email: string) => 
+    BLOCKED_LOGIN: (ipAddress: string, email: string) =>
       `login:blocked:${sanitizeForRedisKey(ipAddress)}:${sanitizeForRedisKey(email)}`,
   },
-  
+
   DEFAULTS: {
     MAX_FAILED_ATTEMPTS: 5,
     LOGIN_BLOCK_TIME: 15 * 60,
     FAILED_ATTEMPTS_TTL: 60 * 60,
     REFRESH_TOKEN_TTL: 60 * 60 * 24 * 7,
   },
-  
+
   JWT: {
     ACCESS_TOKEN_EXPIRATION: '15m',
     REFRESH_TOKEN_EXPIRATION: '7d',
@@ -33,8 +35,8 @@ export const AUTH_CONSTANTS = {
     AUDITOR: 'auditor',
     SUPPORT_ENGINEER: 'support_engineer',
     SYSTEM_OPERATOR: 'system_operator',
-    
-    // Company level  
+
+    // Company level
     COMPANY_OWNER: 'company_owner',
     COMPANY_ADMIN: 'company_admin',
     MANAGER: 'manager',
@@ -44,12 +46,9 @@ export const AUTH_CONSTANTS = {
     LEAD_MECHANIC: 'lead_mechanic',
     MECHANIC: 'mechanic',
     DIAGNOSTIC: 'diagnostic',
-    
+
     // ✅ ОБНОВЛЕНО: backwards compatibility
     OWNER: 'company_owner',
     ADMIN: 'company_admin',
-  }
+  },
 } as const;
-
-// ✅ ЭКСПОРТ функции отдельно
-export { sanitizeForRedisKey };

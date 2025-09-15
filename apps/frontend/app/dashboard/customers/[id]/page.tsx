@@ -1,5 +1,5 @@
 // path: apps/frontend/app/dashboard/customers/[id]/page.tsx
-"use client";
+'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -11,7 +11,7 @@ import { customersAPI } from '@/lib/api/customers';
 import { vehiclesAPI } from '@/lib/api/vehicles';
 import type { CustomerResponse } from '@/lib/types/customers';
 import type { VehicleResponse } from '@/lib/types/vehicles';
-import { ArrowLeft, Home, RefreshCw, Users, Phone, Mail, Car, Download, ShieldX, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Home, RefreshCw, Users, Phone, Mail, Car, Trash2, AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { OrderCreateDialog } from '@/components/orders/order-create-dialog';
 
@@ -62,7 +62,7 @@ export default function CustomerDetailsPage() {
           if (search) {
             try {
               const dup = await customersAPI.getCustomers({ search, page: 1, limit: 5 });
-              const others = dup.items.filter(i => i.id !== c.id);
+              const others = dup.items.filter((i) => i.id !== c.id);
               if (others.length > 0) setDuplicateHint({ count: others.length, search });
               else setDuplicateHint(null);
             } catch {
@@ -84,7 +84,9 @@ export default function CustomerDetailsPage() {
       }
     }
     loadAll();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isMounted, authLoading, isAuthenticated, user, router, id]);
 
   const handleRefresh = async () => {
@@ -181,7 +183,8 @@ export default function CustomerDetailsPage() {
   }
   if (!isAuthenticated || !user) return null;
 
-  const fullName = [customer?.firstName, customer?.lastName].filter(Boolean).join(' ') || customer?.companyName || 'Клиент';
+  const fullName =
+    [customer?.firstName, customer?.lastName].filter(Boolean).join(' ') || customer?.companyName || 'Клиент';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-surface-1">
@@ -197,9 +200,7 @@ export default function CustomerDetailsPage() {
                 <ArrowLeft className="w-4 h-4 mr-2" /> Назад
               </Button>
             </Link>
-            <h1 className="text-xl font-bold">
-              Клиент: {fullName}
-            </h1>
+            <h1 className="text-xl font-bold">Клиент: {fullName}</h1>
           </div>
           <div className="flex items-center gap-2">
             <Button onClick={() => setOpenOrderCreate(true)}>Создать заказ</Button>
@@ -299,10 +300,18 @@ export default function CustomerDetailsPage() {
                 <div className="grid md:grid-cols-2 gap-3">
                   {vehicles.map((v) => {
                     const model = `${v.model?.brand?.name || ''} ${v.model?.name || ''}`.trim();
-                    const history = typeof v.serviceHistoryCount === 'number' ? ` · История: ${v.serviceHistoryCount}` : '';
-                    const serviceBadge = v.needsService ? ' · ТО!' : (typeof v.daysUntilService === 'number' ? ` · ТО через ${v.daysUntilService} д.` : '');
+                    const history =
+                      typeof v.serviceHistoryCount === 'number' ? ` · История: ${v.serviceHistoryCount}` : '';
+                    const serviceBadge = v.needsService
+                      ? ' · ТО!'
+                      : typeof v.daysUntilService === 'number'
+                      ? ` · ТО через ${v.daysUntilService} д.`
+                      : '';
                     return (
-                      <div key={v.id} className="p-3 rounded-md border border-border/50 hover:bg-surface-1/60 transition-colors">
+                      <div
+                        key={v.id}
+                        className="p-3 rounded-md border border-border/50 hover:bg-surface-1/60 transition-colors"
+                      >
                         <div className="flex items-center justify-between gap-3">
                           <Link href={`/dashboard/vehicles/${v.id}`} className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded bg-emerald-500/20 flex items-center justify-center">
@@ -311,7 +320,9 @@ export default function CustomerDetailsPage() {
                             <div>
                               <div className="font-medium">{model}</div>
                               <div className="text-xs text-muted-foreground">
-                                {v.licensePlate || v.vin || '—'} · Пробег: {v.mileage ?? '—'}{history}{serviceBadge}
+                                {v.licensePlate || v.vin || '—'} · Пробег: {v.mileage ?? '—'}
+                                {history}
+                                {serviceBadge}
                               </div>
                             </div>
                           </Link>

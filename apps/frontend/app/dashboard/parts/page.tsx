@@ -1,122 +1,120 @@
 // path: apps/frontend/app/dashboard/parts/page.tsx
-'use client'
+'use client';
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Building2, Plus, Search, RefreshCw, Pencil, Trash2 } from 'lucide-react'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { useAuth } from '@/lib/hooks/use-auth'
-import { partsAPI } from '@/lib/api/parts'
-import type { PaginatedPartsResponse, PartCatalogueItem } from '@/lib/types/parts'
-import { PartEditDialog } from '@/components/parts/part-edit-dialog'
-import { toast } from 'sonner'
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Building2, Plus, Search, RefreshCw, Pencil, Trash2 } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useAuth } from '@/lib/hooks/use-auth';
+import { partsAPI } from '@/lib/api/parts';
+import type { PaginatedPartsResponse, PartCatalogueItem } from '@/lib/types/parts';
+import { PartEditDialog } from '@/components/parts/part-edit-dialog';
+import { toast } from 'sonner';
 
 export default function PartsCataloguePage() {
-  const { isAuthenticated, user, isLoading: authLoading } = useAuth()
-  const router = useRouter()
-  const [isMounted, setIsMounted] = useState(false)
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const [isMounted, setIsMounted] = useState(false);
 
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [data, setData] = useState<PaginatedPartsResponse | null>(null)
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<PaginatedPartsResponse | null>(null);
 
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(20)
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
 
-  const [openEdit, setOpenEdit] = useState(false)
-  const [current, setCurrent] = useState<PartCatalogueItem | null>(null)
+  const [openEdit, setOpenEdit] = useState(false);
+  const [current, setCurrent] = useState<PartCatalogueItem | null>(null);
 
-  useEffect(() => setIsMounted(true), [])
-
-  const query = useMemo(() => ({ search: search || undefined, page, limit }), [search, page, limit])
+  useEffect(() => setIsMounted(true), []);
 
   useEffect(() => {
-    if (!isMounted) return
-    if (authLoading) return
+    if (!isMounted) return;
+    if (authLoading) return;
     if (!isAuthenticated || !user) {
-      router.push('/login')
-      return
+      router.push('/login');
+      return;
     }
 
-    let cancelled = false
+    let cancelled = false;
     const t = setTimeout(async () => {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
       try {
         const res = search.trim()
           ? await partsAPI.search({ search: search.trim(), page, limit })
-          : await partsAPI.list({ page, limit })
-        if (!cancelled) setData(res)
+          : await partsAPI.list({ page, limit });
+        if (!cancelled) setData(res);
       } catch (e) {
         try {
-          const parsed = JSON.parse((e as Error).message) as { message?: string }
-          if (!cancelled) setError(parsed.message || 'Ошибка загрузки запчастей')
+          const parsed = JSON.parse((e as Error).message) as { message?: string };
+          if (!cancelled) setError(parsed.message || 'Ошибка загрузки запчастей');
         } catch {
-          if (!cancelled) setError('Ошибка загрузки запчастей')
+          if (!cancelled) setError('Ошибка загрузки запчастей');
         }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setLoading(false);
       }
-    }, 250)
+    }, 250);
 
     return () => {
-      cancelled = true
-      clearTimeout(t)
-    }
-  }, [isMounted, authLoading, isAuthenticated, user, router, query, search])
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [isMounted, authLoading, isAuthenticated, user, router, search, page, limit]);
 
   const handleCreate = () => {
-    setCurrent(null)
-    setOpenEdit(true)
-  }
+    setCurrent(null);
+    setOpenEdit(true);
+  };
 
   const handleEdit = (p: PartCatalogueItem) => {
-    setCurrent(p)
-    setOpenEdit(true)
-  }
+    setCurrent(p);
+    setOpenEdit(true);
+  };
 
   const handleSaved = async () => {
     const res = search.trim()
       ? await partsAPI.search({ search: search.trim(), page: 1, limit })
-      : await partsAPI.list({ page: 1, limit })
-    setData(res)
-    setPage(1)
-  }
+      : await partsAPI.list({ page: 1, limit });
+    setData(res);
+    setPage(1);
+  };
 
   const handleDelete = async (p: PartCatalogueItem) => {
-    if (!confirm(`Удалить запчасть "${p.name}"?`)) return
+    if (!confirm(`Удалить запчасть "${p.name}"?`)) return;
     try {
-      await partsAPI.remove(p.id)
-      toast.success('Запчасть удалена')
+      await partsAPI.remove(p.id);
+      toast.success('Запчасть удалена');
       const res = search.trim()
         ? await partsAPI.search({ search: search.trim(), page: 1, limit })
-        : await partsAPI.list({ page: 1, limit })
-      setData(res)
-      setPage(1)
+        : await partsAPI.list({ page: 1, limit });
+      setData(res);
+      setPage(1);
     } catch (e) {
       try {
-        const parsed = JSON.parse((e as Error).message) as { message?: string }
-        toast.error(parsed.message || 'Ошибка удаления запчасти')
+        const parsed = JSON.parse((e as Error).message) as { message?: string };
+        toast.error(parsed.message || 'Ошибка удаления запчасти');
       } catch {
-        toast.error('Ошибка удаления запчасти')
+        toast.error('Ошибка удаления запчасти');
       }
     }
-  }
+  };
 
-  if (!isMounted) return null
+  if (!isMounted) return null;
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
       </div>
-    )
+    );
   }
-  if (!isAuthenticated || !user) return null
+  if (!isAuthenticated || !user) return null;
 
-  const items = data?.items || []
+  const items = data?.items || [];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-surface-1">
@@ -154,7 +152,10 @@ export default function PartsCataloguePage() {
             <div className="relative">
               <Input
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
                 placeholder="Поиск по названию/артикулу/бренду"
                 className="pl-9"
               />
@@ -163,12 +164,21 @@ export default function PartsCataloguePage() {
             <div className="flex gap-2">
               <select
                 value={limit}
-                onChange={(e) => { setLimit(parseInt(e.target.value, 10)); setPage(1) }}
+                onChange={(e) => {
+                  setLimit(parseInt(e.target.value, 10));
+                  setPage(1);
+                }}
                 className="w-28 h-9 rounded-md border border-border bg-background text-sm px-3"
               >
-                {[10, 20, 50].map(n => <option key={n} value={n}>{n} / стр</option>)}
+                {[10, 20, 50].map((n) => (
+                  <option key={n} value={n}>
+                    {n} / стр
+                  </option>
+                ))}
               </select>
-              <Button variant="outline" onClick={() => setPage(1)}>Применить</Button>
+              <Button variant="outline" onClick={() => setPage(1)}>
+                Применить
+              </Button>
             </div>
           </div>
         </Card>
@@ -176,7 +186,9 @@ export default function PartsCataloguePage() {
         <Card className="p-0 backdrop-blur-sm bg-card/80 border-border/50 overflow-hidden">
           {loading ? (
             <div className="p-6 space-y-3">
-              {[...Array(6)].map((_, i) => <div key={i} className="h-14 bg-surface-1 rounded-md animate-pulse" />)}
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-14 bg-surface-1 rounded-md animate-pulse" />
+              ))}
             </div>
           ) : error ? (
             <div className="p-6 text-center text-destructive">{error}</div>
@@ -184,12 +196,13 @@ export default function PartsCataloguePage() {
             <div className="p-10 text-center text-muted-foreground">Запчасти не найдены</div>
           ) : (
             <div className="divide-y divide-border/60">
-              {items.map(p => (
+              {items.map((p) => (
                 <div key={p.id} className="p-4 flex items-center justify-between">
                   <div>
                     <div className="font-medium">{p.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {p.brand ? `${p.brand} · ` : ''}{p.partNumber || '—'} · {(p.sellingPrice || 0).toLocaleString('ru-RU')} ₽
+                      {p.brand ? `${p.brand} · ` : ''}
+                      {p.partNumber || '—'} · {(p.sellingPrice || 0).toLocaleString('ru-RU')} ₽
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -209,11 +222,21 @@ export default function PartsCataloguePage() {
         <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">Всего: {data?.total || 0}</div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" disabled={(data?.page || 1) <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+            <Button
+              variant="outline"
+              disabled={(data?.page || 1) <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
               Назад
             </Button>
-            <div className="text-sm">Стр. {data?.page || 1} / {data?.totalPages || 1}</div>
-            <Button variant="outline" disabled={(data?.page || 1) >= (data?.totalPages || 1)} onClick={() => setPage((p) => p + 1)}>
+            <div className="text-sm">
+              Стр. {data?.page || 1} / {data?.totalPages || 1}
+            </div>
+            <Button
+              variant="outline"
+              disabled={(data?.page || 1) >= (data?.totalPages || 1)}
+              onClick={() => setPage((p) => p + 1)}
+            >
               Далее
             </Button>
           </div>
@@ -222,5 +245,5 @@ export default function PartsCataloguePage() {
 
       <PartEditDialog open={openEdit} onOpenChange={setOpenEdit} part={current} onSaved={handleSaved} />
     </div>
-  )
+  );
 }

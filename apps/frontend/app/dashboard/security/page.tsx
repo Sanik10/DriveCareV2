@@ -1,209 +1,228 @@
 // path: apps/frontend/app/dashboard/security/page.tsx
-'use client'
+'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Shield, Smartphone, Monitor, Tablet,
   AlertTriangle, CheckCircle, Key, LogOut, RefreshCw, Home,
-} from 'lucide-react'
-import { toast } from 'sonner'
+} from 'lucide-react';
+import { toast } from 'sonner';
 
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { useAuth } from '@/lib/hooks/use-auth'
-import { securityAPI } from '@/lib/api/security'
-import type { SessionDevice } from '@/lib/types/security'
-import { DeviceSessionCard } from '@/components/security/device-session-card'
-import { TwoFactorAuthCard } from '@/components/security/two-factor-auth-card'
-import { LogoutConfirmDialog } from '@/components/security/logout-confirm-dialog'
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { useAuth } from '@/lib/hooks/use-auth';
+import { securityAPI } from '@/lib/api/security';
+import type { SessionDevice } from '@/lib/types/security';
+import { DeviceSessionCard } from '@/components/security/device-session-card';
+import { TwoFactorAuthCard } from '@/components/security/two-factor-auth-card';
+import { LogoutConfirmDialog } from '@/components/security/logout-confirm-dialog';
 
 interface ApiError {
-  message: string
-  statusCode?: number
+  message: string;
+  statusCode?: number;
 }
 
 const isDebug = () => {
-  if (typeof window === 'undefined') return false
-  return window.localStorage.getItem('DEBUG_SECURITY') === '1'
-}
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem('DEBUG_SECURITY') === '1';
+  } catch {
+    return false;
+  }
+};
 
 export default function SecurityPage() {
-  const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth()
-  const router = useRouter()
-  const [sessions, setSessions] = useState<SessionDevice[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [twoFAEnabled, setTwoFAEnabled] = useState(false)
+  const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const [sessions, setSessions] = useState<SessionDevice[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [twoFAEnabled, setTwoFAEnabled] = useState(false);
   const [logoutDialog, setLogoutDialog] = useState<{
-    isOpen: boolean
-    deviceId?: string
-    deviceName?: string
-    isAllDevices?: boolean
-  }>({ isOpen: false })
+    isOpen: boolean;
+    deviceId?: string;
+    deviceName?: string;
+    isAllDevices?: boolean;
+  }>({ isOpen: false });
 
-  const [isMounted, setIsMounted] = useState(false)
-  const loadingRef = useRef(false)
-  const isMountedRef = useRef(false)
+  const [isMounted, setIsMounted] = useState(false);
+  const loadingRef = useRef(false);
+  const isMountedRef = useRef(false);
 
-  useEffect(() => setIsMounted(true), [])
+  useEffect(() => setIsMounted(true), []);
 
   // Redirect if not authenticated
   useEffect(() => {
-    if (!isMounted) return
-    if (authLoading) return
+    if (!isMounted) return;
+    if (authLoading) return;
     if (!isAuthenticated && !user) {
-      if (isDebug()) console.log('[SecurityPage] Not authenticated, redirect to /login')
-      router.push('/login')
+      if (isDebug()) console.log('[SecurityPage] Not authenticated, redirect to /login');
+      router.push('/login');
     }
-  }, [isAuthenticated, user, authLoading, router, isMounted])
+  }, [isAuthenticated, user, authLoading, router, isMounted]);
 
   const getDeviceIcon = useCallback(
     (deviceType: string): React.ComponentType<{ className?: string }> => {
       switch (deviceType?.toLowerCase()) {
         case 'mobile':
-          return Smartphone
+          return Smartphone;
         case 'tablet':
-          return Tablet
+          return Tablet;
         case 'desktop':
         default:
-          return Monitor
+          return Monitor;
       }
     },
     []
-  )
+  );
 
   const formatLastActive = useCallback((date: Date) => {
-    const now = new Date()
-    const diff = now.getTime() - new Date(date).getTime()
-    const minutes = Math.floor(diff / 60000)
-    const hours = Math.floor(diff / 3600000)
-    const days = Math.floor(diff / 86400000)
+    const now = new Date();
+    const diff = now.getTime() - new Date(date).getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
 
-    if (minutes < 1) return 'Только что'
-    if (minutes < 60) return `${minutes} мин назад`
-    if (hours < 24) return `${hours} ч назад`
-    return `${days} дн назад`
-  }, [])
+    if (minutes < 1) return 'Только что';
+    if (minutes < 60) return `${minutes} мин назад`;
+    if (hours < 24) return `${hours} ч назад`;
+    return `${days} дн назад`;
+  }, []);
 
   const loadSessions = useCallback(
     async (forceRefresh = false) => {
-      if (!isAuthenticated || !user || authLoading || !isMounted) return
-      if (loadingRef.current && !forceRefresh) return
+      if (!isAuthenticated || !user || authLoading || !isMounted) return;
+      if (loadingRef.current && !forceRefresh) return;
 
       try {
-        loadingRef.current = true
-        setIsLoading(true)
-        if (isDebug()) console.log('[SecurityPage] Loading sessions, forceRefresh:', forceRefresh)
+        loadingRef.current = true;
+        setIsLoading(true);
+        if (isDebug()) console.log('[SecurityPage] Loading sessions, forceRefresh:', forceRefresh);
 
-        const sessionsData = await securityAPI.getSessions(forceRefresh)
+        const sessionsData = await securityAPI.getSessions(forceRefresh);
+        if (!isMountedRef.current) return;
 
-        if (!isMountedRef.current) return
-
-        const currentDeviceId =
-          (typeof window !== 'undefined' && (localStorage.getItem('deviceId') || sessionStorage.getItem('deviceId'))) ||
-          undefined
+        // Предпочтительно берём deviceId из sessionStorage (эпемерно), затем fallback на localStorage
+        let currentDeviceId: string | undefined = undefined;
+        try {
+          if (typeof window !== 'undefined') {
+            currentDeviceId =
+              window.sessionStorage.getItem('deviceId') ||
+              window.localStorage.getItem('deviceId') ||
+              undefined;
+          }
+        } catch {
+          // ignore
+        }
 
         const sessionsWithCurrent: SessionDevice[] = sessionsData.map((session) => ({
           ...session,
           isCurrentDevice: currentDeviceId ? session.deviceId === currentDeviceId : false,
-        }))
+        }));
 
-        setSessions(sessionsWithCurrent)
+        setSessions(sessionsWithCurrent);
       } catch (error: unknown) {
-        if (!isMountedRef.current) return
+        if (!isMountedRef.current) return;
+
+        const plainMsg = (error as Error)?.message || '';
+        // Совместимость с apiRequest: определяем 401 по текстовому сообщению
+        if (plainMsg.includes('401')) {
+          await logout();
+          router.push('/login');
+          return;
+        }
 
         try {
-          const errorData = JSON.parse((error as Error).message) as ApiError
+          const errorData = JSON.parse(plainMsg) as ApiError;
           if (errorData.statusCode === 401) {
-            await logout()
-            router.push('/login')
-            return
+            await logout();
+            router.push('/login');
+            return;
           }
           if (errorData.statusCode === 429) {
-            if (isDebug()) console.warn('[SecurityPage] 429 Too Many Requests for sessions')
-            return
+            if (isDebug()) console.warn('[SecurityPage] 429 Too Many Requests for sessions');
+            return;
           }
-          toast.error(errorData.message || 'Ошибка загрузки сессий')
+          toast.error(errorData.message || 'Ошибка загрузки сессий');
         } catch {
-          toast.error('Ошибка загрузки сессий')
+          toast.error('Ошибка загрузки сессий');
         }
       } finally {
-        if (isMountedRef.current) setIsLoading(false)
-        loadingRef.current = false
+        if (isMountedRef.current) setIsLoading(false);
+        loadingRef.current = false;
       }
     },
     [isAuthenticated, user, authLoading, logout, router, isMounted]
-  )
+  );
 
   // Initial load and mount flags
   useEffect(() => {
-    isMountedRef.current = true
+    isMountedRef.current = true;
 
     if (isAuthenticated && user && !authLoading && isMounted) {
-      loadSessions()
-      setTwoFAEnabled(Boolean(user.twoFactorEnabled))
+      loadSessions();
+      setTwoFAEnabled(Boolean(user.twoFactorEnabled));
     }
 
     return () => {
-      isMountedRef.current = false
-      loadingRef.current = false
-    }
-  }, [isAuthenticated, user, authLoading, loadSessions, isMounted])
+      isMountedRef.current = false;
+      loadingRef.current = false;
+    };
+  }, [isAuthenticated, user, authLoading, loadSessions, isMounted]);
 
   // Keep 2FA status in sync with user changes
   useEffect(() => {
     if (user && isMounted) {
-      setTwoFAEnabled(Boolean(user.twoFactorEnabled))
+      setTwoFAEnabled(Boolean(user.twoFactorEnabled));
     }
-  }, [user, isMounted])
+  }, [user, isMounted]);
 
-  // Compute sessions count label BEFORE any early return
   const sessionsCountLabel = useMemo(() => {
-    const n = sessions.length
-    if (n === 1) return 'устройство'
-    if (n >= 2 && n <= 4) return 'устройства'
-    return 'устройств'
-  }, [sessions.length])
+    const n = sessions.length;
+    if (n === 1) return 'устройство';
+    if (n >= 2 && n <= 4) return 'устройства';
+    return 'устройств';
+  }, [sessions.length]);
 
   const handleRefresh = async () => {
-    setIsRefreshing(true)
-    await loadSessions(true)
-    setIsRefreshing(false)
-    toast.success('Список устройств обновлен')
-  }
+    setIsRefreshing(true);
+    await loadSessions(true);
+    setIsRefreshing(false);
+    toast.success('Список устройств обновлен');
+  };
 
   const handleLogoutDevice = async (deviceId: string) => {
     try {
-      await securityAPI.logoutDevice({ deviceId })
-      toast.success('Устройство отключено')
-      await loadSessions(true)
+      await securityAPI.logoutDevice({ deviceId });
+      toast.success('Устройство отключено');
+      await loadSessions(true);
     } catch (error: unknown) {
       try {
-        const errorData = JSON.parse((error as Error).message) as ApiError
-        toast.error(errorData.message || 'Ошибка отключения устройства')
+        const errorData = JSON.parse((error as Error).message) as ApiError;
+        toast.error(errorData.message || 'Ошибка отключения устройства');
       } catch {
-        toast.error('Ошибка отключения устройства')
+        toast.error('Ошибка отключения устройства');
       }
     }
-  }
+  };
 
   const handleLogoutAllDevices = async () => {
     try {
-      await securityAPI.logoutAllDevices()
-      toast.success('Все устройства отключены')
-      await logout()
-      router.push('/')
+      await securityAPI.logoutAllDevices();
+      toast.success('Все устройства отключены');
+      await logout();
+      router.push('/');
     } catch (error: unknown) {
       try {
-        const errorData = JSON.parse((error as Error).message) as ApiError
-        toast.error(errorData.message || 'Ошибка отключения устройств')
+        const errorData = JSON.parse((error as Error).message) as ApiError;
+        toast.error(errorData.message || 'Ошибка отключения устройств');
       } catch {
-        toast.error('Ошибка отключения устройств')
+        toast.error('Ошибка отключения устройств');
       }
     }
-  }
+  };
 
   const confirmLogout = (deviceId?: string, deviceName?: string) => {
     setLogoutDialog({
@@ -211,24 +230,24 @@ export default function SecurityPage() {
       deviceId,
       deviceName,
       isAllDevices: !deviceId,
-    })
-  }
+    });
+  };
 
   const executeLogout = async () => {
-    const { deviceId, isAllDevices } = logoutDialog
+    const { deviceId, isAllDevices } = logoutDialog;
     if (isAllDevices) {
-      await handleLogoutAllDevices()
+      await handleLogoutAllDevices();
     } else if (deviceId) {
-      await handleLogoutDevice(deviceId)
+      await handleLogoutDevice(deviceId);
     }
-    setLogoutDialog({ isOpen: false })
-  }
+    setLogoutDialog({ isOpen: false });
+  };
 
   const handle2FAStatusChange = async (enabled: boolean) => {
-    setTwoFAEnabled(enabled)
-  }
+    setTwoFAEnabled(enabled);
+  };
 
-  if (!isMounted) return null
+  if (!isMounted) return null;
 
   if (authLoading) {
     return (
@@ -238,10 +257,10 @@ export default function SecurityPage() {
           <p className="text-muted-foreground">Проверка авторизации...</p>
         </div>
       </div>
-    )
+    );
   }
 
-  if (!isAuthenticated || !user) return null
+  if (!isAuthenticated || !user) return null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-surface-1">
@@ -382,7 +401,7 @@ export default function SecurityPage() {
                   </div>
                 </div>
 
-                <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                <div className="п-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
                   <div className="flex items-start gap-3">
                     <LogOut className="w-5 h-5 text-purple-500 mt-0.5" />
                     <div>
@@ -409,5 +428,5 @@ export default function SecurityPage() {
         isAllDevices={logoutDialog.isAllDevices}
       />
     </div>
-  )
+  );
 }

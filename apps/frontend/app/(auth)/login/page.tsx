@@ -1,166 +1,157 @@
 // path: apps/frontend/app/(auth)/login/page.tsx
-"use client"
+'use client';
 
-import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { Eye, EyeOff, ArrowRight, Building2, AlertCircle, Clock, Lock, Mail, Shield } from 'lucide-react'
-import Link from 'next/link'
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Eye, EyeOff, ArrowRight, Building2, AlertCircle, Clock, Lock, Mail, Shield } from 'lucide-react';
+import Link from 'next/link';
 
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { authAPI } from '@/lib/api/auth'
-import { useAuth } from '@/lib/hooks/use-auth'
-import { EMAIL_REGEX, PASSWORD_REGEX, TWO_FA_REGEX } from '@/lib/types/auth'
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { authAPI } from '@/lib/api/auth';
+import { useAuth } from '@/lib/hooks/use-auth';
+import { EMAIL_REGEX, PASSWORD_REGEX, TWO_FA_REGEX } from '@/lib/types/auth';
+import styles from './login.module.css';
 
 const loginSchema = z.object({
-  email: z.string()
-    .min(1, 'Email обязателен')
-    .regex(EMAIL_REGEX, 'Некорректный email'),
-  password: z.string()
+  email: z.string().min(1, 'Email обязателен').regex(EMAIL_REGEX, 'Некорректный email'),
+  password: z
+    .string()
     .min(8, 'Минимум 8 символов')
     .regex(PASSWORD_REGEX, 'Пароль должен содержать строчные и заглавные буквы, цифры и спецсимволы'),
-  twoFactorCode: z.string()
+  twoFactorCode: z
+    .string()
     .optional()
     .refine((val) => !val || TWO_FA_REGEX.test(val), {
-      message: 'Код 2FA должен состоять из 6 цифр'
-    })
-})
+      message: 'Код 2FA должен состоять из 6 цифр',
+    }),
+});
 
-type LoginForm = z.infer<typeof loginSchema>
+type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [apiError, setApiError] = useState<string | null>(null)
-  const [isThrottled, setIsThrottled] = useState(false)
-  const [throttleTimeLeft, setThrottleTimeLeft] = useState(0)
-  const router = useRouter()
-  const { setAuthUser } = useAuth()
-  
-  const loginAttemptRef = useRef(false)
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isThrottled, setIsThrottled] = useState(false);
+  const [throttleTimeLeft, setThrottleTimeLeft] = useState(0);
+  const router = useRouter();
+  const { setAuthUser } = useAuth();
+
+  const loginAttemptRef = useRef(false);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-    setError
+    setError,
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
-  })
+  });
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null
-    
+    let interval: NodeJS.Timeout | null = null;
+
     if (isThrottled && throttleTimeLeft > 0) {
       interval = setInterval(() => {
-        setThrottleTimeLeft(prev => {
+        setThrottleTimeLeft((prev) => {
           if (prev <= 1) {
-            setIsThrottled(false)
-            return 0
+            setIsThrottled(false);
+            return 0;
           }
-          return prev - 1
-        })
-      }, 1000)
+          return prev - 1;
+        });
+      }, 1000);
     }
 
     return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [isThrottled, throttleTimeLeft])
+      if (interval) clearInterval(interval);
+    };
+  }, [isThrottled, throttleTimeLeft]);
 
   const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = seconds % 60
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-  }
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
 
   const onSubmit = async (data: LoginForm) => {
     if (isThrottled || isLoading || loginAttemptRef.current) {
-      return
+      return;
     }
-    
-    loginAttemptRef.current = true
-    setIsLoading(true)
-    setApiError(null)
-    
+
+    loginAttemptRef.current = true;
+    setIsLoading(true);
+    setApiError(null);
+
     try {
-      const response = await authAPI.login(data)
-      
+      const response = await authAPI.login(data);
+
       if (!response.user || !response.user.email) {
-        setApiError('Ошибка входа: получены некорректные данные пользователя')
-        return
+        setApiError('Ошибка входа: получены некорректные данные пользователя');
+        return;
       }
-      
-      if (response.accessToken) {
-        localStorage.setItem('accessToken', response.accessToken)
-      }
-      if (response.refreshToken) {
-        localStorage.setItem('refreshToken', response.refreshToken)
-      }
-      localStorage.setItem('user', JSON.stringify(response.user))
-      if (response.deviceId) {
-        localStorage.setItem('deviceId', response.deviceId)
-      }
-      
-      setAuthUser(response.user)
-      router.push('/dashboard')
+
+      // Access/refresh токены уже установлены в in-memory и HttpOnly cookie внутри authAPI.login
+      // Здесь просто фиксируем пользователя в глобальном состоянии
+      setAuthUser(response.user);
+      router.push('/dashboard');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Неизвестная ошибка'
-      
+      const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+
       try {
-        const errorData = JSON.parse(message)
-        
+        const errorData = JSON.parse(message);
+
         if (errorData.statusCode === 429) {
-          setIsThrottled(true)
-          setThrottleTimeLeft(15 * 60)
-          setApiError('Превышен лимит попыток входа. Попробуйте позже.')
+          setIsThrottled(true);
+          setThrottleTimeLeft(15 * 60);
+          setApiError('Превышен лимит попыток входа. Попробуйте позже.');
         } else if (errorData.statusCode === 401) {
-          setApiError('Неверный email или пароль')
+          setApiError('Неверный email или пароль');
         } else if (errorData.statusCode === 400) {
-          setApiError('Некорректные данные для входа')
+          setApiError('Некорректные данные для входа');
         } else {
-          setApiError('Ошибка сервера. Попробуйте позже.')
+          setApiError('Ошибка сервера. Попробуйте позже.');
         }
       } catch {
-        if (message.includes('2FA')) {
-          setError('twoFactorCode', { message: 'Неверный код 2FA' })
-        } else if (message.includes('email') || message.includes('пароль')) {
-          setApiError(message)
+        if (message.toLowerCase().includes('2fa')) {
+          setError('twoFactorCode', { message: 'Неверный код 2FA' });
+        } else if (message.toLowerCase().includes('email') || message.toLowerCase().includes('парол')) {
+          setApiError(message);
         } else {
-          setApiError('Ошибка входа. Проверьте данные и попробуйте снова.')
+          setApiError('Ошибка входа. Проверьте данные и попробуйте снова.');
         }
       }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
       setTimeout(() => {
-        loginAttemptRef.current = false
-      }, 1000)
+        loginAttemptRef.current = false;
+      }, 1000);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      {/* Advanced Background with Floating Shapes */}
-      <div 
+      {/* Background */}
+      <div
         className="fixed inset-0 -z-10"
         style={{
           background: `
             radial-gradient(ellipse 600px 400px at 80% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
             radial-gradient(ellipse 500px 500px at 20% 80%, rgba(14, 165, 233, 0.12) 0%, transparent 50%),
             radial-gradient(ellipse 700px 300px at 60% 60%, rgba(168, 85, 247, 0.08) 0%, transparent 50%)
-          `
+          `,
         }}
       />
-      
+
       {/* Floating Geometric Shapes */}
       <div className="fixed inset-0 -z-10 pointer-events-none">
-        {/* Triangle */}
-        <div 
-          className="absolute login-shape-1"
+        <div
+          className={`absolute ${styles.shape1}`}
           style={{
             width: '60px',
             height: '60px',
@@ -171,10 +162,8 @@ export default function LoginPage() {
             filter: 'blur(1px)',
           }}
         />
-        
-        {/* Circle */}
-        <div 
-          className="absolute login-shape-2"
+        <div
+          className={`absolute ${styles.shape2}`}
           style={{
             width: '80px',
             height: '80px',
@@ -185,10 +174,8 @@ export default function LoginPage() {
             filter: 'blur(2px)',
           }}
         />
-        
-        {/* Square */}
-        <div 
-          className="absolute login-shape-3"
+        <div
+          className={`absolute ${styles.shape3}`}
           style={{
             width: '50px',
             height: '50px',
@@ -199,10 +186,8 @@ export default function LoginPage() {
             filter: 'blur(1px)',
           }}
         />
-        
-        {/* Hexagon */}
-        <div 
-          className="absolute login-shape-4"
+        <div
+          className={`absolute ${styles.shape4}`}
           style={{
             width: '70px',
             height: '70px',
@@ -213,10 +198,8 @@ export default function LoginPage() {
             filter: 'blur(2px)',
           }}
         />
-        
-        {/* Additional smaller shapes */}
-        <div 
-          className="absolute login-shape-5"
+        <div
+          className={`absolute ${styles.shape5}`}
           style={{
             width: '30px',
             height: '30px',
@@ -227,9 +210,8 @@ export default function LoginPage() {
             filter: 'blur(1px)',
           }}
         />
-        
-        <div 
-          className="absolute login-shape-6"
+        <div
+          className={`absolute ${styles.shape6}`}
           style={{
             width: '40px',
             height: '40px',
@@ -241,10 +223,10 @@ export default function LoginPage() {
           }}
         />
       </div>
-      
+
       <div className="flex items-center justify-center min-h-screen p-6 relative z-10">
         <div className="w-full max-w-md space-y-8">
-          {/* Header with enhanced animation */}
+          {/* Header */}
           <div className="text-center space-y-6">
             <Link href="/" className="inline-block group">
               <div className="flex items-center justify-center">
@@ -254,12 +236,8 @@ export default function LoginPage() {
               </div>
             </Link>
             <div className="space-y-3">
-              <h1 className="text-4xl font-bold text-gradient-primary">
-                Вход в систему
-              </h1>
-              <p className="text-lg text-muted-foreground">
-                Добро пожаловать в DriveCare
-              </p>
+              <h1 className="text-4xl font-bold text-gradient-primary">Вход в систему</h1>
+              <p className="text-lg text-muted-foreground">Добро пожаловать в DriveCare</p>
               <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <Shield className="w-4 h-4 text-primary" />
@@ -273,10 +251,9 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Enhanced Login Form */}
+          {/* Login Form */}
           <Card className="p-8 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 rounded-3xl">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-              {/* API Error */}
               {apiError && (
                 <div className="flex items-center gap-3 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 animate-in slide-in-from-top-2 duration-300">
                   <AlertCircle className="w-5 h-5 text-destructive" />
@@ -284,7 +261,6 @@ export default function LoginPage() {
                 </div>
               )}
 
-              {/* Throttle Warning */}
               {isThrottled && (
                 <div className="flex items-center gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 animate-in slide-in-from-top-2 duration-300">
                   <Clock className="w-5 h-5 text-amber-600" />
@@ -326,11 +302,7 @@ export default function LoginPage() {
                     className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-all duration-200 hover:scale-110"
                     disabled={isLoading || isThrottled}
                   >
-                    {showPassword ? (
-                      <EyeOff className="w-5 h-5" />
-                    ) : (
-                      <Eye className="w-5 h-5" />
-                    )}
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
 
@@ -373,14 +345,11 @@ export default function LoginPage() {
               <div className="text-center space-y-4">
                 <p className="text-sm text-muted-foreground">
                   Нет аккаунта компании?{' '}
-                  <Link
-                    href="/register"
-                    className="text-primary hover:text-secondary transition-colors font-medium hover:underline"
-                  >
+                  <Link href="/register" className="text-primary hover:text-secondary transition-colors font-medium hover:underline">
                     Зарегистрировать автосервис
                   </Link>
                 </p>
-                
+
                 <div className="text-xs text-muted-foreground space-y-1">
                   <p>Используя DriveCare, вы соглашаетесь с</p>
                   <p>
@@ -399,8 +368,8 @@ export default function LoginPage() {
 
           {/* Back to Home */}
           <div className="text-center">
-            <Link 
-              href="/" 
+            <Link
+              href="/"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300 hover:underline inline-flex items-center gap-2"
             >
               ← Вернуться на главную
@@ -412,86 +381,15 @@ export default function LoginPage() {
             <Card className="p-6 glass border-border/30 rounded-2xl animate-in slide-in-from-bottom-2 duration-500">
               <div className="text-center space-y-3">
                 <Shield className="w-6 h-6 text-primary mx-auto" />
-                <h4 className="text-sm font-semibold text-muted-foreground">
-                  Система защиты от атак
-                </h4>
+                <h4 className="text-sm font-semibold text-muted-foreground">Система защиты от атак</h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Для безопасности количество попыток входа ограничено. 
-                  Лимит: 5 попыток в 15 минут.
+                  Для безопасности количество попыток входа ограничено. Лимит: 5 попыток в 15 минут.
                 </p>
               </div>
             </Card>
           )}
         </div>
       </div>
-
-      {/* CSS for animations */}
-      <style jsx>{`
-        .login-shape-1 {
-          animation: float1 12s ease-in-out infinite;
-        }
-        
-        .login-shape-2 {
-          animation: float2 15s ease-in-out infinite;
-        }
-        
-        .login-shape-3 {
-          animation: float3 10s ease-in-out infinite;
-        }
-        
-        .login-shape-4 {
-          animation: float4 18s ease-in-out infinite;
-        }
-        
-        .login-shape-5 {
-          animation: float5 8s ease-in-out infinite;
-        }
-        
-        .login-shape-6 {
-          animation: float6 14s ease-in-out infinite;
-        }
-
-        @keyframes float1 {
-          0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-          33% { transform: translateY(-15px) translateX(10px) rotate(5deg); }
-          66% { transform: translateY(10px) translateX(-5px) rotate(-3deg); }
-        }
-
-        @keyframes float2 {
-          0%, 100% { transform: translateY(0px) translateX(0px) scale(1); }
-          25% { transform: translateY(12px) translateX(-8px) scale(1.1); }
-          75% { transform: translateY(-8px) translateX(12px) scale(0.9); }
-        }
-
-        @keyframes float3 {
-          0%, 100% { transform: translateY(0px) translateX(0px) rotate(45deg); }
-          50% { transform: translateY(-20px) translateX(15px) rotate(90deg); }
-        }
-
-        @keyframes float4 {
-          0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-          40% { transform: translateY(18px) translateX(-12px) rotate(10deg); }
-          80% { transform: translateY(-6px) translateX(8px) rotate(-5deg); }
-        }
-
-        @keyframes float5 {
-          0%, 100% { transform: translateY(0px) scale(1); }
-          50% { transform: translateY(-25px) scale(1.2); }
-        }
-
-        @keyframes float6 {
-          0%, 100% { transform: translateY(0px) translateX(0px) rotate(30deg); }
-          33% { transform: translateY(-10px) translateX(6px) rotate(60deg); }
-          66% { transform: translateY(8px) translateX(-4px) rotate(0deg); }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .login-shape-1, .login-shape-2, .login-shape-3, 
-          .login-shape-4, .login-shape-5, .login-shape-6 {
-            animation: none !important;
-          }
-        }
-      `}</style>
     </div>
-  )
+  );
 }

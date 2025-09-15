@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/appointments/dto/response/appointment-response.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AppointmentStatus, AppointmentPriority } from '../../../../database/entities';
 

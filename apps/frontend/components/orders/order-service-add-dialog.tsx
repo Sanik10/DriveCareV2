@@ -1,16 +1,23 @@
 // path: apps/frontend/components/orders/order-service-add-dialog.tsx
-"use client";
+'use client';
 
-import * as React from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { servicesAPI } from "@/lib/api/services";
-import { ordersAPI } from "@/lib/api/orders";
-import type { ServiceCatalogueItem } from "@/lib/types/services";
-import type { AddServiceToOrderRequest, OrderServiceResponse } from "@/lib/types/orders";
-import { Search, Wrench, UserPlus, Save } from "lucide-react";
-import { useAuth } from "@/lib/hooks/use-auth";
+import * as React from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { servicesAPI } from '@/lib/api/services';
+import { ordersAPI } from '@/lib/api/orders';
+import type { ServiceCatalogueItem } from '@/lib/types/services';
+import type { AddServiceToOrderRequest, OrderServiceResponse } from '@/lib/types/orders';
+import { Search, Wrench, UserPlus, Save } from 'lucide-react';
+import { useAuth } from '@/lib/hooks/use-auth';
 
 type Props = {
   orderId: string;
@@ -19,17 +26,25 @@ type Props = {
   onAdded?: (line: OrderServiceResponse) => void;
 };
 
+function getUserId(u: unknown): string | undefined {
+  if (u && typeof u === 'object' && 'id' in u) {
+    const maybe = (u as { id?: unknown }).id;
+    return typeof maybe === 'string' ? maybe : undefined;
+  }
+  return undefined;
+}
+
 export function OrderServiceAddDialog({ orderId, open, onOpenChange, onAdded }: Props) {
   const { user } = useAuth();
-  const [query, setQuery] = React.useState("");
+  const [query, setQuery] = React.useState('');
   const [results, setResults] = React.useState<ServiceCatalogueItem[]>([]);
   const [selected, setSelected] = React.useState<ServiceCatalogueItem | null>(null);
 
-  const [quantity, setQuantity] = React.useState<string>("1");
-  const [customPrice, setCustomPrice] = React.useState<string>("");
-  const [discountPercent, setDiscountPercent] = React.useState<string>("0");
-  const [mechanicId, setMechanicId] = React.useState<string>("");
-  const [notes, setNotes] = React.useState<string>("");
+  const [quantity, setQuantity] = React.useState<string>('1');
+  const [customPrice, setCustomPrice] = React.useState<string>('');
+  const [discountPercent, setDiscountPercent] = React.useState<string>('0');
+  const [mechanicId, setMechanicId] = React.useState<string>('');
+  const [notes, setNotes] = React.useState<string>('');
 
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -58,27 +73,27 @@ export function OrderServiceAddDialog({ orderId, open, onOpenChange, onAdded }: 
 
   React.useEffect(() => {
     if (!open) {
-      setQuery("");
+      setQuery('');
       setResults([]);
       setSelected(null);
-      setQuantity("1");
-      setCustomPrice("");
-      setDiscountPercent("0");
-      setMechanicId("");
-      setNotes("");
+      setQuantity('1');
+      setCustomPrice('');
+      setDiscountPercent('0');
+      setMechanicId('');
+      setNotes('');
       setError(null);
       setSubmitting(false);
     }
   }, [open]);
 
   const onAssignMe = () => {
-    const meId = (user as any)?.id as string | undefined;
+    const meId = getUserId(user);
     if (meId) setMechanicId(meId);
   };
 
   const submit = async () => {
     if (!selected) {
-      setError("Выберите услугу");
+      setError('Выберите услугу');
       return;
     }
     setSubmitting(true);
@@ -98,9 +113,9 @@ export function OrderServiceAddDialog({ orderId, open, onOpenChange, onAdded }: 
     } catch (e) {
       try {
         const parsed = JSON.parse((e as Error).message) as { message?: string };
-        setError(parsed.message || "Ошибка добавления услуги");
+        setError(parsed.message || 'Ошибка добавления услуги');
       } catch {
-        setError("Ошибка добавления услуги");
+        setError('Ошибка добавления услуги');
       }
     } finally {
       setSubmitting(false);
@@ -137,8 +152,8 @@ export function OrderServiceAddDialog({ orderId, open, onOpenChange, onAdded }: 
                   >
                     <div className="font-medium">{s.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {(s.price || 0).toLocaleString("ru-RU")} ₽ · {s.durationMinutes} мин
-                      {s.category?.name ? ` · ${s.category.name}` : ""}
+                      {(s.price || 0).toLocaleString('ru-RU')} ₽ · {s.durationMinutes} мин
+                      {s.category?.name ? ` · ${s.category.name}` : ''}
                     </div>
                   </button>
                 ))}
@@ -150,7 +165,7 @@ export function OrderServiceAddDialog({ orderId, open, onOpenChange, onAdded }: 
             <div className="rounded-md border border-border/50 p-3 text-sm">
               <div className="font-medium">{selected.name}</div>
               <div className="text-xs text-muted-foreground">
-                База: {(selected.price || 0).toLocaleString("ru-RU")} ₽ · Длительность: {selected.durationMinutes} мин
+                База: {(selected.price || 0).toLocaleString('ru-RU')} ₽ · Длительность: {selected.durationMinutes} мин
               </div>
             </div>
           )}
@@ -159,22 +174,26 @@ export function OrderServiceAddDialog({ orderId, open, onOpenChange, onAdded }: 
             <Input
               placeholder="Кол-во"
               value={quantity}
-              onChange={(e) => setQuantity(e.target.value.replace(/[^\d]/g, ""))}
+              onChange={(e) => setQuantity(e.target.value.replace(/[^\d]/g, ''))}
             />
             <Input
               placeholder="Своя цена (₽)"
               value={customPrice}
-              onChange={(e) => setCustomPrice(e.target.value.replace(/[^0-9.,]/g, "").replace(",", "."))}
+              onChange={(e) => setCustomPrice(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
             />
             <Input
               placeholder="Скидка (%)"
               value={discountPercent}
-              onChange={(e) => setDiscountPercent(e.target.value.replace(/[^0-9.,]/g, "").replace(",", "."))}
+              onChange={(e) => setDiscountPercent(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Input placeholder="ID механика (необязательно)" value={mechanicId} onChange={(e) => setMechanicId(e.target.value)} />
+            <Input
+              placeholder="ID механика (необязательно)"
+              value={mechanicId}
+              onChange={(e) => setMechanicId(e.target.value)}
+            />
             <Button variant="outline" onClick={onAssignMe} className="justify-center">
               <UserPlus className="w-4 h-4 mr-2" /> Назначить меня
             </Button>
@@ -190,7 +209,11 @@ export function OrderServiceAddDialog({ orderId, open, onOpenChange, onAdded }: 
             Отмена
           </Button>
           <Button onClick={submit} disabled={submitting || !selected}>
-            {submitting ? "Добавление..." : (<><Save className="w-4 h-4 mr-2" /> Добавить</>)}
+            {submitting ? 'Добавление...' : (
+              <>
+                <Save className="w-4 h-4 mr-2" /> Добавить
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

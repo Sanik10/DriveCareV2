@@ -120,3 +120,26 @@ export type PaymentMethodUpdateRequest = Partial<PaymentMethodCreateRequest>;
 export interface CalculateFeeRequest {
   amount: number;
 }
+
+/**
+ * Ответ проверки интеграции
+ */
+export interface TestIntegrationResponse {
+  ok: boolean;
+  status: 'ok' | 'warning' | 'error' | string;
+  message?: string;
+  checkedAt?: string;
+  gateway?: string;
+  testMode?: boolean;
+}
+
+/**
+ * Ответ расчёта комиссии
+ */
+export interface CalculateFeeResponse {
+  amount: number; // исходная сумма
+  fee: number;    // рассчитанная комиссия
+  total: number;  // сумма + комиссия
+  percent?: number;
+  currency?: string; // напр., 'RUB'
+}

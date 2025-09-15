@@ -1,0 +1,451 @@
+/* path: apps/frontend/app/(auth)/register/invite/invite.module.css */
+.centralHub {
+  animation: hub-central-pulse 4s ease-in-out infinite;
+}
+
+.deptNode1 {
+  animation: dept-orbit-1 20s linear infinite;
+}
+
+.deptNode2 {
+  animation: dept-orbit-2 25s linear infinite;
+}
+
+.deptNode3 {
+  animation: dept-orbit-3 18s linear infinite;
+}
+
+.deptNode4 {
+  animation: dept-orbit-4 22s linear infinite;
+}
+
+.empNode1 {
+  animation: emp-satellite-1 12s ease-in-out infinite;
+}
+
+.empNode2 {
+  animation: emp-satellite-2 15s ease-in-out infinite;
+}
+
+.backboneConnection1 {
+  animation: backbone-data-flow-1 3s ease-in-out infinite;
+}
+
+.backboneConnection2 {
+  animation: backbone-data-flow-2 3.5s ease-in-out infinite;
+}
+
+.backboneConnection3 {
+  animation: backbone-data-flow-3 2.8s ease-in-out infinite;
+}
+
+.backboneConnection4 {
+  animation: backbone-data-flow-4 3.2s ease-in-out infinite;
+}
+
+.secondaryConnection1 {
+  animation: secondary-data-flow-1 4s ease-in-out infinite;
+}
+
+.secondaryConnection2 {
+  animation: secondary-data-flow-2 5s ease-in-out infinite;
+}
+
+.dataPulse1 {
+  animation: data-travel-1 6s linear infinite;
+}
+
+.dataPulse2 {
+  animation: data-travel-2 7s linear infinite;
+}
+
+.dataPulse3 {
+  animation: data-travel-3 5s linear infinite;
+}
+
+.activityRing1 {
+  animation: network-activity-1 8s linear infinite;
+}
+
+.activityRing2 {
+  animation: network-activity-2 12s linear infinite;
+}
+
+.networkIconPulse {
+  animation: icon-network-pulse 2s ease-in-out infinite;
+}
+
+.networkIconFloat {
+  animation: icon-network-float 3s ease-in-out infinite;
+}
+
+.networkStatusIndicator {
+  animation: status-blink 1.5s ease-in-out infinite;
+}
+
+.networkLineSegment1 {
+  animation: segment-flow-1 2s linear infinite;
+}
+
+.networkLineSegment2 {
+  animation: segment-flow-2 2.5s linear infinite;
+}
+
+.networkNodeIndicator {
+  animation: node-activity 3s ease-in-out infinite;
+}
+
+/* Central hub animations */
+@keyframes hub-central-pulse {
+  0%,
+  100% {
+    transform: translateX(-50%) scale(1);
+    filter: blur(45px);
+  }
+  50% {
+    transform: translateX(-50%) scale(1.1);
+    filter: blur(50px);
+  }
+}
+
+/* Department nodes - realistic orbital motion */
+@keyframes dept-orbit-1 {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  25% {
+    transform: translate3d(15px, -8px, 0);
+  }
+  50% {
+    transform: translate3d(8px, 12px, 0);
+  }
+  75% {
+    transform: translate3d(-10px, 5px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes dept-orbit-2 {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  30% {
+    transform: translate3d(-12px, 10px, 0);
+  }
+  60% {
+    transform: translate3d(8px, -6px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes dept-orbit-3 {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  40% {
+    transform: translate3d(10px, -12px, 0);
+  }
+  80% {
+    transform: translate3d(-8px, 8px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes dept-orbit-4 {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  35% {
+    transform: translate3d(-15px, -5px, 0);
+  }
+  70% {
+    transform: translate3d(12px, 10px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Employee satellites */
+@keyframes emp-satellite-1 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(8px, -10px, 0);
+  }
+}
+
+@keyframes emp-satellite-2 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-10px, 12px, 0);
+  }
+}
+
+/* Backbone connections - data flow visualization */
+@keyframes backbone-data-flow-1 {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scaleX(1) scaleY(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scaleX(1.1) scaleY(1.5);
+  }
+}
+
+@keyframes backbone-data-flow-2 {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scaleX(1) scaleY(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scaleX(1.05) scaleY(1.3);
+  }
+}
+
+@keyframes backbone-data-flow-3 {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scaleX(1) scaleY(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scaleX(1.08) scaleY(1.4);
+  }
+}
+
+@keyframes backbone-data-flow-4 {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scaleX(1) scaleY(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scaleX(1.06) scaleY(1.2);
+  }
+}
+
+/* Secondary connections */
+@keyframes secondary-data-flow-1 {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes secondary-data-flow-2 {
+  0%,
+  100% {
+    opacity: 0.18;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Data packet travel */
+@keyframes data-travel-1 {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.5);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  90% {
+    opacity: 1;
+    transform: scale(0.8);
+  }
+  100% {
+    transform: translate3d(120px, -50px, 0) scale(0.3);
+    opacity: 0;
+  }
+}
+
+@keyframes data-travel-2 {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.4);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  85% {
+    opacity: 0.8;
+    transform: scale(0.6);
+  }
+  100% {
+    transform: translate3d(-100px, 40px, 0) scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes data-travel-3 {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.6);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  80% {
+    opacity: 0.9;
+    transform: scale(0.7);
+  }
+  100% {
+    transform: translate3d(80px, -30px, 0) scale(0.25);
+    opacity: 0;
+  }
+}
+
+/* Network activity rings */
+@keyframes network-activity-1 {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes network-activity-2 {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+/* Header network icons */
+@keyframes icon-network-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 5px rgba(99, 102, 241, 0.3));
+  }
+  50% {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.6));
+  }
+}
+
+@keyframes icon-network-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes status-blink {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
+}
+
+@keyframes segment-flow-1 {
+  0% {
+    background: linear-gradient(90deg, rgba(99, 102, 241, 0.3) 0%, rgba(14, 165, 233, 0.6) 50%, rgba(99, 102, 241, 0.3) 100%);
+  }
+  50% {
+    background: linear-gradient(90deg, rgba(14, 165, 233, 0.6) 0%, rgba(99, 102, 241, 0.8) 50%, rgba(14, 165, 233, 0.6) 100%);
+  }
+  100% {
+    background: linear-gradient(90deg, rgba(99, 102, 241, 0.3) 0%, rgba(14, 165, 233, 0.6) 50%, rgba(99, 102, 241, 0.3) 100%);
+  }
+}
+
+@keyframes segment-flow-2 {
+  0% {
+    background: linear-gradient(90deg, rgba(14, 165, 233, 0.4) 0%, rgba(168, 85, 247, 0.7) 50%, rgba(14, 165, 233, 0.4) 100%);
+  }
+  50% {
+    background: linear-gradient(90deg, rgba(168, 85, 247, 0.7) 0%, rgba(14, 165, 233, 0.9) 50%, rgba(168, 85, 247, 0.7) 100%);
+  }
+  100% {
+    background: linear-gradient(90deg, rgba(14, 165, 233, 0.4) 0%, rgba(168, 85, 247, 0.7) 50%, rgba(14, 165, 233, 0.4) 100%);
+  }
+}
+
+@keyframes node-activity {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .centralHub,
+  .deptNode1,
+  .deptNode2,
+  .deptNode3,
+  .deptNode4,
+  .empNode1,
+  .empNode2,
+  .backboneConnection1,
+  .backboneConnection2,
+  .backboneConnection3,
+  .backboneConnection4,
+  .secondaryConnection1,
+  .secondaryConnection2,
+  .dataPulse1,
+  .dataPulse2,
+  .dataPulse3,
+  .activityRing1,
+  .activityRing2,
+  .networkIconPulse,
+  .networkIconFloat,
+  .networkStatusIndicator,
+  .networkLineSegment1,
+  .networkLineSegment2,
+  .networkNodeIndicator {
+    animation: none !important;
+  }
+}

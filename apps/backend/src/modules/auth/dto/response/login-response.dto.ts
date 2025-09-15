@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/auth/dto/response/login-response.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UserDto {
@@ -19,9 +20,9 @@ export class UserDto {
   @ApiProperty({ example: true, description: 'Активен ли пользователь' })
   isActive: boolean;
 
-  @ApiProperty({ 
-    example: { id: 'uuid', name: 'owner' }, 
-    description: 'Роль пользователя' 
+  @ApiProperty({
+    example: { id: 'uuid', name: 'owner' },
+    description: 'Роль пользователя',
   })
   role: {
     id: string;
@@ -39,10 +40,10 @@ export class LoginResponseDto {
   @ApiProperty({ type: UserDto, description: 'Информация о пользователе' })
   user: UserDto;
 
-  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...', description: 'JWT-токен доступа' })
+  @ApiProperty({ example: 'eyJhbGciOi...', description: 'JWT-токен доступа' })
   accessToken: string;
 
-  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...', description: 'Refresh-токен' })
+  @ApiProperty({ example: 'eyJhbGciOi...', description: 'Refresh-токен' })
   refreshToken: string;
 
   @ApiProperty({ example: '15m', description: 'Время жизни токена доступа' })

@@ -1,52 +1,55 @@
 // path: apps/frontend/app/dashboard/payment-methods/page.tsx
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { useAuth } from "@/lib/hooks/use-auth";
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { useAuth } from '@/lib/hooks/use-auth';
 
-import { CreditCard, Search, RefreshCw, Pencil, Power, Trash2, Plus } from "lucide-react";
-import { paymentMethodsAPI } from "@/lib/api/payment-methods";
+import { CreditCard, Search, RefreshCw, Pencil, Power, Trash2, Plus } from 'lucide-react';
+import { paymentMethodsAPI } from '@/lib/api/payment-methods';
 import type {
   PaymentMethodType,
   PaymentMethodResponse,
   PaymentMethodsQuery,
   PaginatedPaymentMethodsUI,
-} from "@/lib/types/payment-methods";
+} from '@/lib/types/payment-methods';
 
 const PAYMENT_METHOD_TYPES: { value: PaymentMethodType; label: string }[] = [
-  { value: "cash", label: "Наличные" },
-  { value: "card", label: "Банковская карта" },
-  { value: "bank_transfer", label: "Банковский перевод" },
-  { value: "installments", label: "Рассрочка" },
-  { value: "corporate", label: "Корпоративный" },
-  { value: "digital_wallet", label: "Цифровой кошелёк" },
-  { value: "cryptocurrency", label: "Криптовалюта" },
+  { value: 'cash', label: 'Наличные' },
+  { value: 'card', label: 'Банковская карта' },
+  { value: 'bank_transfer', label: 'Банковский перевод' },
+  { value: 'installments', label: 'Рассрочка' },
+  { value: 'corporate', label: 'Корпоративный' },
+  { value: 'digital_wallet', label: 'Цифровой кошелёк' },
+  { value: 'cryptocurrency', label: 'Криптовалюта' },
 ];
 
 const SORT_OPTIONS = [
-  { value: "", label: "Без сортировки" },
-  { value: "name:ASC", label: "Название (A→Z)" },
-  { value: "name:DESC", label: "Название (Z→A)" },
-  { value: "type:ASC", label: "Тип (A→Z)" },
-  { value: "type:DESC", label: "Тип (Z→A)" },
-  { value: "createdAt:DESC", label: "Новые сверху" },
-  { value: "createdAt:ASC", label: "Старые сверху" },
-  { value: "updatedAt:DESC", label: "Недавно изменённые" },
-  { value: "updatedAt:ASC", label: "Давно изменённые" },
-  { value: "transactionCount:DESC", label: "Транзакций (DESC)" },
-  { value: "transactionCount:ASC", label: "Транзакций (ASC)" },
+  { value: '', label: 'Без сортировки' },
+  { value: 'name:ASC', label: 'Название (A→Z)' },
+  { value: 'name:DESC', label: 'Название (Z→A)' },
+  { value: 'type:ASC', label: 'Тип (A→Z)' },
+  { value: 'type:DESC', label: 'Тип (Z→A)' },
+  { value: 'createdAt:DESC', label: 'Новые сверху' },
+  { value: 'createdAt:ASC', label: 'Старые сверху' },
+  { value: 'updatedAt:DESC', label: 'Недавно изменённые' },
+  { value: 'updatedAt:ASC', label: 'Давно изменённые' },
+  { value: 'transactionCount:DESC', label: 'Транзакций (DESC)' },
+  { value: 'transactionCount:ASC', label: 'Транзакций (ASC)' },
 ];
 
 export default function PaymentMethodsPage() {
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   const router = useRouter();
+
+  const roleName = user?.role?.name || '';
+  const canManage = ['company_owner', 'company_admin', 'owner', 'admin'].includes(roleName);
 
   const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -54,10 +57,10 @@ export default function PaymentMethodsPage() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PaginatedPaymentMethodsUI | null>(null);
 
-  const [search, setSearch] = useState("");
-  const [type, setType] = useState<PaymentMethodType | "">("");
-  const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
-  const [sortCombined, setSortCombined] = useState<string>("");
+  const [search, setSearch] = useState('');
+  const [type, setType] = useState<PaymentMethodType | ''>('');
+  const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [sortCombined, setSortCombined] = useState<string>('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
@@ -73,16 +76,16 @@ export default function PaymentMethodsPage() {
       limit,
     };
     if (type) q.type = type;
-    if (status !== "all") q.isActive = status === "active";
+    if (status !== 'all') q.isActive = status === 'active';
     if (sortCombined) {
-      const [sortBy, sortOrder] = sortCombined.split(":");
-      if (sortBy) q.sortBy = sortBy as PaymentMethodsQuery["sortBy"];
-      if (sortOrder === "ASC" || sortOrder === "DESC") q.sortOrder = sortOrder;
+      const [sortBy, sortOrder] = sortCombined.split(':');
+      if (sortBy) q.sortBy = sortBy as PaymentMethodsQuery['sortBy'];
+      if (sortOrder === 'ASC' || sortOrder === 'DESC') q.sortOrder = sortOrder;
     }
     return q;
   }, [search, page, limit, type, status, sortCombined]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -91,20 +94,20 @@ export default function PaymentMethodsPage() {
     } catch (e) {
       try {
         const parsed = JSON.parse((e as Error).message) as { message?: string; correlationId?: string };
-        setError(parsed.message || "Ошибка загрузки способов оплаты");
+        setError(parsed.message || 'Ошибка загрузки способов оплаты');
       } catch {
-        setError("Ошибка загрузки способов оплаты");
+        setError('Ошибка загрузки способов оплаты');
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [query]);
 
   useEffect(() => {
     if (!isMounted) return;
     if (authLoading) return;
     if (!isAuthenticated || !user) {
-      router.push("/login");
+      router.push('/login');
       return;
     }
 
@@ -117,7 +120,7 @@ export default function PaymentMethodsPage() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [isMounted, authLoading, isAuthenticated, user, router, query]);
+  }, [isMounted, authLoading, isAuthenticated, user, router, load]);
 
   if (!isMounted) return null;
   if (authLoading) {
@@ -132,6 +135,7 @@ export default function PaymentMethodsPage() {
   const items = data?.items || [];
 
   const toggleStatus = async (id: string) => {
+    if (!canManage) return;
     setActionLoading(id);
     setError(null);
     try {
@@ -140,9 +144,9 @@ export default function PaymentMethodsPage() {
     } catch (e) {
       try {
         const parsed = JSON.parse((e as Error).message) as { message?: string };
-        setError(parsed.message || "Не удалось изменить статус");
+        setError(parsed.message || 'Не удалось изменить статус');
       } catch {
-        setError("Не удалось изменить статус");
+        setError('Не удалось изменить статус');
       }
     } finally {
       setActionLoading(null);
@@ -150,6 +154,7 @@ export default function PaymentMethodsPage() {
   };
 
   const confirmDelete = async () => {
+    if (!canManage) return;
     const id = deleteId;
     if (!id) return;
     setDeleting(true);
@@ -161,9 +166,9 @@ export default function PaymentMethodsPage() {
     } catch (e) {
       try {
         const parsed = JSON.parse((e as Error).message) as { message?: string };
-        setError(parsed.message || "Не удалось удалить способ оплаты");
+        setError(parsed.message || 'Не удалось удалить способ оплаты');
       } catch {
-        setError("Не удалось удалить способ оплаты");
+        setError('Не удалось удалить способ оплаты');
       }
     } finally {
       setDeleting(false);
@@ -193,12 +198,14 @@ export default function PaymentMethodsPage() {
             <Link href="/dashboard">
               <Button variant="ghost">В дашборд</Button>
             </Link>
-            <Link href="/dashboard/payment-methods/new">
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                Добавить
-              </Button>
-            </Link>
+            {canManage && (
+              <Link href="/dashboard/payment-methods/new">
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Добавить
+                </Button>
+              </Link>
+            )}
             <Button variant="outline" onClick={() => setPage(1)}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Обновить
@@ -229,7 +236,7 @@ export default function PaymentMethodsPage() {
               <select
                 value={type}
                 onChange={(e) => {
-                  setType(e.target.value as PaymentMethodType | "");
+                  setType(e.target.value as PaymentMethodType | '');
                   setPage(1);
                 }}
                 className="w-full h-9 rounded-md border border-border bg-background text-sm px-3"
@@ -266,7 +273,7 @@ export default function PaymentMethodsPage() {
                 className="w-full h-9 rounded-md border border-border bg-background text-sm px-3"
               >
                 {SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value || "none"} value={opt.value}>
+                  <option key={opt.value || 'none'} value={opt.value}>
                     {opt.label}
                   </option>
                 ))}
@@ -295,10 +302,10 @@ export default function PaymentMethodsPage() {
               <Button
                 variant="ghost"
                 onClick={() => {
-                  setSearch("");
-                  setType("");
-                  setStatus("all");
-                  setSortCombined("");
+                  setSearch('');
+                  setType('');
+                  setStatus('all');
+                  setSortCombined('');
                   setLimit(10);
                   setPage(1);
                 }}
@@ -327,6 +334,7 @@ export default function PaymentMethodsPage() {
                 <PaymentMethodRow
                   key={m.id}
                   method={m}
+                  canManage={canManage}
                   onToggle={() => toggleStatus(m.id)}
                   onDelete={() => setDeleteId(m.id)}
                   actionLoading={actionLoading === m.id}
@@ -340,11 +348,7 @@ export default function PaymentMethodsPage() {
         <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">Всего: {data?.total || 0}</div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
+            <Button variant="outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
               Назад
             </Button>
             <div className="text-sm">
@@ -377,11 +381,13 @@ export default function PaymentMethodsPage() {
 
 function PaymentMethodRow({
   method,
+  canManage,
   onToggle,
   onDelete,
   actionLoading,
 }: {
   method: PaymentMethodResponse;
+  canManage: boolean;
   onToggle: () => void;
   onDelete: () => void;
   actionLoading: boolean;
@@ -397,36 +403,36 @@ function PaymentMethodRow({
   );
 
   const typeLabel =
-    PAYMENT_METHOD_TYPES.find((t) => t.value === method.type)?.label || (method.type as string) || "—";
-
+    (method.type && typeof method.type === 'string'
+      ? method.type
+      : (method.type as string)) || '—';
   const fee =
-    typeof method.processingFeePercent === "number"
-      ? `${method.processingFeePercent}%`
-      : "—";
+    typeof method.processingFeePercent === 'number' ? `${method.processingFeePercent}%` : '—';
 
   const limits =
     method.limits &&
-    (typeof method.limits.minAmount === "number" ||
-      typeof method.limits.maxAmount === "number" ||
-      typeof method.limits.dailyTransactionLimit === "number")
+    (typeof method.limits.minAmount === 'number' ||
+      typeof method.limits.maxAmount === 'number' ||
+      typeof method.limits.dailyTransactionLimit === 'number')
       ? [
-          typeof method.limits.minAmount === "number" ? `мин. ${method.limits.minAmount}` : null,
-          typeof method.limits.maxAmount === "number" ? `макс. ${method.limits.maxAmount}` : null,
-          typeof method.limits.dailyTransactionLimit === "number"
+          typeof method.limits.minAmount === 'number' ? `мин. ${method.limits.minAmount}` : null,
+          typeof method.limits.maxAmount === 'number' ? `макс. ${method.limits.maxAmount}` : null,
+          typeof method.limits.dailyTransactionLimit === 'number'
             ? `в день: ${method.limits.dailyTransactionLimit}`
             : null,
         ]
           .filter(Boolean)
-          .join(", ")
-      : "—";
+          .join(', ')
+      : '—';
 
-  const integration =
-    method.integrationStatus?.isConfigured
-      ? `${method.integrationStatus.gatewayType || "интеграция"}${method.integrationStatus.testMode ? " (test)" : ""}`
-      : "нет";
+  const isConfigured = !!method.integrationStatus?.isConfigured;
+  const gatewayType = method.integrationStatus?.gatewayType || '';
+  const integrationText = canManage
+    ? (isConfigured ? `${gatewayType || 'интеграция'}${method.integrationStatus?.testMode ? ' (test)' : ''}` : 'нет')
+    : (isConfigured ? 'да' : 'нет');
 
   const txCount =
-    typeof method.stats?.transactionCount === "number" ? method.stats.transactionCount : undefined;
+    typeof method.stats?.transactionCount === 'number' ? method.stats.transactionCount : undefined;
 
   return (
     <div className="p-4 flex items-center justify-between">
@@ -438,27 +444,31 @@ function PaymentMethodRow({
           <div className="font-medium">{method.name}</div>
           <div className="text-xs text-muted-foreground">
             Тип: {typeLabel} · Комиссия: {fee} · Лимиты: {limits}
-            {typeof txCount === "number" ? ` · Транзакций: ${txCount}` : ""}
-            {` · Интеграция: ${integration}`}
+            {typeof txCount === 'number' ? ` · Транзакций: ${txCount}` : ''}
+            {` · Интеграция: ${integrationText}`}
           </div>
         </div>
       </div>
       <div className="flex items-center gap-2">
         {statusBadge}
-        <Link href={`/dashboard/payment-methods/${method.id}`}>
-          <Button variant="outline" size="sm">
-            <Pencil className="w-4 h-4 mr-1" />
-            Ред.
-          </Button>
-        </Link>
-        <Button variant="outline" size="sm" onClick={onToggle} disabled={actionLoading}>
-          <Power className="w-4 h-4 mr-1" />
-          {method.isActive ? "Выкл." : "Вкл."}
-        </Button>
-        <Button variant="destructive" size="sm" onClick={onDelete} disabled={actionLoading}>
-          <Trash2 className="w-4 h-4 mr-1" />
-          Удалить
-        </Button>
+        {canManage && (
+          <>
+            <Link href={`/dashboard/payment-methods/${method.id}`}>
+              <Button variant="outline" size="sm">
+                <Pencil className="w-4 h-4 mr-1" />
+                Ред.
+              </Button>
+            </Link>
+            <Button variant="outline" size="sm" onClick={onToggle} disabled={actionLoading}>
+              <Power className="w-4 h-4 mr-1" />
+              {method.isActive ? 'Выкл.' : 'Вкл.'}
+            </Button>
+            <Button variant="destructive" size="sm" onClick={onDelete} disabled={actionLoading}>
+              <Trash2 className="w-4 h-4 mr-1" />
+              Удалить
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );
