@@ -1,10 +1,11 @@
 // path: apps/backend/src/modules/tariffs/interfaces/tariffs.interface.ts
 import { Tariff } from '../../../database/entities';
-import { 
-  CreateTariffData, 
-  UpdateTariffData, 
-  TariffFilter, 
-  TariffFeatures 
+import {
+  CreateTariffData,
+  UpdateTariffData,
+  TariffFilter,
+  TariffFeatures,
+  TariffMetricsMap,
 } from '../types/tariffs.types';
 
 export interface ITariffsDataService {
@@ -17,6 +18,8 @@ export interface ITariffsDataService {
   delete(id: string): Promise<void>;
   setActive(id: string, isActive: boolean): Promise<Tariff>;
   getPopularTariffs(limit?: number): Promise<Tariff[]>;
+  // Новое: метрики подписчиков по тарифам
+  getSubscribersMetricsByTariff(ids: string[], now?: Date): Promise<TariffMetricsMap>;
 }
 
 export interface ITariffsBusinessService {
@@ -35,5 +38,10 @@ export interface ITariffsValidationService {
   validateTariffExists(id: string): Promise<Tariff>;
   validateNameUniqueness(name: string, excludeId?: string): Promise<void>;
   validatePrices(monthlyPrice?: number, yearlyPrice?: number): void;
-  validateLimits(limits: { maxUsers?: number; maxCustomers?: number; maxVehicles?: number; maxOrders?: number }): void;
+  validateLimits(limits: {
+    maxUsers?: number;
+    maxCustomers?: number;
+    maxVehicles?: number;
+    maxOrders?: number;
+  }): void;
 }

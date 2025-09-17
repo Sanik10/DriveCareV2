@@ -25,7 +25,7 @@ export class TariffsBusinessService implements ITariffsBusinessService {
     // Валидация ценообразования
     this.validatePricing(data.priceMonthly, data.priceYearly);
 
-    // Обработка features
+    // Обработка features (в т.ч. маркетинговые поля)
     const processedFeatures = this.processFeatures(data.features);
 
     // Создаем тариф
@@ -64,14 +64,14 @@ export class TariffsBusinessService implements ITariffsBusinessService {
       throw new Error(`Tariff with id ${id} not found`);
     }
 
-    // Валидация ценообразования (если меняются цены)
+    // Валидация ценообразования (если меняются цены) — проверяем в связке с текущими
     if (data.priceMonthly !== undefined || data.priceYearly !== undefined) {
       const monthlyPrice = data.priceMonthly ?? beforeTariff.priceMonthly;
       const yearlyPrice = data.priceYearly ?? beforeTariff.priceYearly;
       this.validatePricing(monthlyPrice, yearlyPrice);
     }
 
-    // Обработка features (если меняются)
+    // Обработка features (в т.ч. маркетинговые поля)
     if (data.features !== undefined) {
       data.features = this.processFeatures(data.features);
     }
@@ -111,10 +111,27 @@ export class TariffsBusinessService implements ITariffsBusinessService {
       throw new Error(`Tariff with id ${id} not found`);
     }
 
-    // TODO: Проверить, есть ли активные подписки на этот тариф
-    // if (hasActiveSubscriptions) {
-    //   throw new BadRequestException('Нельзя удалить тариф с активными подписками');
-    // }
+    // Безопасность: запрещаем удаление активного тарифа
+    if (tariff.isActive) {
+      throw new BadRequestException('Нельзя удалить активный тариф. Сначала деактивируйте тариф.');
+    }
+
+    // Проверка наличия подписчиков (активных и исторических) — блокируем удаление,
+    // чтобы не ломать историю и связи
+    const metrics = await this.tariffsDataService.getSubscribersMetricsByTariff([id]);
+    const m = metrics[id] || { activeSubscribers: 0, totalSubscribers: 0 };
+
+    if (m.activeSubscribers > 0) {
+      throw new BadRequestException(
+        'Нельзя удалить тариф, на который есть активные подписки. Сначала дождитесь завершения подписок.',
+      );
+    }
+    if (m.totalSubscribers > 0) {
+      // Если нужно разрешить удаление после миграции исторических данных — это правило можно ослабить
+      throw new BadRequestException(
+        'Нельзя удалить тариф, который уже использовался компаниями. Рекомендуется оставить его деактивированным.',
+      );
+    }
 
     // Удаляем тариф
     await this.tariffsDataService.delete(id);
@@ -173,58 +190,132 @@ export class TariffsBusinessService implements ITariffsBusinessService {
    */
   calculateYearlyDiscount(monthlyPrice: number, yearlyPrice: number): number {
     if (monthlyPrice <= 0 || yearlyPrice <= 0) return 0;
-    
     const yearlyFromMonthly = monthlyPrice * 12;
+    if (yearlyFromMonthly <= 0) return 0;
     const discount = ((yearlyFromMonthly - yearlyPrice) / yearlyFromMonthly) * 100;
-    
     return Math.round(discount * 100) / 100; // Округляем до 2 знаков
   }
 
   /**
-   * Валидация ценообразования
+   * Валидация ценообразования (единое правило, согласованное с TariffsValidationService)
    */
   validatePricing(monthlyPrice: number, yearlyPrice: number): void {
-    // Годовая цена не может быть больше месячной * 12
+    // Годовая цена не может быть больше месячной × 12
     const maxYearlyPrice = monthlyPrice * 12;
     if (yearlyPrice > maxYearlyPrice) {
       throw new BadRequestException(
-        `Годовая цена (${yearlyPrice / 100} руб.) не может быть больше месячной цены × 12 (${maxYearlyPrice / 100} руб.)`
+        `Годовая цена (${yearlyPrice.toFixed(2)} руб.) не может быть больше месячной цены × 12 (${maxYearlyPrice.toFixed(
+          2,
+        )} руб.)`,
       );
     }
 
-    // Минимальная скидка за годовую оплату (например, 5%)
-    const minYearlyPrice = monthlyPrice * 12 * 0.95; // 5% скидка минимум
+    // Минимальная скидка за год (процент из констант, по умолчанию 1%)
+    const MIN_DISCOUNT =
+      ((TARIFFS_CONSTANTS as any)?.VALIDATION?.MIN_YEARLY_DISCOUNT_PERCENT as number | undefined) ?? 1;
+    const minYearlyPrice = monthlyPrice * 12 * (1 - MIN_DISCOUNT / 100);
+
     if (yearlyPrice > minYearlyPrice) {
       const currentDiscount = this.calculateYearlyDiscount(monthlyPrice, yearlyPrice);
       throw new BadRequestException(
-        `Скидка за годовую оплату слишком мала (${currentDiscount}%). Минимальная скидка должна быть 5%.`
+        `Скидка за годовую оплату слишком мала (${currentDiscount}%). Минимальная скидка должна быть ${MIN_DISCOUNT}%.`,
       );
     }
   }
 
   /**
    * Обработка и стандартизация features
+   * - нормализация boolean-строк
+   * - поддержка маркетинговых полей: recommended, badge, tags/labels, highlight, shelf_position/display_rank
+   * - объединение с базовыми функциональными фичами (FEATURES.BASIC)
    */
   processFeatures(features?: TariffFeatures): TariffFeatures {
-    if (!features) {
-      return { ...TARIFFS_CONSTANTS.FEATURES.BASIC };
+    const base: TariffFeatures = { ...TARIFFS_CONSTANTS.FEATURES.BASIC };
+    if (!features || typeof features !== 'object') {
+      return base;
     }
 
-    // Объединяем с базовыми features и нормализуем булевые значения
-    const processedFeatures: TariffFeatures = {
-      ...TARIFFS_CONSTANTS.FEATURES.BASIC,
+    const processed: TariffFeatures = {
+      ...base,
       ...features,
     };
 
-    // Нормализуем булевые значения
-    Object.keys(processedFeatures).forEach(key => {
-      const value = processedFeatures[key];
+    // Нормализация boolean-строк
+    Object.keys(processed).forEach((key) => {
+      const value = (processed as any)[key];
       if (typeof value === 'string') {
-        processedFeatures[key] = value.toLowerCase() === 'true';
+        const v = value.trim().toLowerCase();
+        if (v === 'true' || v === '1') (processed as any)[key] = true;
+        else if (v === 'false' || v === '0') (processed as any)[key] = false;
       }
     });
 
-    return processedFeatures;
+    // badge
+    if ((processed as any).badge !== undefined) {
+      const badge = this.normalizeBadge((processed as any).badge);
+      if (badge) (processed as any).badge = badge;
+      else delete (processed as any).badge;
+    }
+
+    // recommended / highlight → boolean
+    if ((processed as any).recommended !== undefined) {
+      (processed as any).recommended = !!(processed as any).recommended;
+    }
+    if ((processed as any).highlight !== undefined) {
+      (processed as any).highlight = !!(processed as any).highlight;
+    }
+
+    // tags / labels → массив строк, уникальный, очищенный
+    const rawTags =
+      (processed as any).tags ??
+      (processed as any).labels ??
+      undefined;
+
+    if (rawTags !== undefined) {
+      let tags: string[] = [];
+      if (typeof rawTags === 'string') {
+        tags = rawTags
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      } else if (Array.isArray(rawTags)) {
+        tags = rawTags.map((x) => String(x).trim()).filter(Boolean);
+      }
+      // нормализация: ограничиваем длину тега, убираем дубликаты, обрезаем массив
+      const set = new Set<string>();
+      for (const t of tags) {
+        const tt = t.slice(0, 40);
+        if (tt) set.add(tt);
+        if (set.size >= 50) break;
+      }
+      const norm = Array.from(set);
+      if (norm.length > 0) (processed as any).tags = norm;
+      else delete (processed as any).tags;
+
+      // labels больше не держим (единизируем в tags)
+      if ('labels' in processed) delete (processed as any).labels;
+    }
+
+    // shelf_position / display_rank → shelf_position int 0..9999
+    const pos = (processed as any).shelf_position ?? (processed as any).display_rank;
+    if (pos !== undefined) {
+      const n = typeof pos === 'string' ? Number(pos) : pos;
+      if (Number.isFinite(n) && Math.floor(n as number) === (n as number) && (n as number) >= 0 && (n as number) <= 9999) {
+        (processed as any).shelf_position = Number(n);
+      } else {
+        delete (processed as any).shelf_position;
+      }
+      if ('display_rank' in processed) delete (processed as any).display_rank;
+    }
+
+    return processed;
+  }
+
+  private normalizeBadge(badge: unknown): string | undefined {
+    if (typeof badge !== 'string') return undefined;
+    const v = badge.trim().toLowerCase();
+    const allowed = ['popular', 'best_value', 'new', 'sale', 'recommended', 'hot'];
+    return allowed.includes(v) ? v : undefined;
   }
 
   /**
@@ -243,7 +334,7 @@ export class TariffsBusinessService implements ITariffsBusinessService {
       maxOrders,
       isActive,
       createdAt,
-      updatedAt
+      updatedAt,
     } = tariff;
 
     return {
@@ -258,7 +349,7 @@ export class TariffsBusinessService implements ITariffsBusinessService {
       maxOrders,
       isActive,
       createdAt,
-      updatedAt
+      updatedAt,
     };
   }
 }

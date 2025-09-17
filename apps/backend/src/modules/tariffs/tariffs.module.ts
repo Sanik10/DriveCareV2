@@ -7,15 +7,12 @@ import { TariffsDataService } from './services/tariffs-data.service';
 import { TariffsBusinessService } from './services/tariffs-business.service';
 import { TariffsValidationService } from './services/tariffs-validation.service';
 import { TariffsMapperService } from './services/tariffs-mapper.service';
-import { Tariff } from '../../database/entities';
+import { Tariff, Subscription } from '../../database/entities';
 import { AuditService } from '../../common/audit/audit.service';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Tariff]),
-    forwardRef(() => AuthModule), // ✅ нужен для JwtAuthGuard/SessionService/SecurityService
-  ],
+  imports: [TypeOrmModule.forFeature([Tariff, Subscription]), forwardRef(() => AuthModule)],
   controllers: [TariffsController],
   providers: [
     TariffsService,
@@ -25,10 +22,6 @@ import { AuthModule } from '../auth/auth.module';
     TariffsMapperService,
     AuditService,
   ],
-  exports: [
-    TariffsService,
-    TariffsDataService,
-    TariffsMapperService,
-  ],
+  exports: [TariffsService, TariffsDataService, TariffsMapperService],
 })
 export class TariffsModule {}

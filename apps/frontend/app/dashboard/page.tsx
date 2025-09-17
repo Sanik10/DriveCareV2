@@ -97,6 +97,11 @@ export default function DashboardPage() {
     []
   );
 
+  const isPlatformAdmin = useMemo(() => {
+    const role = user?.role?.name?.toLowerCase();
+    return role === 'superadmin' || role === 'platform_admin';
+  }, [user?.role?.name]);
+
   if (!isMounted) return null;
 
   if (isLoading) {
@@ -247,6 +252,9 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-4">
+              <Link href="/tariffs">
+                <Button className="rounded-2xl btn-outline-fixed">Тарифы</Button>
+              </Link>
               <div className="text-right">
                 <p className="text-sm font-medium flex items-center gap-2">
                   <span className={`w-2 h-2 bg-primary rounded-full ${styles.userStatusIndicator}`} />
@@ -458,7 +466,7 @@ export default function DashboardPage() {
               </Card>
             </Link>
 
-            {/* Appointments (подключено к дэшборду) */}
+            {/* Appointments */}
             <Link href="/dashboard/appointments">
               <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group cursor-pointer rounded-3xl surface-glow">
                 <div className="space-y-4">
@@ -478,6 +486,46 @@ export default function DashboardPage() {
                 </div>
               </Card>
             </Link>
+
+            {/* Tariffs (public landing) */}
+            <Link href="/tariffs">
+              <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group cursor-pointer rounded-3xl surface-glow">
+                <div className="space-y-4">
+                  <div className="w-14 h-14 rounded-2xl bg-yellow-500/20 border border-yellow-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
+                    <Star className="w-7 h-7 text-yellow-500" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="font-semibold text-lg">Тарифы</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">Выбор плана и сравнение возможностей</p>
+                  </div>
+                  <Button size="sm" className="w-full rounded-2xl bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border-yellow-500/30">
+                    Перейти
+                  </Button>
+                </div>
+              </Card>
+            </Link>
+
+            {/* Platform: Tariffs Backoffice (visible only for platform admins) */}
+            {isPlatformAdmin && (
+              <Link href="/platform/tariffs">
+                <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group cursor-pointer rounded-3xl surface-glow">
+                  <div className="space-y-4">
+                    <div className="w-14 h-14 rounded-2xl bg-pink-500/20 border border-pink-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
+                      <Star className="w-7 h-7 text-pink-500" />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-lg">Тарифы (Backoffice)</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Создание, редактирование и управление тарифными планами
+                      </p>
+                    </div>
+                    <Button size="sm" className="w-full rounded-2xl bg-pink-500/10 hover:bg-pink-500/20 text-pink-500 border-pink-500/30">
+                      Открыть
+                    </Button>
+                  </div>
+                </Card>
+              </Link>
+            )}
 
             {/* Inventory */}
             <Card

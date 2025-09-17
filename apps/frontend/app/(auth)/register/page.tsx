@@ -1,8 +1,8 @@
 // path: apps/frontend/app/(auth)/register/page.tsx
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -18,13 +18,17 @@ import {
   MapPin,
   Lock,
   Sparkles,
+  Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { TariffPreview } from '@/components/ui/tariff-preview';
 import { authAPI } from '@/lib/api/auth';
+import { tariffsAPI } from '@/lib/api/tariffs';
+import { Tariff } from '@/lib/types/tariffs';
 import { RegisterCompanyRequest, EMAIL_REGEX, PASSWORD_REGEX, PHONE_REGEX, NAME_REGEX } from '@/lib/types/auth';
 import styles from './register.module.css';
 
@@ -310,7 +314,7 @@ function OwnerStepForm({
               spellCheck={false}
               disabled={isLoading}
               error={errors.ownerLastName?.message || externalValidationErrors?.ownerLastName}
-              className="pl-12 h-12 rounded-2xl border-border/50 focus-бorder-primary/50 transition-all duration-300"
+              className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
             />
           </div>
 
@@ -326,7 +330,7 @@ function OwnerStepForm({
               spellCheck={false}
               disabled={isLoading}
               error={errors.ownerPhone?.message || externalValidationErrors?.ownerPhone}
-              className="pl-12 h-12 rounded-2xl border-border/50 focus-бorder-primary/50 transition-all duration-300"
+              className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
             />
           </div>
         </div>
@@ -400,7 +404,7 @@ function SecurityStepForm({
           </div>
 
           <div className="relative group">
-            <Lock className="absolute left-3 топ-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+            <Lock className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
             <Input
               id="confirmPassword"
               {...register('confirmPassword')}
@@ -450,7 +454,7 @@ function SecurityStepForm({
         >
           {isLoading ? (
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 border-2 border-white/30 border-т-white rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               Создание аккаунта...
             </div>
           ) : (
@@ -465,20 +469,66 @@ function SecurityStepForm({
   );
 }
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  // Состояние тарифа
+  const [selectedTariff, setSelectedTariff] = useState<Tariff | null>(null);
+  const [tariffLoading, setTariffLoading] = useState(false);
+  const [tariffError, setTariffError] = useState<string | null>(null);
 
   // Изолированное состояние между шагами
   const [companyData, setCompanyData] = useState<Partial<CompanyForm>>({});
   const [ownerData, setOwnerData] = useState<Partial<OwnerForm>>({});
   const [securityData, setSecurityData] = useState<Partial<SecurityForm>>({});
 
+  // Загрузка тарифа при монтировании
+  useEffect(() => {
+    const tariffId = searchParams.get('tariffId');
+    if (tariffId && tariffId.trim() !== '') {
+      loadTariff(tariffId.trim());
+    }
+  }, [searchParams]);
+
+  const loadTariff = async (tariffId: string) => {
+    // Валидация UUID на клиенте для безопасности
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(tariffId)) {
+      setTariffError('Некорректный ID тарифа');
+      return;
+    }
+
+    setTariffLoading(true);
+    setTariffError(null);
+    
+    try {
+      const tariff = await tariffsAPI.get(tariffId);
+      if (!tariff.isActive) {
+        setTariffError('Выбранный тариф недоступен');
+        setSelectedTariff(null);
+      } else {
+        setSelectedTariff(tariff);
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки тарифа:', error);
+      setTariffError('Не удалось загрузить информацию о тарифе');
+      setSelectedTariff(null);
+    } finally {
+      setTariffLoading(false);
+    }
+  };
+
   const handlePrev = () => {
     if (currentStep > 0) setCurrentStep((s) => s - 1);
+  };
+
+  const handleChangeTariff = () => {
+    router.push('/tariffs');
   };
 
   async function submitAll() {
@@ -513,11 +563,18 @@ export default function RegisterPage() {
           finalData.ownerPhone && String(finalData.ownerPhone).trim() !== ''
             ? (finalData.ownerPhone as string)
             : undefined,
+        // Безопасно передаем tariffId только если он загружен и валиден
+        tariffId: selectedTariff?.id || undefined,
       };
 
       await authAPI.registerCompany(requestData);
 
-      router.push('/register/success');
+      // Передаем tariffId в success page для отображения выбранного плана
+      const successUrl = selectedTariff 
+        ? `/register/success?tariffId=${selectedTariff.id}`
+        : '/register/success';
+      
+      router.push(successUrl);
     } catch (error) {
       if (error instanceof Error) {
         try {
@@ -655,13 +712,13 @@ export default function RegisterPage() {
         />
       </div>
 
-      <div className="flex items-center justify-center min-h-screen p-6 relative з-10">
-        <div className="w-full max-w-2xl space-y-8">
+      <div className="flex items-center justify-center min-h-screen p-6 relative z-10">
+        <div className="w-full max-w-4xl space-y-8">
           {/* Header */}
           <div className="text-center space-y-6">
             <Link href="/" className="inline-block group">
               <div className="flex items-center justify-center">
-                <div className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-primary shadow-гласс-lg transition-all duration-300 group-hover:scale-105 group-hover:shadow-xl">
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-primary shadow-glass-lg transition-all duration-300 group-hover:scale-105 group-hover:shadow-xl">
                   <Building2 className="w-7 h-7 text-white" />
                 </div>
               </div>
@@ -671,6 +728,51 @@ export default function RegisterPage() {
               <p className="text-lg text-muted-foreground">{steps[currentStep].description}</p>
             </div>
           </div>
+
+          {/* Tariff Preview */}
+          {(selectedTariff || tariffLoading || tariffError) && (
+            <div className="space-y-4">
+              {tariffLoading && (
+                <Card className="p-4 glass border-border/30 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    <span className="text-sm text-muted-foreground">Загрузка информации о тарифе...</span>
+                  </div>
+                </Card>
+              )}
+
+              {tariffError && (
+                <Card className="p-4 glass border-destructive/30 bg-destructive/5 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="w-5 h-5 text-destructive" />
+                    <span className="text-sm text-destructive">{tariffError}</span>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleChangeTariff}
+                      className="ml-auto rounded-xl btn-outline-fixed text-xs"
+                    >
+                      Выбрать тариф
+                    </Button>
+                  </div>
+                </Card>
+              )}
+
+              {selectedTariff && (
+                <div className="space-y-3">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-primary">Выбранный тарифный план</h3>
+                    <p className="text-sm text-muted-foreground">Тариф будет активирован после создания аккаунта</p>
+                  </div>
+                  <TariffPreview 
+                    tariff={selectedTariff} 
+                    period="monthly"
+                    onEdit={handleChangeTariff}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Steps Progress */}
           <div className="flex items-center justify-center">
@@ -701,7 +803,7 @@ export default function RegisterPage() {
           </div>
 
           {/* Form Card */}
-          <Card className="p-8 glass border-border/30 hover:shadow-гласс-lg transition-all duration-500 rounded-3xl surface-glow">
+          <Card className="p-8 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 rounded-3xl surface-glow">
             {/* API Error */}
             {apiError && (
               <div className="mb-6 flex items-center gap-3 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 animate-in slide-in-from-top-2 duration-300">
@@ -762,10 +864,37 @@ export default function RegisterPage() {
               >
                 ← Вернуться на главную
               </Link>
+
+              {!selectedTariff && (
+                <div className="pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleChangeTariff}
+                    className="rounded-2xl btn-outline-fixed text-sm"
+                  >
+                    Выбрать тарифный план
+                  </Button>
+                </div>
+              )}
             </div>
           </Card>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex items-center gap-3">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <span className="text-muted-foreground">Загрузка...</span>
+        </div>
+      </div>
+    }>
+      <RegisterPageContent />
+    </Suspense>
   );
 }

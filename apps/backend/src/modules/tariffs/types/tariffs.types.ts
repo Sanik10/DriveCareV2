@@ -1,7 +1,13 @@
 // path: apps/backend/src/modules/tariffs/types/tariffs.types.ts
 export type TariffStatus = 'active' | 'inactive';
 export type SortOrder = 'asc' | 'desc';
-export type TariffSortField = 'name' | 'priceMonthly' | 'priceYearly' | 'createdAt';
+export type TariffSortField =
+  | 'name'
+  | 'priceMonthly'
+  | 'priceYearly'
+  | 'createdAt'
+  | 'activeSubscribers'
+  | 'totalSubscribers';
 
 export interface TariffFeatures {
   reports?: boolean;
@@ -46,6 +52,9 @@ export interface TariffFilter {
   isActive?: boolean;
   minPrice?: number;
   maxPrice?: number;
+  // Расширенные бэкофис-фильтры по подписчикам
+  minActiveSubscribers?: number; // уникальные компании с активной подпиской на текущий момент
+  minTotalSubscribers?: number; // уникальные компании, когда-либо имевшие подписку
   page?: number;
   limit?: number;
   sortField?: TariffSortField;
@@ -66,3 +75,10 @@ export interface TariffComparison {
   standard: boolean | string | number;
   premium: boolean | string | number;
 }
+
+export interface TariffSubscribersMetrics {
+  activeSubscribers: number;
+  totalSubscribers: number;
+}
+
+export type TariffMetricsMap = Record<string, TariffSubscribersMetrics>;

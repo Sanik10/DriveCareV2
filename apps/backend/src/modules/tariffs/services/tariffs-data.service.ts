@@ -1,9 +1,11 @@
 // path: apps/backend/src/modules/tariffs/services/tariffs-data.service.ts
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DeepPartial } from 'typeorm';
+import { DeepPartial, In, Repository } from 'typeorm';
 import { Tariff } from '../../../database/entities';
-import { CreateTariffData, UpdateTariffData, TariffFilter } from '../types/tariffs.types';
+import { Subscription } from '../../../database/entities';
+import { SubscriptionStatus } from '../../../database/entities/subscription.entity';
+import { CreateTariffData, UpdateTariffData, TariffFilter, TariffMetricsMap } from '../types/tariffs.types';
 import { ITariffsDataService } from '../interfaces/tariffs.interface';
 import { TARIFFS_CONSTANTS } from '../constants/tariffs.constants';
 
@@ -12,13 +14,15 @@ export class TariffsDataService implements ITariffsDataService {
   constructor(
     @InjectRepository(Tariff)
     private readonly tariffsRepository: Repository<Tariff>,
+    @InjectRepository(Subscription)
+    private readonly subscriptionsRepository: Repository<Subscription>,
   ) {}
 
   /**
    * Создание нового тарифа
    */
   async create(data: CreateTariffData): Promise<Tariff> {
-    const name = (data.name || '').trim();
+    const name = this.normalizeName(data.name);
     const nameNormalized = name.toLowerCase();
 
     const dataToCreate: DeepPartial<Tariff> = {
@@ -33,8 +37,17 @@ export class TariffsDataService implements ITariffsDataService {
       nameNormalized,
     };
 
-    const tariff = this.tariffsRepository.create(dataToCreate);
-    return this.tariffsRepository.save(tariff);
+    try {
+      const tariff = this.tariffsRepository.create(dataToCreate);
+      return await this.tariffsRepository.save(tariff);
+    } catch (e: any) {
+      const code = e?.code ?? e?.driverError?.code;
+      if (code === '23505') {
+        // unique violation
+        throw new ConflictException(`Тариф с названием "${name}" уже существует`);
+      }
+      throw e;
+    }
   }
 
   /**
@@ -65,7 +78,7 @@ export class TariffsDataService implements ITariffsDataService {
    * Поиск тарифа по названию (case-insensitive)
    */
   async findByName(name: string): Promise<Tariff | null> {
-    const nameNormalized = (name || '').trim().toLowerCase();
+    const nameNormalized = this.normalizeName(name).toLowerCase();
     return this.tariffsRepository.findOne({
       where: { nameNormalized },
     });
@@ -73,6 +86,8 @@ export class TariffsDataService implements ITariffsDataService {
 
   /**
    * Поиск с фильтрами и пагинацией
+   * Внимание: фильтры по подписчикам и сортировка по подписчикам реализуются на уровне сервиса,
+   * здесь — только базовые поля тарифа.
    */
   async findWithFilters(filter: TariffFilter): Promise<[Tariff[], number]> {
     const {
@@ -86,6 +101,12 @@ export class TariffsDataService implements ITariffsDataService {
       sortOrder = 'asc',
     } = filter;
 
+    const safePage = Number.isFinite(page) && page > 0 ? page : 1;
+    const safeLimit = Math.min(
+      Math.max(1, Number.isFinite(limit) ? limit : TARIFFS_CONSTANTS.DEFAULTS.PAGE_SIZE),
+      TARIFFS_CONSTANTS.DEFAULTS.MAX_ITEMS,
+    );
+
     const query = this.tariffsRepository.createQueryBuilder('tariff');
 
     // Фильтр по поиску
@@ -97,7 +118,11 @@ export class TariffsDataService implements ITariffsDataService {
 
     // Фильтр по статусу активности
     if (typeof isActive === 'boolean') {
-      query.andWhere('tariff.isActive = :isActive', { isActive });
+      if (query.expressionMap.wheres.length === 0) {
+        query.where('tariff.isActive = :isActive', { isActive });
+      } else {
+        query.andWhere('tariff.isActive = :isActive', { isActive });
+      }
     }
 
     // Фильтр по цене (рубли)
@@ -109,13 +134,13 @@ export class TariffsDataService implements ITariffsDataService {
       query.andWhere('tariff.priceMonthly <= :maxPrice', { maxPrice });
     }
 
-    // Сортировка
+    // Сортировка (только по полям тарифа — сортировка по метрикам делается в сервисе)
     const sortColumn = this.mapSortField(sortField);
     query.orderBy(sortColumn, (sortOrder || 'asc').toUpperCase() as 'ASC' | 'DESC');
 
     // Пагинация
-    const offset = (page - 1) * limit;
-    query.skip(offset).take(limit);
+    const offset = (safePage - 1) * safeLimit;
+    query.skip(offset).take(safeLimit);
 
     return query.getManyAndCount();
   }
@@ -127,7 +152,7 @@ export class TariffsDataService implements ITariffsDataService {
     const updateData: DeepPartial<Tariff> = {};
 
     if (data.name !== undefined) {
-      const name = (data.name || '').trim();
+      const name = this.normalizeName(data.name);
       updateData.name = name;
       (updateData as any).nameNormalized = name.toLowerCase();
     }
@@ -141,7 +166,15 @@ export class TariffsDataService implements ITariffsDataService {
     if (data.features !== undefined) updateData.features = data.features;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
 
-    await this.tariffsRepository.update(id, updateData);
+    try {
+      await this.tariffsRepository.update(id, updateData);
+    } catch (e: any) {
+      const code = e?.code ?? e?.driverError?.code;
+      if (code === '23505') {
+        throw new ConflictException(`Тариф с таким названием уже существует`);
+      }
+      throw e;
+    }
 
     const updatedTariff = await this.findById(id);
     if (!updatedTariff) {
@@ -173,19 +206,74 @@ export class TariffsDataService implements ITariffsDataService {
   }
 
   /**
-   * Получение популярных тарифов (по количеству подписок)
+   * Получение популярных тарифов (по количеству активных подписчиков)
    */
   async getPopularTariffs(limit: number = 5): Promise<Tariff[]> {
-    // TODO: заменить на реальный подсчёт по подпискам
-    return this.tariffsRepository.find({
-      where: { isActive: true },
-      order: { priceMonthly: 'ASC' },
-      take: limit,
+    const activeTariffs = await this.findAll(true);
+    if (!activeTariffs.length) return [];
+
+    const metrics = await this.getSubscribersMetricsByTariff(activeTariffs.map((t) => t.id));
+    const sorted = [...activeTariffs].sort((a, b) => {
+      const am = metrics[a.id]?.activeSubscribers ?? 0;
+      const bm = metrics[b.id]?.activeSubscribers ?? 0;
+      if (bm !== am) return bm - am;
+      // вторичная сортировка по цене по возрастанию
+      return a.priceMonthly - b.priceMonthly;
     });
+
+    return sorted.slice(0, Math.max(1, Math.min(limit, 50)));
   }
 
   /**
-   * Маппинг полей для сортировки
+   * Метрики подписчиков по тарифам (distinct companyId):
+   * - totalSubscribers: за всё время
+   * - activeSubscribers: активные на текущий момент (status=active и дата в интервале)
+   */
+  async getSubscribersMetricsByTariff(ids: string[], now: Date = new Date()): Promise<TariffMetricsMap> {
+    const map: TariffMetricsMap = {};
+    if (!ids || ids.length === 0) return map;
+
+    // Все подписчики за всё время
+    const totalRows = await this.subscriptionsRepository
+      .createQueryBuilder('s')
+      .select('s.tariffId', 'tariffId')
+      .addSelect('COUNT(DISTINCT s.companyId)', 'total')
+      .where('s.tariffId IN (:...ids)', { ids })
+      .groupBy('s.tariffId')
+      .getRawMany<{ tariffId: string; total: string }>();
+
+    // Активные подписчики на текущий момент
+    const activeRows = await this.subscriptionsRepository
+      .createQueryBuilder('s')
+      .select('s.tariffId', 'tariffId')
+      .addSelect('COUNT(DISTINCT s.companyId)', 'active')
+      .where('s.tariffId IN (:...ids)', { ids })
+      .andWhere('s.status = :status', { status: SubscriptionStatus.ACTIVE })
+      .andWhere('s.startDate <= :now', { now })
+      .andWhere('s.endDate > :now', { now })
+      .groupBy('s.tariffId')
+      .getRawMany<{ tariffId: string; active: string }>();
+
+    totalRows.forEach((r) => {
+      map[r.tariffId] = map[r.tariffId] || { activeSubscribers: 0, totalSubscribers: 0 };
+      map[r.tariffId].totalSubscribers = Number(r.total) || 0;
+    });
+
+    activeRows.forEach((r) => {
+      map[r.tariffId] = map[r.tariffId] || { activeSubscribers: 0, totalSubscribers: 0 };
+      map[r.tariffId].activeSubscribers = Number(r.active) || 0;
+    });
+
+    // Инициализируем отсутствующие тарифы нулями
+    ids.forEach((id) => {
+      if (!map[id]) map[id] = { activeSubscribers: 0, totalSubscribers: 0 };
+    });
+
+    return map;
+  }
+
+  /**
+   * Маппинг полей для сортировки по колонкам тарифа
    */
   private mapSortField(sortField: string): string {
     const fieldMap: Record<string, string> = {
@@ -193,8 +281,13 @@ export class TariffsDataService implements ITariffsDataService {
       priceMonthly: 'tariff.priceMonthly',
       priceYearly: 'tariff.priceYearly',
       createdAt: 'tariff.createdAt',
+      // activeSubscribers / totalSubscribers — не сортируем на уровне БД (делается в сервисе)
     };
 
     return fieldMap[sortField] || 'tariff.priceMonthly';
+  }
+
+  private normalizeName(name: string): string {
+    return (name || '').trim().replace(/\s+/g, ' ');
   }
 }

@@ -2,8 +2,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsNumber, IsOptional, IsBoolean, IsObject, Min, Max, MaxLength } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
-import sanitizeHtml from 'sanitize-html';
 import { TARIFFS_CONSTANTS } from '../../constants/tariffs.constants';
+import { sanitizePlainText } from '../../../../common/utils/sanitize.util';
 
 export class UpdateTariffDto {
   @ApiPropertyOptional({
@@ -15,11 +15,7 @@ export class UpdateTariffDto {
   @MaxLength(TARIFFS_CONSTANTS.VALIDATION.NAME_MAX_LENGTH, {
     message: `Название не может превышать ${TARIFFS_CONSTANTS.VALIDATION.NAME_MAX_LENGTH} символов`,
   })
-  @Transform(({ value }) =>
-    typeof value === 'string'
-      ? sanitizeHtml(value.trim().replace(/\s+/g, ' '), { allowedTags: [], allowedAttributes: {} })
-      : value,
-  )
+  @Transform(({ value }) => (typeof value === 'string' ? sanitizePlainText(value) : value))
   name?: string;
 
   @ApiPropertyOptional({
@@ -31,11 +27,7 @@ export class UpdateTariffDto {
   @MaxLength(TARIFFS_CONSTANTS.VALIDATION.DESCRIPTION_MAX_LENGTH, {
     message: `Описание не может превышать ${TARIFFS_CONSTANTS.VALIDATION.DESCRIPTION_MAX_LENGTH} символов`,
   })
-  @Transform(({ value }) =>
-    typeof value === 'string'
-      ? sanitizeHtml(value.trim().replace(/\s+/g, ' '), { allowedTags: [], allowedAttributes: {} })
-      : value,
-  )
+  @Transform(({ value }) => (typeof value === 'string' ? sanitizePlainText(value) : value))
   description?: string;
 
   @ApiPropertyOptional({

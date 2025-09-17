@@ -44,7 +44,7 @@ export interface LoginResponse {
   deviceId: string;
 }
 
-// Обновлено: структура соответствует backend RegisterCompanyResponseDto
+// Обновлено: структура соответствует backend RegisterCompanyResponseDto + добавлен tariffId
 export interface RegisterCompanyRequest {
   companyName: string;
   companyLegalName: string;
@@ -59,6 +59,7 @@ export interface RegisterCompanyRequest {
   ownerPhone?: string;
 
   inviteCode?: string;
+  tariffId?: string; // ДОБАВЛЕНО: ID выбранного тарифа
 }
 
 export interface RegisterCompanyResponse {

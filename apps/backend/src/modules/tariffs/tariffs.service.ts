@@ -7,7 +7,7 @@ import { TariffsMapperService } from './services/tariffs-mapper.service';
 import { CreateTariffDto } from './dto/request/create-tariff.dto';
 import { UpdateTariffDto } from './dto/request/update-tariff.dto';
 import { TariffResponseDto } from './dto/response/tariff-response.dto';
-import { TariffFilter, PaginatedTariffsResult } from './types/tariffs.types';
+import { TariffFilter, PaginatedTariffsResult, TariffMetricsMap } from './types/tariffs.types';
 import { TARIFFS_CONSTANTS } from './constants/tariffs.constants';
 import { AuditService, AuditAction } from '../../common/audit/audit.service';
 
@@ -38,15 +38,84 @@ export class TariffsService {
 
   /**
    * Получение всех тарифов с фильтрацией
+   * includeMetrics=false (public) — метрики подписчиков скрыты.
+   * includeMetrics=true (admin) — добавляем active/totalSubscribers и даём сортировку/фильтры по метрикам.
    */
-  async findAll(filter: TariffFilter = {}): Promise<PaginatedTariffsResult> {
-    this.logger.log(`Поиск тарифов с фильтрами: ${JSON.stringify(filter)}`);
+  async findAll(filter: TariffFilter = {}, opts?: { includeMetrics?: boolean }): Promise<PaginatedTariffsResult> {
+    const includeMetrics = !!opts?.includeMetrics;
+    this.logger.log(
+      `Поиск тарифов с фильтрами (metrics=${includeMetrics}): ${JSON.stringify(filter)}`,
+    );
 
-    const [tariffs, total] = await this.tariffsDataService.findWithFilters(filter);
+    const metricsSortFields = new Set(['activeSubscribers', 'totalSubscribers']);
+    const wantsMetricsSort =
+      includeMetrics && filter.sortField ? metricsSortFields.has(filter.sortField) : false;
+    const wantsMetricsFilter =
+      includeMetrics &&
+      ((typeof filter.minActiveSubscribers === 'number' && filter.minActiveSubscribers > 0) ||
+        (typeof filter.minTotalSubscribers === 'number' && filter.minTotalSubscribers > 0));
 
-    const page = filter.page || 1;
-    const limit = filter.limit || TARIFFS_CONSTANTS.DEFAULTS.PAGE_SIZE;
-    const totalPages = Math.ceil(total / limit);
+    // Если нужна сортировка или фильтрация по метрикам — заберем максимум записей и отфильтруем в памяти
+    const baseFilter = { ...filter };
+    if (wantsMetricsSort || wantsMetricsFilter) {
+      baseFilter.page = 1;
+      baseFilter.limit = TARIFFS_CONSTANTS.DEFAULTS.MAX_ITEMS;
+      // сортировку по полям тарифа оставляем прежней — итоговую сортировку по метрикам сделаем ниже
+    }
+
+    const [tariffs, totalRaw] = await this.tariffsDataService.findWithFilters(baseFilter);
+
+    let metricsMap: TariffMetricsMap | undefined;
+    if (includeMetrics && tariffs.length > 0) {
+      metricsMap = await this.tariffsDataService.getSubscribersMetricsByTariff(tariffs.map((t) => t.id));
+    }
+
+    // Применяем фильтры по метрикам (только если разрешено includeMetrics)
+    let items = tariffs;
+    if (includeMetrics && (wantsMetricsFilter || wantsMetricsSort)) {
+      const mm = metricsMap || {};
+      if (wantsMetricsFilter) {
+        items = items.filter((t) => {
+          const m = mm[t.id] || { activeSubscribers: 0, totalSubscribers: 0 };
+          if (typeof filter.minActiveSubscribers === 'number' && filter.minActiveSubscribers > 0) {
+            if (m.activeSubscribers < filter.minActiveSubscribers) return false;
+          }
+          if (typeof filter.minTotalSubscribers === 'number' && filter.minTotalSubscribers > 0) {
+            if (m.totalSubscribers < filter.minTotalSubscribers) return false;
+          }
+          return true;
+        });
+      }
+
+      // Сортировка по метрикам (если требуется)
+      if (wantsMetricsSort && filter.sortField) {
+        const order = filter.sortOrder === 'desc' ? -1 : 1;
+        const sf = filter.sortField;
+        items = [...items].sort((a, b) => {
+          const am = mm[a.id] || { activeSubscribers: 0, totalSubscribers: 0 };
+          const bm = mm[b.id] || { activeSubscribers: 0, totalSubscribers: 0 };
+          const av = sf === 'activeSubscribers' ? am.activeSubscribers : am.totalSubscribers;
+          const bv = sf === 'activeSubscribers' ? bm.activeSubscribers : bm.totalSubscribers;
+          if (av !== bv) return (av - bv) * order;
+          // вторично сортируем по цене за месяц
+          return (a.priceMonthly - b.priceMonthly) * order;
+        });
+      }
+    }
+
+    // Пагинация
+    let page = filter.page || 1;
+    let limit = filter.limit || TARIFFS_CONSTANTS.DEFAULTS.PAGE_SIZE;
+    limit = Math.min(limit, TARIFFS_CONSTANTS.DEFAULTS.MAX_ITEMS);
+
+    let paginatedItems = items;
+    let total = wantsMetricsSort || wantsMetricsFilter ? items.length : totalRaw;
+    if (wantsMetricsSort || wantsMetricsFilter) {
+      const start = (page - 1) * limit;
+      paginatedItems = items.slice(start, start + limit);
+    }
+
+    const totalPages = Math.ceil((total || 0) / (limit || 1));
 
     await this.auditService.log(AuditAction.TARIFFS_LISTED, {
       details: {
@@ -54,15 +123,21 @@ export class TariffsService {
         isActive: typeof filter.isActive === 'boolean' ? filter.isActive : null,
         minPrice: filter.minPrice ?? null,
         maxPrice: filter.maxPrice ?? null,
+        minActiveSubscribers: includeMetrics ? filter.minActiveSubscribers ?? null : null,
+        minTotalSubscribers: includeMetrics ? filter.minTotalSubscribers ?? null : null,
         page,
         limit,
         sortField: filter.sortField || 'priceMonthly',
         sortOrder: filter.sortOrder || 'asc',
+        includeMetrics,
       },
     });
 
     return {
-      items: this.tariffsMapperService.mapArrayToResponseDto(tariffs),
+      items: this.tariffsMapperService.mapArrayToResponseDto(
+        paginatedItems,
+        includeMetrics ? metricsMap : undefined,
+      ),
       total,
       page,
       limit,
@@ -71,7 +146,7 @@ export class TariffsService {
   }
 
   /**
-   * Получение только активных тарифов
+   * Получение только активных тарифов (публично)
    */
   async findActive(): Promise<TariffResponseDto[]> {
     this.logger.log('Получение активных тарифов');
@@ -81,11 +156,12 @@ export class TariffsService {
       details: { scope: 'active' },
     });
 
+    // публичный ответ — без метрик
     return this.tariffsMapperService.mapArrayToResponseDto(tariffs);
   }
 
   /**
-   * Получение тарифа по ID
+   * Получение тарифа по ID (публично)
    */
   async findOne(id: string): Promise<TariffResponseDto> {
     this.logger.log(`Поиск тарифа по ID: ${id}`);
@@ -97,11 +173,12 @@ export class TariffsService {
       details: { id },
     });
 
+    // публичный ответ — без метрик
     return this.tariffsMapperService.mapToResponseDto(tariff);
   }
 
   /**
-   * Обновление тарифа
+   * Обновление тарифа (admin)
    */
   async update(id: string, updateTariffDto: UpdateTariffDto): Promise<TariffResponseDto> {
     this.logger.log(`Обновление тарифа: ${id}`);
@@ -114,7 +191,7 @@ export class TariffsService {
   }
 
   /**
-   * Изменение статуса активности тарифа
+   * Изменение статуса активности тарифа (admin)
    */
   async setActive(id: string, isActive: boolean): Promise<TariffResponseDto> {
     this.logger.log(`Изменение статуса тарифа ${id} на ${isActive ? 'активен' : 'неактивен'}`);
@@ -126,7 +203,7 @@ export class TariffsService {
   }
 
   /**
-   * Удаление тарифа (только для platform roles)
+   * Удаление тарифа (admin)
    */
   async remove(id: string): Promise<void> {
     this.logger.log(`Удаление тарифа: ${id}`);
@@ -138,22 +215,119 @@ export class TariffsService {
   }
 
   /**
-   * Получение популярных тарифов
+   * ИСПРАВЛЕНО: Получение популярных тарифов с проверкой реальных подписок
    */
   async getPopular(limit: number = 5): Promise<TariffResponseDto[]> {
     this.logger.log(`Получение популярных тарифов (лимит: ${limit})`);
 
-    const tariffs = await this.tariffsDataService.getPopularTariffs(limit);
+    // Получаем все активные тарифы
+    const allActiveTariffs = await this.tariffsDataService.findAll(true);
+    
+    if (allActiveTariffs.length === 0) {
+      this.logger.log('Нет активных тарифов');
+      return [];
+    }
 
-    await this.auditService.log(AuditAction.TARIFFS_POPULAR_VIEWED, {
-      details: { limit },
-    });
+    try {
+      // Получаем метрики подписчиков для определения популярности
+      const metricsMap = await this.tariffsDataService.getSubscribersMetricsByTariff(
+        allActiveTariffs.map(t => t.id)
+      );
 
-    return this.tariffsMapperService.mapArrayToResponseDto(tariffs);
+      // ИСПРАВЛЕНО: Определяем минимальный порог для "популярности"
+      const MIN_SUBSCRIPTIONS_FOR_POPULAR = 5;
+
+      // Фильтруем тарифы с достаточным количеством подписок
+      const popularTariffs = allActiveTariffs.filter(tariff => {
+        const metrics = metricsMap[tariff.id];
+        if (!metrics) return false;
+        
+        const activeCount = metrics.activeSubscribers || 0;
+        const totalCount = metrics.totalSubscribers || 0;
+        
+        return activeCount >= MIN_SUBSCRIPTIONS_FOR_POPULAR || totalCount >= MIN_SUBSCRIPTIONS_FOR_POPULAR;
+      });
+
+      let resultTariffs = [];
+
+      if (popularTariffs.length > 0) {
+        this.logger.log(`Найдено ${popularTariffs.length} реально популярных тарифов`);
+        
+        // Сортируем по количеству активных подписчиков (убывание)
+        resultTariffs = popularTariffs.sort((a, b) => {
+          const aMetrics = metricsMap[a.id] || { activeSubscribers: 0, totalSubscribers: 0 };
+          const bMetrics = metricsMap[b.id] || { activeSubscribers: 0, totalSubscribers: 0 };
+          
+          // Сначала по активным подписчикам
+          const activeDiff = bMetrics.activeSubscribers - aMetrics.activeSubscribers;
+          if (activeDiff !== 0) return activeDiff;
+          
+          // Потом по общему количеству
+          const totalDiff = bMetrics.totalSubscribers - aMetrics.totalSubscribers;
+          if (totalDiff !== 0) return totalDiff;
+          
+          // Наконец по цене (возрастание)
+          return a.priceMonthly - b.priceMonthly;
+        });
+      } else {
+        this.logger.log('Нет тарифов с достаточным количеством подписок, используем fallback');
+        
+        // ИСПРАВЛЕНО: Fallback - возвращаем highlighted тарифы или топ по позиции
+        const highlightedTariffs = allActiveTariffs.filter(t => t.features?.highlight === true);
+        
+        if (highlightedTariffs.length > 0) {
+          this.logger.log(`Используем ${highlightedTariffs.length} highlighted тарифов как fallback`);
+          resultTariffs = highlightedTariffs;
+        } else {
+          this.logger.log('Используем сортировку по shelf_position как fallback');
+          // Последний fallback: сортируем по shelf_position, потом по цене
+          resultTariffs = [...allActiveTariffs].sort((a, b) => {
+            const aPos = typeof a.features?.shelf_position === 'number' ? a.features.shelf_position : 999;
+            const bPos = typeof b.features?.shelf_position === 'number' ? b.features.shelf_position : 999;
+            
+            if (aPos !== bPos) return aPos - bPos;
+            return a.priceMonthly - b.priceMonthly;
+          });
+        }
+      }
+
+      // Ограничиваем результат запрошенным лимитом
+      const finalTariffs = resultTariffs.slice(0, limit);
+
+      await this.auditService.log(AuditAction.TARIFFS_POPULAR_VIEWED, {
+        details: { 
+          limit,
+          foundReallyPopular: popularTariffs.length,
+          returned: finalTariffs.length,
+          usedFallback: popularTariffs.length === 0
+        },
+      });
+
+      // публичный ответ — без метрик
+      return this.tariffsMapperService.mapArrayToResponseDto(finalTariffs);
+
+    } catch (error) {
+      this.logger.error('Ошибка при получении метрик подписчиков, используем простой fallback', error);
+      
+      // Fallback при ошибке: возвращаем первые N активных тарифов по цене
+      const fallbackTariffs = [...allActiveTariffs]
+        .sort((a, b) => a.priceMonthly - b.priceMonthly)
+        .slice(0, limit);
+
+      await this.auditService.log(AuditAction.TARIFFS_POPULAR_VIEWED, {
+        details: { 
+          limit,
+          error: true,
+          returned: fallbackTariffs.length
+        },
+      });
+
+      return this.tariffsMapperService.mapArrayToResponseDto(fallbackTariffs);
+    }
   }
 
   /**
-   * Сравнение тарифов
+   * Сравнение тарифов (публично)
    */
   async compareTariffs(tariffIds: string[]): Promise<TariffResponseDto[]> {
     this.logger.log(`Сравнение тарифов: ${tariffIds.join(', ')}`);
@@ -164,44 +338,12 @@ export class TariffsService {
       details: { tariffIds },
     });
 
+    // публичный ответ — без метрик
     return this.tariffsMapperService.mapArrayToResponseDto(tariffs);
   }
 
   /**
-   * Получение данных для сравнения тарифов
-   */
-  async getComparisonData(
-    tariffIds: string[],
-  ): Promise<
-    {
-      id: string;
-      name: string;
-      priceMonthly: number;
-      priceYearly: number;
-      yearlyDiscount: number;
-      limits: {
-        users: number | null;
-        customers: number | null;
-        vehicles: number | null;
-        orders: number | null;
-      };
-      features: Record<string, any>;
-      isRecommended: boolean;
-    }[]
-  > {
-    this.logger.log(`Получение данных для сравнения тарифов: ${tariffIds.join(', ')}`);
-
-    const tariffs = await Promise.all(tariffIds.map((id) => this.tariffsValidationService.validateTariffExists(id)));
-
-    await this.auditService.log(AuditAction.TARIFFS_COMPARED, {
-      details: { tariffIds, mode: 'detailed' },
-    });
-
-    return tariffs.map((tariff) => this.tariffsMapperService.mapToComparisonData(tariff));
-  }
-
-  /**
-   * Получение статистики по тарифам
+   * Получение статистики по тарифам (admin-only, пока заглушка)
    */
   async getStats(): Promise<
     {
@@ -237,7 +379,7 @@ export class TariffsService {
   }
 
   /**
-   * Получение опций для селектов (для других модулей)
+   * Получение опций для селектов (для других модулей) — публичные активные
    */
   async getSelectOptions(): Promise<
     {

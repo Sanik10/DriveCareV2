@@ -2,14 +2,35 @@
 import { Injectable } from '@nestjs/common';
 import { Tariff } from '../../../database/entities';
 import { TariffResponseDto } from '../dto/response/tariff-response.dto';
+import { TariffMetricsMap, TariffSubscribersMetrics } from '../types/tariffs.types';
 
 @Injectable()
 export class TariffsMapperService {
   /**
    * Основной маппинг Entity → ResponseDto
+   * metrics:
+   *  - number: трактуем как activeSubscribers (для обратной совместимости с прежним параметром subscriptionsCount)
+   *  - object: { activeSubscribers, totalSubscribers }
    */
-  mapToResponseDto(tariff: Tariff, subscriptionsCount: number = 0): TariffResponseDto {
+  mapToResponseDto(
+    tariff: Tariff,
+    metrics?: number | Partial<TariffSubscribersMetrics>,
+  ): TariffResponseDto {
     const yearlyDiscount = this.calculateYearlyDiscount(tariff.priceMonthly, tariff.priceYearly);
+
+    let activeSubscribers: number | undefined;
+    let totalSubscribers: number | undefined;
+
+    if (typeof metrics === 'number') {
+      activeSubscribers = metrics;
+    } else if (metrics && typeof metrics === 'object') {
+      if (typeof metrics.activeSubscribers === 'number') {
+        activeSubscribers = metrics.activeSubscribers;
+      }
+      if (typeof metrics.totalSubscribers === 'number') {
+        totalSubscribers = metrics.totalSubscribers;
+      }
+    }
 
     return {
       id: tariff.id,
@@ -26,16 +47,44 @@ export class TariffsMapperService {
       isActive: tariff.isActive,
       createdAt: tariff.createdAt,
       updatedAt: tariff.updatedAt,
-      subscriptionsCount,
+      // subscriptionsCount — для обратной совместимости: это активные подписчики
+      subscriptionsCount: typeof activeSubscribers === 'number' ? activeSubscribers : undefined,
       isRecommended: this.isRecommendedTariff(tariff),
+      activeSubscribers,
+      totalSubscribers,
     };
   }
 
   /**
    * Маппинг для списков (массив Entity → массив ResponseDto)
    */
-  mapArrayToResponseDto(tariffs: Tariff[], subscriptionsCounts: Record<string, number> = {}): TariffResponseDto[] {
-    return tariffs.map((tariff) => this.mapToResponseDto(tariff, subscriptionsCounts[tariff.id] || 0));
+  mapArrayToResponseDto(
+    tariffs: Tariff[],
+    metricsMap?: TariffMetricsMap | Record<string, number>,
+  ): TariffResponseDto[] {
+    // Поддерживаем 2 формата metricsMap:
+    // 1) Record<string, number> — это map активных подписчиков
+    // 2) TariffMetricsMap — объект с active/total
+    const isNumberMap =
+      metricsMap &&
+      typeof metricsMap === 'object' &&
+      Object.values(metricsMap)[0] !== undefined &&
+      typeof (Object.values(metricsMap)[0] as any) === 'number';
+
+    return tariffs.map((tariff) => {
+      if (!metricsMap) return this.mapToResponseDto(tariff);
+
+      if (isNumberMap) {
+        const count = (metricsMap as Record<string, number>)[tariff.id] || 0;
+        return this.mapToResponseDto(tariff, count);
+      }
+
+      const metrics = (metricsMap as TariffMetricsMap)[tariff.id] || {
+        activeSubscribers: 0,
+        totalSubscribers: 0,
+      };
+      return this.mapToResponseDto(tariff, metrics);
+    });
   }
 
   /**
@@ -229,8 +278,17 @@ export class TariffsMapperService {
   }
 
   private isRecommendedTariff(tariff: Tariff): boolean {
+    const f = (tariff.features || {}) as Record<string, unknown>;
+    // 1) Явная отметка в features
+    if (typeof f.recommended === 'boolean') {
+      return f.recommended;
+    }
+    if (typeof f.badge === 'string' && ['recommended', 'best_value'].includes(f.badge)) {
+      return true;
+    }
+    // 2) Эвристика по названию (обратная совместимость)
     const name = (tariff.name || '').toLowerCase();
     const recommendedKeywords = ['стандарт', 'standard', 'professional', 'про', 'business'];
     return recommendedKeywords.some((keyword) => name.includes(keyword));
-    }
+  }
 }

@@ -26,12 +26,6 @@ import {
   ApiBody,
   ApiParam,
   ApiQuery,
-  ApiUnauthorizedResponse,
-  ApiForbiddenResponse,
-  ApiNotFoundResponse,
-  ApiConflictResponse,
-  ApiBadRequestResponse,
-  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { TariffsService } from './tariffs.service';
@@ -58,168 +52,40 @@ export class TariffsController {
     summary: 'Создание нового тарифного плана',
     description: 'Создание нового тарифа с лимитами и возможностями. Доступно только платформенным администраторам.',
   })
-  @ApiBody({
-    type: CreateTariffDto,
-    description: 'Данные для создания тарифа (цены в рублях с точностью до копеек)',
-    examples: {
-      basic: {
-        summary: 'Базовый тариф',
-        description: 'Простой тариф для малых автосервисов',
-        value: {
-          name: 'Базовый',
-          description: 'Идеальный выбор для небольших автосервисов',
-          priceMonthly: 1000,
-          priceYearly: 10000,
-          maxUsers: 3,
-          maxCustomers: 50,
-          maxVehicles: 100,
-          maxOrders: 200,
-          features: {
-            reports: false,
-            analytics: false,
-            api_access: false,
-            priority_support: false,
-            custom_fields: false,
-          },
-          isActive: true,
-        },
-      },
-      premium: {
-        summary: 'Премиум тариф',
-        description: 'Безлимитный тариф для крупных автосервисов',
-        value: {
-          name: 'Премиум',
-          description: 'Максимальные возможности для крупного бизнеса',
-          priceMonthly: 5000,
-          priceYearly: 50000,
-          maxUsers: null,
-          maxCustomers: null,
-          maxVehicles: null,
-          maxOrders: null,
-          features: {
-            reports: true,
-            analytics: true,
-            api_access: true,
-            priority_support: true,
-            custom_fields: true,
-            integrations: true,
-            white_label: true,
-          },
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.CREATED,
-    description: '✅ Тариф успешно создан',
-    type: TariffResponseDto,
-  })
-  @ApiConflictResponse({
-    description: '❌ Тариф с таким названием уже существует',
-    example: {
-      statusCode: 409,
-      message: 'Тариф с названием "Базовый" уже существует',
-      error: 'Conflict',
-    },
-  })
-  @ApiBadRequestResponse({
-    description: '❌ Некорректные данные валидации',
-    example: {
-      statusCode: 400,
-      message: ['Годовая цена должна предоставлять скидку минимум 1%'],
-      error: 'Bad Request',
-    },
-  })
-  @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
-  @ApiForbiddenResponse({ description: '❌ Недостаточно прав доступа' })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 10 в минуту)' })
+  @ApiBody({ type: CreateTariffDto })
+  @ApiResponse({ status: HttpStatus.CREATED, type: TariffResponseDto })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async create(@Body() createTariffDto: CreateTariffDto): Promise<TariffResponseDto> {
     return this.tariffsService.create(createTariffDto);
   }
 
+  // Публичный листинг — без метрик подписчиков
   @Get()
-  @AllowCache(3600, 'public')
   @ApiOperation({
-    summary: 'Получение списка тарифов с фильтрацией',
-    description: 'Получение списка всех тарифов с возможностью фильтрации по статусу, цене и поиску.',
+    summary: 'Получение списка тарифов (публично)',
+    description: 'Публичный список тарифов с базовыми фильтрами. Метрики подписчиков не включаются.',
   })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Поиск по названию или описанию',
-    example: 'стандарт',
-  })
-  @ApiQuery({
-    name: 'isActive',
-    required: false,
-    type: Boolean,
-    description: 'Фильтр по статусу активности',
-    example: true,
-  })
-  @ApiQuery({
-    name: 'minPrice',
-    required: false,
-    type: Number,
-    description: 'Минимальная цена в рублях (месячная)',
-    example: 1000,
-  })
-  @ApiQuery({
-    name: 'maxPrice',
-    required: false,
-    type: Number,
-    description: 'Максимальная цена в рублях (месячная)',
-    example: 5000,
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    description: 'Номер страницы',
-    example: 1,
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Количество элементов на странице',
-    example: 20,
-  })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'isActive', required: false, type: Boolean })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({
     name: 'sortField',
     required: false,
     enum: ['name', 'priceMonthly', 'priceYearly', 'createdAt'],
-    description: 'Поле для сортировки',
-    example: 'priceMonthly',
   })
-  @ApiQuery({
-    name: 'sortOrder',
-    required: false,
-    enum: ['asc', 'desc'],
-    description: 'Порядок сортировки',
-    example: 'asc',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Список тарифов успешно получен',
-    example: {
-      items: [],
-      total: 3,
-      page: 1,
-      limit: 20,
-      totalPages: 1,
-    },
-  })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 100 в минуту)' })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
+  @ApiResponse({ status: HttpStatus.OK })
   @Throttle({ default: { limit: 100, ttl: 60000 } })
-  async findAll(
+  async findAllPublic(
     @Query('search') search?: string,
-    @Query('isActive', new DefaultValuePipe(undefined), ParseBoolPipe) isActive?: boolean,
-    @Query('minPrice', new DefaultValuePipe(undefined), ParseFloatPipe) minPrice?: number,
-    @Query('maxPrice', new DefaultValuePipe(undefined), ParseFloatPipe) maxPrice?: number,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
-    @Query('limit', new DefaultValuePipe(TARIFFS_CONSTANTS.DEFAULTS.PAGE_SIZE), ParseIntPipe) limit?: number,
+    @Query('isActive', new DefaultValuePipe(undefined), new ParseBoolPipe({ optional: true })) isActive?: boolean,
+    @Query('minPrice', new DefaultValuePipe(undefined), new ParseFloatPipe({ optional: true })) minPrice?: number,
+    @Query('maxPrice', new DefaultValuePipe(undefined), new ParseFloatPipe({ optional: true })) maxPrice?: number,
+    @Query('page', new DefaultValuePipe('1'), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(String(TARIFFS_CONSTANTS.DEFAULTS.PAGE_SIZE)), ParseIntPipe) limit?: number,
     @Query('sortField', new DefaultValuePipe('priceMonthly')) sortField?: string,
     @Query('sortOrder', new DefaultValuePipe('asc')) sortOrder?: 'asc' | 'desc',
   ) {
@@ -235,76 +101,113 @@ export class TariffsController {
       minPrice,
       maxPrice,
       page,
-      limit: Math.min(limit || TARIFFS_CONSTANTS.DEFAULTS.PAGE_SIZE, TARIFFS_CONSTANTS.DEFAULTS.MAX_ITEMS),
+      limit: Math.min(
+        Number.isFinite(limit as number) ? (limit as number) : TARIFFS_CONSTANTS.DEFAULTS.PAGE_SIZE,
+        TARIFFS_CONSTANTS.DEFAULTS.MAX_ITEMS,
+      ),
       sortField: sf as any,
       sortOrder: sortOrder === 'desc' ? 'desc' : 'asc',
     };
 
-    return this.tariffsService.findAll(filter);
+    // Важно: includeMetrics=false (по умолчанию)
+    return this.tariffsService.findAll(filter, { includeMetrics: false });
   }
 
-  @Get('active')
-  @AllowCache(3600, 'public')
+  // Админский листинг — с метриками подписчиков и расширенными фильтрами
+  @Get('admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'platform_admin')
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Получение активных тарифов',
-    description: 'Получение списка только активных тарифов для публичного отображения.',
+    summary: 'Получение списка тарифов (админ, с метриками)',
+    description:
+      'Backoffice-листинг тарифов с расширенными фильтрами и метриками подписчиков (активные/всего уникальных компаний).',
   })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Активные тарифы успешно получены',
-    type: [TariffResponseDto],
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'isActive', required: false, type: Boolean })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number })
+  @ApiQuery({ name: 'minActiveSubscribers', required: false, type: Number })
+  @ApiQuery({ name: 'minTotalSubscribers', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({
+    name: 'sortField',
+    required: false,
+    enum: ['name', 'priceMonthly', 'priceYearly', 'createdAt', 'activeSubscribers', 'totalSubscribers'],
   })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 200 в минуту)' })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
+  @ApiResponse({ status: HttpStatus.OK })
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
+  async findAllAdmin(
+    @Query('search') search?: string,
+    @Query('isActive', new DefaultValuePipe(undefined), new ParseBoolPipe({ optional: true })) isActive?: boolean,
+    @Query('minPrice', new DefaultValuePipe(undefined), new ParseFloatPipe({ optional: true })) minPrice?: number,
+    @Query('maxPrice', new DefaultValuePipe(undefined), new ParseFloatPipe({ optional: true })) maxPrice?: number,
+    @Query('minActiveSubscribers', new DefaultValuePipe('0'), ParseIntPipe) minActiveSubscribers?: number,
+    @Query('minTotalSubscribers', new DefaultValuePipe('0'), ParseIntPipe) minTotalSubscribers?: number,
+    @Query('page', new DefaultValuePipe('1'), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(String(TARIFFS_CONSTANTS.DEFAULTS.PAGE_SIZE)), ParseIntPipe) limit?: number,
+    @Query('sortField', new DefaultValuePipe('priceMonthly')) sortField?: string,
+    @Query('sortOrder', new DefaultValuePipe('asc')) sortOrder?: 'asc' | 'desc',
+  ) {
+    const allowedSortFields = new Set([
+      'name',
+      'priceMonthly',
+      'priceYearly',
+      'createdAt',
+      'activeSubscribers',
+      'totalSubscribers',
+    ]);
+    const sf = (sortField || 'priceMonthly').toString();
+    if (!allowedSortFields.has(sf)) {
+      throw new BadRequestException(`Недопустимое поле сортировки: ${sf}`);
+    }
+
+    const filter: TariffFilter = {
+      search: (search || '').trim() || undefined,
+      isActive,
+      minPrice,
+      maxPrice,
+      minActiveSubscribers: (minActiveSubscribers || 0) > 0 ? minActiveSubscribers : undefined,
+      minTotalSubscribers: (minTotalSubscribers || 0) > 0 ? minTotalSubscribers : undefined,
+      page,
+      limit: Math.min(
+        Number.isFinite(limit as number) ? (limit as number) : TARIFFS_CONSTANTS.DEFAULTS.PAGE_SIZE,
+        TARIFFS_CONSTANTS.DEFAULTS.MAX_ITEMS,
+      ),
+      sortField: sf as any,
+      sortOrder: sortOrder === 'desc' ? 'desc' : 'asc',
+    };
+
+    return this.tariffsService.findAll(filter, { includeMetrics: true });
+  }
+
+  // Публичные витрины — оставляем кэш, но уменьшаем TTL
+  @Get('active')
+  @AllowCache(60, 'public')
+  @ApiOperation({ summary: 'Получение активных тарифов (публично)' })
+  @ApiResponse({ status: HttpStatus.OK, type: [TariffResponseDto] })
   @Throttle({ default: { limit: 200, ttl: 60000 } })
   async findActive(): Promise<TariffResponseDto[]> {
     return this.tariffsService.findActive();
   }
 
   @Get('popular')
-  @AllowCache(3600, 'public')
-  @ApiOperation({
-    summary: 'Получение популярных тарифов',
-    description: 'Получение списка популярных тарифов (по количеству подписок).',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Количество тарифов',
-    example: 3,
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Популярные тарифы получены',
-    type: [TariffResponseDto],
-  })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 100 в минуту)' })
+  @AllowCache(60, 'public')
+  @ApiOperation({ summary: 'Получение популярных тарифов (публично)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({ status: HttpStatus.OK, type: [TariffResponseDto] })
   @Throttle({ default: { limit: 100, ttl: 60000 } })
-  async getPopular(@Query('limit', new DefaultValuePipe(5), ParseIntPipe) limit: number): Promise<TariffResponseDto[]> {
+  async getPopular(@Query('limit', new DefaultValuePipe('5'), ParseIntPipe) limit: number): Promise<TariffResponseDto[]> {
     return this.tariffsService.getPopular(Math.min(limit, 10));
   }
 
   @Get('compare')
-  @AllowCache(3600, 'public')
-  @ApiOperation({
-    summary: 'Сравнение тарифов',
-    description: 'Получение данных для сравнения нескольких тарифов.',
-  })
-  @ApiQuery({
-    name: 'ids',
-    required: true,
-    type: [String],
-    description: 'Массив ID тарифов для сравнения',
-    example: ['456e7890-e89b-12d3-a456-426614174001', '456e7890-e89b-12d3-a456-426614174002'],
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Данные для сравнения получены',
-    type: [TariffResponseDto],
-  })
-  @ApiBadRequestResponse({ description: '❌ Некорректные ID тарифов' })
-  @ApiNotFoundResponse({ description: '❌ Один или несколько тарифов не найдены' })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 50 в минуту)' })
+  @AllowCache(60, 'public')
+  @ApiOperation({ summary: 'Сравнение тарифов (публично)' })
+  @ApiQuery({ name: 'ids', required: true, type: [String] })
+  @ApiResponse({ status: HttpStatus.OK, type: [TariffResponseDto] })
   @Throttle({ default: { limit: 50, ttl: 60000 } })
   async compareTariffs(@Query('ids', new ParseArrayPipe({ items: String, separator: ',' })) ids: string[]): Promise<TariffResponseDto[]> {
     if (ids.length > 5) {
@@ -314,30 +217,9 @@ export class TariffsController {
   }
 
   @Get(':id')
-  @ApiOperation({
-    summary: 'Получение тарифа по ID',
-    description: 'Получение детальной информации о тарифе по его идентификатору.',
-  })
-  @ApiParam({
-    name: 'id',
-    type: String,
-    description: 'ID тарифа',
-    example: '456e7890-e89b-12d3-a456-426614174001',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Тариф найден',
-    type: TariffResponseDto,
-  })
-  @ApiNotFoundResponse({
-    description: '❌ Тариф не найден',
-    example: {
-      statusCode: 404,
-      message: 'Тариф с ID xxx не найден',
-      error: 'Not Found',
-    },
-  })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 100 в минуту)' })
+  @ApiOperation({ summary: 'Получение тарифа по ID (публично)' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: HttpStatus.OK, type: TariffResponseDto })
   @Throttle({ default: { limit: 100, ttl: 60000 } })
   async findOne(@Param('id') id: string): Promise<TariffResponseDto> {
     return this.tariffsService.findOne(id);
@@ -346,61 +228,10 @@ export class TariffsController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('superadmin', 'platform_admin')
-  @ApiOperation({
-    summary: 'Обновление тарифа',
-    description: 'Обновление параметров тарифного плана: цены, лимиты, возможности.',
-  })
-  @ApiParam({
-    name: 'id',
-    type: String,
-    description: 'ID тарифа',
-    example: '456e7890-e89b-12d3-a456-426614174001',
-  })
-  @ApiBody({
-    type: UpdateTariffDto,
-    description: 'Данные для обновления тарифа (цены в рублях)',
-    examples: {
-      priceUpdate: {
-        summary: 'Изменение цен',
-        description: 'Обновление месячной и годовой цены',
-        value: {
-          priceMonthly: 2500,
-          priceYearly: 25000,
-        },
-      },
-      limitsUpdate: {
-        summary: 'Изменение лимитов',
-        description: 'Увеличение лимитов тарифа',
-        value: {
-          maxUsers: 15,
-          maxCustomers: 300,
-          maxVehicles: 800,
-        },
-      },
-      featuresUpdate: {
-        summary: 'Добавление возможностей',
-        description: 'Включение дополнительных features',
-        value: {
-          features: {
-            reports: true,
-            analytics: true,
-            priority_support: true,
-          },
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Тариф успешно обновлен',
-    type: TariffResponseDto,
-  })
-  @ApiNotFoundResponse({ description: '❌ Тариф не найден' })
-  @ApiConflictResponse({ description: '❌ Название уже используется другим тарифом' })
-  @ApiBadRequestResponse({ description: '❌ Некорректные данные валидации' })
-  @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
-  @ApiForbiddenResponse({ description: '❌ Недостаточно прав доступа' })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 20 в минуту)' })
+  @ApiOperation({ summary: 'Обновление тарифа' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiBody({ type: UpdateTariffDto })
+  @ApiResponse({ status: HttpStatus.OK, type: TariffResponseDto })
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   async update(@Param('id') id: string, @Body() updateTariffDto: UpdateTariffDto): Promise<TariffResponseDto> {
     return this.tariffsService.update(id, updateTariffDto);
@@ -409,32 +240,10 @@ export class TariffsController {
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('superadmin', 'platform_admin')
-  @ApiOperation({
-    summary: 'Изменение статуса тарифа',
-    description: 'Активация или деактивация тарифного плана.',
-  })
-  @ApiParam({
-    name: 'id',
-    type: String,
-    description: 'ID тарифа',
-    example: '456e7890-e89b-12d3-a456-426614174001',
-  })
-  @ApiQuery({
-    name: 'isActive',
-    required: true,
-    type: Boolean,
-    description: 'Новый статус тарифа',
-    example: false,
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Статус тарифа изменен',
-    type: TariffResponseDto,
-  })
-  @ApiNotFoundResponse({ description: '❌ Тариф не найден' })
-  @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
-  @ApiForbiddenResponse({ description: '❌ Недостаточно прав доступа' })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 15 в минуту)' })
+  @ApiOperation({ summary: 'Изменение статуса тарифа' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiQuery({ name: 'isActive', required: true, type: Boolean })
+  @ApiResponse({ status: HttpStatus.OK, type: TariffResponseDto })
   @Throttle({ default: { limit: 15, ttl: 60000 } })
   async setActive(@Param('id') id: string, @Query('isActive', ParseBoolPipe) isActive: boolean): Promise<TariffResponseDto> {
     return this.tariffsService.setActive(id, isActive);
@@ -444,25 +253,9 @@ export class TariffsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles('superadmin', 'platform_admin')
-  @ApiOperation({
-    summary: '🚨 Удаление тарифа (платформенные роли)',
-    description: 'Полное удаление тарифного плана. Возможно только если нет активных подписок и тариф деактивирован.',
-  })
-  @ApiParam({
-    name: 'id',
-    type: String,
-    description: 'ID тарифа',
-    example: '456e7890-e89b-12d3-a456-426614174001',
-  })
-  @ApiResponse({
-    status: HttpStatus.NO_CONTENT,
-    description: '✅ Тариф успешно удален',
-  })
-  @ApiNotFoundResponse({ description: '❌ Тариф не найден' })
-  @ApiBadRequestResponse({ description: '❌ Нельзя удалить тариф с активными подписками или активный тариф' })
-  @ApiUnauthorizedResponse({ description: '❌ Требуется авторизация' })
-  @ApiForbiddenResponse({ description: '❌ Доступно только платформенным ролям' })
-  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 5 в минуту)' })
+  @ApiOperation({ summary: '🚨 Удаление тарифа (платформенные роли)' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT })
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   async remove(@Param('id') id: string): Promise<void> {
     return this.tariffsService.remove(id);

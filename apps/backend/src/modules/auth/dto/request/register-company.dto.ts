@@ -1,6 +1,6 @@
 // path: apps/backend/src/modules/auth/dto/request/register-company.dto.ts
-import { IsEmail, IsNotEmpty, IsOptional, MinLength, MaxLength, Matches } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsNotEmpty, IsOptional, MinLength, MaxLength, Matches, IsUUID } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 
 export class RegisterCompanyDto {
@@ -66,4 +66,13 @@ export class RegisterCompanyDto {
   @Matches(/^[+]?[0-9\s\-()]{7,20}$/, { message: 'Некорректный формат номера телефона' })
   @Transform(({ value }) => value === '' ? undefined : value)
   ownerPhone?: string;
+
+  @ApiPropertyOptional({
+    example: '456e7890-e89b-12d3-a456-426614174001',
+    description: 'ID выбранного тарифного плана (необязательно)',
+  })
+  @IsOptional()
+  @IsUUID(4, { message: 'ID тарифа должен быть валидным UUID' })
+  @Transform(({ value }) => value === '' ? undefined : value)
+  tariffId?: string;
 }
