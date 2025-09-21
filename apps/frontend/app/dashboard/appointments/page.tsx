@@ -3,20 +3,23 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { AppLayout } from '@/components/app/AppLayout';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { appointmentsAPI } from '@/lib/api/appointments';
+import { workSchedulesAPI } from '@/lib/api/work-schedules';
 import { cn } from '@/lib/utils';
 import type {
   Appointment,
-  AppointmentPriority,
   AppointmentStatus,
   AppointmentsQuery,
 } from '@/lib/types/appointments';
+import type { WorkSchedule } from '@/lib/types/work-schedules';
 import { APPOINTMENT_STATUS_LABELS } from '@/lib/types/appointments';
 import { 
   CalendarDays, 
@@ -25,12 +28,15 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Clock,
-  Users,
-  Calendar,
   Zap,
-  CheckCircle
+  CheckCircle,
+  Search,
+  Filter,
+  Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
 import { AppointmentCreateDialog } from '@/components/appointments/appointment-create-dialog';
+import { MechanicSelect, type MechanicOption } from '@/components/appointments/selects/MechanicSelect';
 
 type CalendarView = 'day' | 'week' | 'month';
 
@@ -40,14 +46,55 @@ const VIEW_LABELS: Record<CalendarView, string> = {
   month: 'Месяц'
 };
 
-// Time slots for day/week view
-const TIME_SLOTS = Array.from({ length: 24 }, (_, i) => {
-  const hour = i.toString().padStart(2, '0');
-  return `${hour}:00`;
-});
+// Local date to YYYY-MM-DD (без UTC-сдвига)
+function toYMD(d: Date) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Парсинг часов: старт округляем вниз (floor), конец — вверх (ceil) до часа
+function parseStartHour(hhmm?: string): number | null {
+  if (!hhmm || typeof hhmm !== 'string') return null;
+  const [h, m] = hhmm.split(':').map((x) => parseInt(x || '0', 10));
+  if (Number.isNaN(h) || h < 0 || h > 23) return null;
+  if (Number.isNaN(m) || m < 0 || m > 59) return Math.max(0, Math.min(23, h));
+  return Math.max(0, Math.min(23, h)); // floor
+}
+function parseEndHour(hhmm?: string): number | null {
+  if (!hhmm || typeof hhmm !== 'string') return null;
+  const [h, m] = hhmm.split(':').map((x) => parseInt(x || '0', 10));
+  if (Number.isNaN(h) || h < 0 || h > 23) return null;
+  if (Number.isNaN(m) || m < 0 || m > 59) return Math.max(0, Math.min(23, h));
+  return Math.max(0, Math.min(23, m === 0 ? h : h + 1)); // ceil
+}
+
+function makeTimeSlots(minHour: number, maxHour: number): string[] {
+  const start = Math.max(0, Math.min(23, minHour));
+  const end = Math.max(start, Math.min(23, maxHour));
+  const arr: string[] = [];
+  for (let h = start; h <= end; h++) {
+    arr.push(`${String(h).padStart(2, '0')}:00`);
+  }
+  return arr;
+}
+
+function getEnvDefaultRange(): { min: number; max: number } {
+  const min = Number(process.env.NEXT_PUBLIC_CALENDAR_DEFAULT_MIN_HOUR ?? 8);
+  const max = Number(process.env.NEXT_PUBLIC_CALENDAR_DEFAULT_MAX_HOUR ?? 18);
+  const safeMin = Number.isFinite(min) ? Math.max(0, Math.min(23, min)) : 8;
+  const safeMax = Number.isFinite(max) ? Math.max(safeMin, Math.min(23, max)) : Math.max(safeMin, 18);
+  return { min: safeMin, max: safeMax };
+}
+
+const LS_KEY_ALL_HOURS = 'dc.appts.showAllHours';
 
 export default function AppointmentsPage() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const canCreate = useMemo(() => {
     const r = user?.role?.name || '';
@@ -64,63 +111,96 @@ export default function AppointmentsPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<AppointmentStatus | ''>('');
+  const [mechanic, setMechanic] = useState<MechanicOption | null>(null);
 
   const [openCreate, setOpenCreate] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<{ date: Date; time: string } | null>(null);
+
+  // Work schedules state (for dynamic hours)
+  const [showAllHours, setShowAllHours] = useState(false);
+  // Map dayOfWeek (0..6) -> intervals and hour bounds
+  const [scheduleMap, setScheduleMap] = useState<Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }>>({});
+
+  // Restore "all hours" from URL/localStorage once
+  useEffect(() => {
+    // URL has priority
+    const urlVal = searchParams?.get('all');
+    if (urlVal !== null) {
+      const val = urlVal === '1';
+      setShowAllHours(val);
+      localStorage.setItem(LS_KEY_ALL_HOURS, val ? '1' : '0');
+      return;
+    }
+    // LocalStorage fallback
+    const ls = localStorage.getItem(LS_KEY_ALL_HOURS);
+    if (ls === '1' || ls === '0') {
+      setShowAllHours(ls === '1');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once, after mount
+
+  const updateAllHours = useCallback((val: boolean) => {
+    setShowAllHours(val);
+    try {
+      localStorage.setItem(LS_KEY_ALL_HOURS, val ? '1' : '0');
+    } catch {}
+    // Update URL param without full reload
+    try {
+      const sp = new URLSearchParams(Array.from(searchParams?.entries?.() || []));
+      if (val) sp.set('all', '1');
+      else sp.delete('all');
+      const qs = sp.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    } catch {}
+  }, [pathname, router, searchParams]);
 
   // Date navigation helpers
   const navigateDate = (direction: 'prev' | 'next' | 'today') => {
     const newDate = new Date(currentDate);
-    
     if (direction === 'today') {
       setCurrentDate(new Date());
       return;
     }
-    
     switch (view) {
-      case 'day': {
-        newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
-        break;
-      }
-      case 'week': {
-        newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
-        break;
-      }
-      case 'month': {
-        newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
-        break;
-      }
+      case 'day': newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1)); break;
+      case 'week': newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7)); break;
+      case 'month': newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1)); break;
     }
-    
     setCurrentDate(newDate);
   };
 
-  // Get displayed date range
-  const getDateRange = () => {
-    const start = new Date(currentDate);
-    const end = new Date(currentDate);
-    
+  // Строки диапазона дат для запроса (стабильные зависимости, без Date-объектов)
+  const { rangeStartStr, rangeEndStr } = useMemo(() => {
+    let start = new Date(currentDate);
+    let end = new Date(currentDate);
+
     switch (view) {
       case 'day':
-        return { start, end };
+        break;
       case 'week': {
-        // Start from Monday
-        const dayOfWeek = start.getDay();
-        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        start.setDate(start.getDate() + diff);
-        end.setDate(start.getDate() + 6);
-        return { start, end };
+        const s = new Date(currentDate);
+        const dayOfWeek = s.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Пн
+        s.setDate(s.getDate() + diff);
+        const e = new Date(s);
+        e.setDate(s.getDate() + 6);
+        start = s;
+        end = e;
+        break;
       }
       case 'month': {
-        start.setDate(1);
-        end.setMonth(end.getMonth() + 1);
-        end.setDate(0);
-        return { start, end };
+        const s = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        const e = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+        start = s;
+        end = e;
+        break;
       }
     }
-  };
 
-  const { start: rangeStart, end: rangeEnd } = getDateRange();
+    return {
+      rangeStartStr: toYMD(start),
+      rangeEndStr: toYMD(end),
+    };
+  }, [currentDate, view]);
 
   // Load appointments
   const loadAppointments = useCallback(async () => {
@@ -129,13 +209,13 @@ export default function AppointmentsPage() {
       const query: AppointmentsQuery = {
         search: search.trim() || undefined,
         status: (status || undefined) as AppointmentStatus | undefined,
-        dateFrom: rangeStart.toISOString().split('T')[0],
-        dateTo: rangeEnd.toISOString().split('T')[0],
+        mechanicId: mechanic?.id || undefined,
+        dateFrom: rangeStartStr,
+        dateTo: rangeEndStr,
         sortField: 'startTime',
         sortOrder: 'asc',
-        limit: 1000, // Load all for calendar view
+        limit: 1000,
       };
-      
       const res = await appointmentsAPI.list(query);
       setItems(res.items || []);
     } catch (e) {
@@ -143,7 +223,61 @@ export default function AppointmentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, status, rangeStart, rangeEnd]);
+  }, [search, status, mechanic?.id, rangeStartStr, rangeEndStr]);
+
+  // Load schedules (for dynamic hours). Рекомендательный характер: мы только визуально подсвечиваем
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+
+    const fetchSchedules = async () => {
+      try {
+        const res = await workSchedulesAPI.getSchedules({ isActive: true, page: 1, limit: 200 });
+        const list = (res.items || []) as WorkSchedule[];
+
+        // Map dayOfWeek -> intervals + bounds
+        const tmp: Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }> = {};
+        for (let d = 0; d <= 6; d++) {
+          tmp[d] = { intervals: [], minHour: 23, maxHour: 0 };
+        }
+
+        list.forEach((s) => {
+          if (s.isDayOff) return;
+          const startH = parseStartHour(s.startTime);
+          const endH = parseEndHour(s.endTime);
+          if (startH === null || endH === null) return;
+          if (endH <= startH) return;
+
+          const day = s.dayOfWeek;
+          tmp[day].intervals.push({ start: startH, end: endH });
+          tmp[day].minHour = Math.min(tmp[day].minHour, startH);
+          tmp[day].maxHour = Math.max(tmp[day].maxHour, endH);
+        });
+
+        // Пустые дни = неизвестно (min/max = -1). Будет фолбэк к дефолту/апп-интервалам
+        for (let d = 0; d <= 6; d++) {
+          if (tmp[d].intervals.length === 0) {
+            tmp[d].minHour = -1;
+            tmp[d].maxHour = -1;
+          }
+        }
+
+        if (!cancelled) setScheduleMap(tmp);
+      } catch (e) {
+        // Если расписание недоступно — помечаем как "неопределено" (fallback ниже)
+        if (!cancelled) {
+          const tmp: Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }> = {};
+          for (let d = 0; d <= 6; d++) {
+            tmp[d] = { intervals: [], minHour: -1, maxHour: -1 };
+          }
+          setScheduleMap(tmp);
+        }
+      }
+    };
+
+    void fetchSchedules();
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -154,30 +288,115 @@ export default function AppointmentsPage() {
   // Filter appointments by search
   const filteredAppointments = useMemo(() => {
     return items.filter(apt => {
-      if (search && !apt.customerName?.toLowerCase().includes(search.toLowerCase()) &&
-          !apt.vehicleInfo?.toLowerCase().includes(search.toLowerCase()) &&
-          !apt.mechanicName?.toLowerCase().includes(search.toLowerCase())) {
+      if (
+        search &&
+        !apt.customerName?.toLowerCase().includes(search.toLowerCase()) &&
+        !apt.vehicleInfo?.toLowerCase().includes(search.toLowerCase()) &&
+        !apt.mechanicName?.toLowerCase().includes(search.toLowerCase())
+      ) {
         return false;
       }
       return true;
     });
   }, [items, search]);
 
-  // Get appointments for specific date/time slot
-  const getSlotAppointments = (date: Date, timeSlot?: string) => {
-    const dateStr = date.toISOString().split('T')[0];
-    
-    return filteredAppointments.filter(apt => {
-      const aptDate = new Date(apt.startTime).toISOString().split('T')[0];
-      if (aptDate !== dateStr) return false;
-      
-      if (timeSlot && view !== 'month') {
-        const aptTime = new Date(apt.startTime).toTimeString().substring(0, 5);
-        const slotHour = timeSlot.split(':')[0];
-        const aptHour = aptTime.split(':')[0];
-        return aptHour === slotHour;
+  const hasAnySchedule = useMemo(
+    () => Object.values(scheduleMap).some((v) => v && v.minHour >= 0 && v.maxHour >= 0),
+    [scheduleMap]
+  );
+
+  // Получить часовой диапазон для конкретной даты (учитывая расписание, либо данные аппов, либо дефолт из env)
+  const getDayHourRange = useCallback((date: Date): { min: number; max: number } => {
+    const dow = date.getDay(); // 0..6
+    const conf = scheduleMap[dow];
+
+    // 1) Если есть интервалы расписания — используем их
+    if (conf && conf.minHour >= 0 && conf.maxHour >= 0) {
+      return { min: conf.minHour, max: conf.maxHour };
+    }
+
+    // 2) Иначе — пробуем вычислить по имеющимся апойнтментам за этот день
+    const dateStr = toYMD(date);
+    const hours: number[] = [];
+    filteredAppointments.forEach((apt) => {
+      const aptDate = toYMD(new Date(apt.startTime));
+      if (aptDate === dateStr) {
+        hours.push(new Date(apt.startTime).getHours());
+        hours.push(new Date(apt.endTime).getHours());
       }
-      
+    });
+    if (hours.length > 0) {
+      const min = Math.max(0, Math.min(...hours));
+      const max = Math.min(23, Math.max(...hours));
+      if (max >= min) return { min, max };
+    }
+
+    // 3) Фоллбек — дефолтные "бизнес-часы" (не 24 часа)
+    return getEnvDefaultRange();
+  }, [scheduleMap, filteredAppointments]);
+
+  // Compute dynamic time slots for current view (either show all 24h or business hours derived from schedules/appointments)
+  const timeSlots = useMemo(() => {
+    if (showAllHours) return makeTimeSlots(0, 23);
+
+    switch (view) {
+      case 'day': {
+        const { min, max } = getDayHourRange(currentDate);
+        return makeTimeSlots(min, max);
+      }
+      case 'week': {
+        const startOfWeek = new Date(currentDate);
+        const dow = startOfWeek.getDay();
+        const diff = dow === 0 ? -6 : 1 - dow;
+        startOfWeek.setDate(startOfWeek.getDate() + diff);
+        let min = 23;
+        let max = 0;
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(startOfWeek);
+          d.setDate(startOfWeek.getDate() + i);
+          const r = getDayHourRange(d);
+          min = Math.min(min, r.min);
+          max = Math.max(max, r.max);
+        }
+        if (max < min) {
+          const def = getEnvDefaultRange();
+          return makeTimeSlots(def.min, def.max);
+        }
+        return makeTimeSlots(min, max);
+      }
+      case 'month':
+        // Month view не использует time slots, вернем любой диапазон — не критично
+        return makeTimeSlots(8, 18);
+    }
+  }, [showAllHours, view, currentDate, getDayHourRange]);
+
+  // Helpers for working/non-working highlight
+  const isWorkingHour = useCallback((date: Date, hour: number): boolean => {
+    const conf = scheduleMap[date.getDay()];
+    if (!conf || conf.intervals.length === 0) {
+      // Нет явного расписания: считаем нейтральным (рабочим), чтобы не "серить" всё
+      return true;
+    }
+    return conf.intervals.some((itv) => hour >= itv.start && hour < itv.end);
+  }, [scheduleMap]);
+
+  // Get appointments for specific date/time slot (локальная дата, без UTC сдвига)
+  const getSlotAppointments = (date: Date, timeSlot?: string) => {
+    const dateStr = toYMD(date);
+    return filteredAppointments.filter(apt => {
+      const aptStart = new Date(apt.startTime);
+      const aptEnd = new Date(apt.endTime);
+      const aptDate = toYMD(aptStart);
+      if (aptDate !== dateStr) return false;
+
+      if (timeSlot && view !== 'month') {
+        const slotHour = parseInt(timeSlot.split(':')[0], 10);
+        const slotStart = new Date(date);
+        slotStart.setHours(slotHour, 0, 0, 0);
+        const slotEnd = new Date(date);
+        slotEnd.setHours(Math.min(23, slotHour + 1), 0, 0, 0);
+        return aptStart < slotEnd && aptEnd > slotStart; // перекрытие слота
+      }
       return true;
     });
   };
@@ -185,7 +404,6 @@ export default function AppointmentsPage() {
   // Get slot status color
   const getSlotStatus = (date: Date, timeSlot?: string) => {
     const appointments = getSlotAppointments(date, timeSlot);
-    
     if (appointments.length === 0) return 'free';
     if (appointments.some(apt => apt.status === 'IN_PROGRESS')) return 'busy';
     if (appointments.some(apt => apt.priority === 'URGENT')) return 'urgent';
@@ -193,15 +411,18 @@ export default function AppointmentsPage() {
   };
 
   const statusColors = {
-    free: 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/30',
-    booked: 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/30',
-    busy: 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/30',
-    urgent: 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/30',
+    free: 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/30',
+    booked: 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/30 hover:bg-blue-100 dark:hover:bg-blue-950/30',
+    busy: 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/30 hover:bg-amber-100 dark:hover:bg-amber-950/30',
+    urgent: 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/30 hover:bg-red-100 dark:hover:bg-red-950/30 animate-pulse',
   };
 
-  const handleSlotClick = (date: Date, timeSlot?: string) => {
+  const nonWorkingClass =
+    'opacity-60 grayscale-[15%] hover:grayscale-0 border-dashed border-muted/50';
+
+  const handleSlotClick = () => {
+    // Рекомендационный характер: можно создавать запись даже вне расписания
     if (canCreate) {
-      setSelectedSlot({ date, time: timeSlot || '09:00' });
       setOpenCreate(true);
     }
   };
@@ -215,6 +436,15 @@ export default function AppointmentsPage() {
     return formatter.format(currentDate);
   };
 
+  // Calculate stats
+  const stats = useMemo(() => {
+    const total = filteredAppointments.length;
+    const inProgress = filteredAppointments.filter(apt => apt.status === 'IN_PROGRESS').length;
+    const urgent = filteredAppointments.filter(apt => apt.priority === 'URGENT').length;
+    const completed = filteredAppointments.filter(apt => apt.status === 'COMPLETED').length;
+    return { total, inProgress, urgent, completed };
+  }, [filteredAppointments]);
+
   const headerActions = (
     <div className="flex items-center gap-2">
       <Button
@@ -225,7 +455,6 @@ export default function AppointmentsPage() {
         <RefreshCw className="w-4 h-4 mr-2" />
         Обновить
       </Button>
-      
       {canCreate && (
         <Button 
           className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]"
@@ -238,13 +467,19 @@ export default function AppointmentsPage() {
     </div>
   );
 
+  // "Сейчас" — подсветка текущего часа
+  const now = new Date();
+  const isTodayCurrent = now.toDateString() === currentDate.toDateString();
+  const currentHour = now.getHours();
+  const nowSlotClass = 'ring-2 ring-primary/50';
+
   if (authLoading) {
     return (
       <AppLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="flex items-center gap-3">
             <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-            <span className="text-muted-foreground">Загрузка...</span>
+            <span className="text-muted-foreground">Загрузка календаря...</span>
           </div>
         </div>
       </AppLayout>
@@ -260,30 +495,27 @@ export default function AppointmentsPage() {
     >
       <div className="container mx-auto px-6 py-6 space-y-6">
         {/* Calendar Feature Badge */}
-        <Card className="p-4 glass border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 to-primary/5 rounded-3xl">
+        <Card className="p-4 glass border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-3xl">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-primary">
-              <Calendar className="w-5 h-5 text-white" />
+            <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500">
+              <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-indigo-600 dark:text-indigo-400">Календарная сетка с цветовым кодированием</h3>
+              <h3 className="font-semibold text-indigo-600 dark:text-indigo-400">Календарная сетка с динамичными часами</h3>
               <p className="text-sm text-muted-foreground">
-                Зеленый (свободно), синий (занято), желтый (в работе), красный (срочно). Клик для быстрого создания записи.
+                Поддержка 24/7 и ночных смен. Нерабочие часы подсвечиваются, но не блокируются — всё рекомендательно.
               </p>
+              {!hasAnySchedule && !showAllHours && (
+                <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  Расписание не задано — показаны дефолтные бизнес‑часы ({getEnvDefaultRange().min}:00–{getEnvDefaultRange().max}:00)
+                </div>
+              )}
             </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/30">
-                <CheckCircle className="w-3 h-3 mr-1" />
-                Свободно
-              </Badge>
-              <Badge variant="outline" className="bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/30">
-                <Clock className="w-3 h-3 mr-1" />
-                Занято
-              </Badge>
-              <Badge variant="outline" className="bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/30">
-                <Zap className="w-3 h-3 mr-1" />
-                Срочно
-              </Badge>
+            <div className="ml-auto flex items-center gap-3">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Все 24 часа</span>
+                <Switch checked={showAllHours} onCheckedChange={updateAllHours} />
+              </div>
             </div>
           </div>
         </Card>
@@ -293,33 +525,16 @@ export default function AppointmentsPage() {
           <div className="flex flex-col lg:flex-row gap-4">
             {/* Navigation */}
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                className="rounded-xl btn-outline-fixed"
-                onClick={() => navigateDate('prev')}
-              >
+              <Button variant="outline" className="rounded-xl btn-outline-fixed" onClick={() => navigateDate('prev')}>
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              
-              <Button
-                variant="outline"
-                className="rounded-xl btn-outline-fixed min-w-[120px]"
-                onClick={() => navigateDate('today')}
-              >
+              <Button variant="outline" className="rounded-xl btn-outline-fixed min-w-[120px]" onClick={() => navigateDate('today')}>
                 Сегодня
               </Button>
-              
-              <Button
-                variant="outline"
-                className="rounded-xl btn-outline-fixed"
-                onClick={() => navigateDate('next')}
-              >
+              <Button variant="outline" className="rounded-xl btn-outline-fixed" onClick={() => navigateDate('next')}>
                 <ChevronRight className="w-4 h-4" />
               </Button>
-              
-              <div className="text-lg font-semibold ml-4">
-                {formatDateHeader()}
-              </div>
+              <div className="text-lg font-semibold ml-4">{formatDateHeader()}</div>
             </div>
 
             {/* View Toggles */}
@@ -329,7 +544,10 @@ export default function AppointmentsPage() {
                   key={v}
                   variant={view === v ? 'default' : 'ghost'}
                   size="sm"
-                  className="rounded-lg text-xs"
+                  className={cn(
+                    "rounded-lg text-xs transition-all duration-300",
+                    view === v && "bg-gradient-primary text-white shadow-glass"
+                  )}
                   onClick={() => setView(v)}
                 >
                   {VIEW_LABELS[v]}
@@ -343,26 +561,87 @@ export default function AppointmentsPage() {
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Поиск..."
-                  className="w-40 h-8 rounded-xl text-sm"
+                  placeholder="Поиск записей..."
+                  className="w-48 h-8 rounded-xl text-sm pl-8"
                 />
+                <Search className="w-4 h-4 absolute left-2.5 top-2 text-muted-foreground" />
               </div>
-              
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as AppointmentStatus | '')}
-                className="h-8 rounded-xl border border-border/50 bg-background text-sm px-2"
-              >
-                <option value="">Все статусы</option>
-                {(Object.keys(APPOINTMENT_STATUS_LABELS) as AppointmentStatus[]).map((s) => (
-                  <option key={s} value={s}>
-                    {APPOINTMENT_STATUS_LABELS[s]}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as AppointmentStatus | '')}
+                  className="h-8 rounded-xl border border-border/50 bg-background text-sm px-3 pr-8 appearance-none"
+                >
+                  <option value="">Все статусы</option>
+                  {(Object.keys(APPOINTMENT_STATUS_LABELS) as AppointmentStatus[]).map((s) => (
+                    <option key={s} value={s}>
+                      {APPOINTMENT_STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+                <Filter className="w-3 h-3 absolute right-2.5 top-2.5 text-muted-foreground pointer-events-none" />
+              </div>
+              {/* Mechanic filter */}
+              <div className="w-56">
+                <MechanicSelect value={mechanic} onChange={setMechanic} placeholder="Фильтр: мастер" />
+              </div>
             </div>
           </div>
         </Card>
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-blue-500/20">
+                <CalendarDays className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Всего записей</div>
+                <div className="text-xl font-bold">{stats.total}</div>
+              </div>
+            </div>
+          </Card>
+          
+          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/20">
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">В работе</div>
+                <div className="text-xl font-bold">{stats.inProgress}</div>
+              </div>
+            </div>
+          </Card>
+          
+          <Card className={cn(
+            "p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300",
+            stats.urgent > 0 && "border-red-500/30 bg-red-500/5"
+          )}>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-red-500/20">
+                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Срочные</div>
+                <div className="text-xl font-bold">{stats.urgent}</div>
+              </div>
+            </div>
+          </Card>
+          
+          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-emerald-500/20">
+                <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Завершено</div>
+                <div className="text-xl font-bold">{stats.completed}</div>
+              </div>
+            </div>
+          </Card>
+        </div>
 
         {/* Calendar Grid */}
         <Card className="p-0 glass border-border/30 rounded-3xl surface-glow overflow-hidden">
@@ -387,7 +666,12 @@ export default function AppointmentsPage() {
                 onSlotClick={handleSlotClick}
                 getSlotStatus={getSlotStatus}
                 statusColors={statusColors}
-                timeSlots={TIME_SLOTS}
+                timeSlots={timeSlots}
+                isWorkingHour={isWorkingHour}
+                nonWorkingClass={nonWorkingClass}
+                isTodayCurrent={isTodayCurrent}
+                currentHour={currentHour}
+                nowSlotClass={nowSlotClass}
               />}
               
               {view === 'day' && <DayView 
@@ -396,68 +680,16 @@ export default function AppointmentsPage() {
                 onSlotClick={handleSlotClick}
                 getSlotStatus={getSlotStatus}
                 statusColors={statusColors}
-                timeSlots={TIME_SLOTS}
+                timeSlots={timeSlots}
+                isWorkingHour={isWorkingHour}
+                nonWorkingClass={nonWorkingClass}
+                isTodayCurrent={isTodayCurrent}
+                currentHour={currentHour}
+                nowSlotClass={nowSlotClass}
               />}
             </div>
           )}
         </Card>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="p-4 glass border-border/30 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-emerald-500/20">
-                <CheckCircle className="w-5 h-5 text-emerald-500" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Свободных слотов</div>
-                <div className="text-xl font-bold">
-                  {view === 'month' ? '...' : TIME_SLOTS.length - Math.min(TIME_SLOTS.length, filteredAppointments.length)}
-                </div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4 glass border-border/30 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-blue-500/20">
-                <Clock className="w-5 h-5 text-blue-500" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Всего записей</div>
-                <div className="text-xl font-bold">{filteredAppointments.length}</div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4 glass border-border/30 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-amber-500/20">
-                <Users className="w-5 h-5 text-amber-500" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">В работе</div>
-                <div className="text-xl font-bold">
-                  {filteredAppointments.filter(apt => apt.status === 'IN_PROGRESS').length}
-                </div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4 glass border-border/30 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-red-500/20">
-                <Zap className="w-5 h-5 text-red-500" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Срочные</div>
-                <div className="text-xl font-bold">
-                  {filteredAppointments.filter(apt => apt.priority === 'URGENT').length}
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
       </div>
 
       <AppointmentCreateDialog
@@ -465,12 +697,18 @@ export default function AppointmentsPage() {
         onOpenChange={setOpenCreate}
         onCreated={() => {
           loadAppointments();
-          setSelectedSlot(null);
         }}
       />
     </AppLayout>
   );
 }
+
+type MonthDay = {
+  date: Date;
+  appointments: Appointment[];
+  isCurrentMonth: boolean;
+  isToday: boolean;
+};
 
 // Month View Component
 function MonthView({ 
@@ -482,7 +720,7 @@ function MonthView({
 }: {
   currentDate: Date;
   appointments: Appointment[];
-  onSlotClick: (date: Date) => void;
+  onSlotClick: () => void;
   getSlotStatus: (date: Date) => keyof typeof statusColors;
   statusColors: Record<string, string>;
 }) {
@@ -495,11 +733,11 @@ function MonthView({
   const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
   startDate.setDate(startDate.getDate() + diff);
 
-  const weeks = [];
+  const weeks: MonthDay[][] = [];
   const currentWeekDate = new Date(startDate);
 
   for (let week = 0; week < 6; week++) {
-    const days = [];
+    const days: MonthDay[] = [];
     for (let day = 0; day < 7; day++) {
       const date = new Date(currentWeekDate);
       const dayAppointments = appointments.filter(apt => {
@@ -517,8 +755,6 @@ function MonthView({
       currentWeekDate.setDate(currentWeekDate.getDate() + 1);
     }
     weeks.push(days);
-    
-    // Stop if we've passed the end of the month and completed the week
     if (currentWeekDate > lastDay && days.length === 6) break;
   }
 
@@ -526,7 +762,6 @@ function MonthView({
 
   return (
     <div className="space-y-2">
-      {/* Weekday headers */}
       <div className="grid grid-cols-7 gap-2 mb-4">
         {weekdays.map(day => (
           <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
@@ -535,23 +770,21 @@ function MonthView({
         ))}
       </div>
 
-      {/* Calendar grid */}
       <div className="space-y-2">
         {weeks.map((week, weekIndex) => (
           <div key={weekIndex} className="grid grid-cols-7 gap-2">
             {week.map(({ date, appointments: dayAppointments, isCurrentMonth, isToday }) => {
               const status = getSlotStatus(date);
-              
               return (
                 <div
                   key={date.toISOString()}
                   className={cn(
-                    "min-h-[80px] p-2 rounded-2xl border transition-all duration-200 cursor-pointer hover:scale-[1.02]",
+                    "min-h-[80px] p-2 rounded-2xl border transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:shadow-glass",
                     statusColors[status],
                     !isCurrentMonth && "opacity-50",
                     isToday && "ring-2 ring-primary/50"
                   )}
-                  onClick={() => onSlotClick(date)}
+                  onClick={onSlotClick}
                 >
                   <div className={cn(
                     "text-sm font-medium mb-1",
@@ -561,7 +794,7 @@ function MonthView({
                   </div>
                   
                   <div className="space-y-1">
-                    {dayAppointments.slice(0, 2).map(apt => (
+                    {dayAppointments.slice(0, 2).map((apt: Appointment) => (
                       <Link
                         key={apt.id}
                         href={`/dashboard/appointments/${apt.id}`}
@@ -601,16 +834,25 @@ function WeekView({
   onSlotClick, 
   getSlotStatus, 
   statusColors, 
-  timeSlots 
+  timeSlots,
+  isWorkingHour,
+  nonWorkingClass,
+  isTodayCurrent,
+  currentHour,
+  nowSlotClass,
 }: {
   currentDate: Date;
   appointments: Appointment[];
-  onSlotClick: (date: Date, time: string) => void;
+  onSlotClick: () => void;
   getSlotStatus: (date: Date, time: string) => keyof typeof statusColors;
   statusColors: Record<string, string>;
   timeSlots: string[];
+  isWorkingHour: (date: Date, hour: number) => boolean;
+  nonWorkingClass: string;
+  isTodayCurrent: boolean;
+  currentHour: number;
+  nowSlotClass: string;
 }) {
-  // Get week dates (Monday to Sunday)
   const startOfWeek = new Date(currentDate);
   const dayOfWeek = startOfWeek.getDay();
   const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -624,9 +866,10 @@ function WeekView({
 
   const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
+  const todayStr = new Date().toDateString();
+
   return (
     <div className="space-y-2">
-      {/* Week headers */}
       <div className="grid grid-cols-8 gap-2 mb-4">
         <div className="text-sm font-medium text-muted-foreground py-2">Время</div>
         {weekDates.map((date, index) => (
@@ -634,7 +877,7 @@ function WeekView({
             <div className="text-sm font-medium text-muted-foreground">{weekdays[index]}</div>
             <div className={cn(
               "text-lg font-bold",
-              date.toDateString() === new Date().toDateString() && "text-primary"
+              date.toDateString() === todayStr && "text-primary"
             )}>
               {date.getDate()}
             </div>
@@ -642,73 +885,95 @@ function WeekView({
         ))}
       </div>
 
-      {/* Time slots */}
-      <div className="space-y-1 max-h-[600px] overflow-y-auto">
-        {timeSlots.filter((_, i) => i >= 8 && i <= 18).map(timeSlot => (
-          <div key={timeSlot} className="grid grid-cols-8 gap-2">
-            <div className="text-sm text-muted-foreground py-2 font-mono">
-              {timeSlot}
-            </div>
-            
-            {weekDates.map(date => {
-              const status = getSlotStatus(date, timeSlot);
-              const slotAppointments = appointments.filter(apt => {
-                const aptDate = new Date(apt.startTime).toDateString();
-                const aptTime = new Date(apt.startTime).toTimeString().substring(0, 5);
-                const slotHour = timeSlot.split(':')[0];
-                const aptHour = aptTime.split(':')[0];
-                return aptDate === date.toDateString() && aptHour === slotHour;
-              });
+      <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
+        {timeSlots.map(timeSlot => {
+          const slotHour = parseInt(timeSlot.split(':')[0], 10);
+          return (
+            <div key={timeSlot} className="grid grid-cols-8 gap-2">
+              <div className={cn(
+                "text-sm text-muted-foreground py-2 font-mono rounded-md px-1",
+                isTodayCurrent && slotHour === currentHour && nowSlotClass
+              )}>
+                {timeSlot}
+              </div>
+              {weekDates.map(date => {
+                const status = getSlotStatus(date, timeSlot);
+                const working = isWorkingHour(date, slotHour);
+                const isNow = date.toDateString() === todayStr && slotHour === currentHour;
 
-              return (
-                <div
-                  key={`${date.toISOString()}-${timeSlot}`}
-                  className={cn(
-                    "min-h-[40px] p-1 rounded-xl border cursor-pointer hover:scale-[1.02] transition-all duration-200",
-                    statusColors[status]
-                  )}
-                  onClick={() => onSlotClick(date, timeSlot)}
-                >
-                  {slotAppointments.map(apt => (
-                    <Link
-                      key={apt.id}
-                      href={`/dashboard/appointments/${apt.id}`}
-                      className="block text-xs p-1 rounded bg-white/60 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="font-medium truncate">{apt.customerName}</div>
-                    </Link>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        ))}
+                const slotAppointments = appointments.filter(apt => {
+                  const aptStart = new Date(apt.startTime);
+                  const aptEnd = new Date(apt.endTime);
+                  const slotStart = new Date(date);
+                  slotStart.setHours(slotHour, 0, 0, 0);
+                  const slotEnd = new Date(date);
+                  slotEnd.setHours(Math.min(23, slotHour + 1), 0, 0, 0);
+                  return aptStart < slotEnd && aptEnd > slotStart;
+                });
+
+                return (
+                  <div
+                    key={`${date.toISOString()}-${timeSlot}`}
+                    className={cn(
+                      "min-h-[40px] p-1 rounded-xl border cursor-pointer transition-all duration-300 hover:scale-[1.02]",
+                      statusColors[status],
+                      !working && nonWorkingClass,
+                      isNow && nowSlotClass
+                    )}
+                    onClick={onSlotClick}
+                    title={!working ? 'Вне рабочего времени (рекомендация). Создание записи не блокируется.' : undefined}
+                  >
+                    {slotAppointments.map(apt => (
+                      <Link
+                        key={apt.id}
+                        href={`/dashboard/appointments/${apt.id}`}
+                        className="block text-xs p-1 rounded bg-white/60 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="font-medium truncate">{apt.customerName}</div>
+                      </Link>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// Day View Component  
+// Day View Component
 function DayView({ 
   currentDate, 
   appointments, 
   onSlotClick, 
   getSlotStatus, 
   statusColors, 
-  timeSlots 
+  timeSlots,
+  isWorkingHour,
+  nonWorkingClass,
+  isTodayCurrent,
+  currentHour,
+  nowSlotClass,
 }: {
   currentDate: Date;
   appointments: Appointment[];
-  onSlotClick: (date: Date, time: string) => void;
+  onSlotClick: () => void;
   getSlotStatus: (date: Date, time: string) => keyof typeof statusColors;
   statusColors: Record<string, string>;
   timeSlots: string[];
+  isWorkingHour: (date: Date, hour: number) => boolean;
+  nonWorkingClass: string;
+  isTodayCurrent: boolean;
+  currentHour: number;
+  nowSlotClass: string;
 }) {
-  const dayAppointments = appointments.filter(apt => {
-    const aptDate = new Date(apt.startTime).toDateString();
-    return aptDate === currentDate.toDateString();
-  });
+  const dayAppointments = useMemo(() => {
+    const dateStr = currentDate.toDateString();
+    return appointments.filter(apt => new Date(apt.startTime).toDateString() === dateStr);
+  }, [appointments, currentDate]);
 
   return (
     <div className="space-y-2">
@@ -723,29 +988,36 @@ function DayView({
         </div>
       </div>
 
-      <div className="space-y-1 max-h-[600px] overflow-y-auto">
-        {timeSlots.filter((_, i) => i >= 8 && i <= 18).map(timeSlot => {
+      <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
+        {timeSlots.map(timeSlot => {
+          const slotHour = parseInt(timeSlot.split(':')[0], 10);
           const status = getSlotStatus(currentDate, timeSlot);
+          const working = isWorkingHour(currentDate, slotHour);
+          const isNow = isTodayCurrent && slotHour === currentHour;
+
           const slotAppointments = dayAppointments.filter(apt => {
-            const aptTime = new Date(apt.startTime).toTimeString().substring(0, 5);
-            const slotHour = timeSlot.split(':')[0];
-            const aptHour = aptTime.split(':')[0];
-            return aptHour === slotHour;
+            const aptStart = new Date(apt.startTime);
+            const aptEnd = new Date(apt.endTime);
+            const slotStart = new Date(currentDate);
+            slotStart.setHours(slotHour, 0, 0, 0);
+            const slotEnd = new Date(currentDate);
+            slotEnd.setHours(Math.min(23, slotHour + 1), 0, 0, 0);
+            return aptStart < slotEnd && aptEnd > slotStart;
           });
 
           return (
             <div
               key={timeSlot}
               className={cn(
-                "flex items-center gap-4 min-h-[60px] p-4 rounded-2xl border cursor-pointer hover:scale-[1.01] transition-all duration-200",
-                statusColors[status]
+                "flex items-center gap-4 min-h-[60px] p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:scale-[1.01] hover:shadow-glass",
+                statusColors[status],
+                !working && nonWorkingClass,
+                isNow && nowSlotClass
               )}
-              onClick={() => onSlotClick(currentDate, timeSlot)}
+              onClick={onSlotClick}
+              title={!working ? 'Вне рабочего времени (рекомендация). Создание записи не блокируется.' : undefined}
             >
-              <div className="text-lg font-mono font-medium w-20">
-                {timeSlot}
-              </div>
-              
+              <div className="text-lg font-mono font-medium w-20">{timeSlot}</div>
               <div className="flex-1 space-y-2">
                 {slotAppointments.length === 0 ? (
                   <div className="text-muted-foreground italic">Свободно</div>

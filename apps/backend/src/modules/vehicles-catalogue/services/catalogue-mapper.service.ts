@@ -1,100 +1,110 @@
 // path: apps/backend/src/modules/vehicles-catalogue/services/catalogue-mapper.service.ts
 import { Injectable } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+
 import { VehicleBrand, VehicleModel, VehicleType } from '../../../database/entities';
+
 import { BrandResponseDto } from '../dto/brands/brand-response.dto';
 import { ModelResponseDto } from '../dto/models/model-response.dto';
 import { TypeResponseDto } from '../dto/types/type-response.dto';
 
 @Injectable()
 export class CatalogueMapperService {
-  // ====== BRANDS MAPPING ======
-
+  // ===== BRANDS =====
   mapBrandToResponseDto(brand: VehicleBrand): BrandResponseDto {
-    return {
+    if (!brand) return undefined as unknown as BrandResponseDto;
+
+    return plainToInstance(BrandResponseDto, {
       id: brand.id,
       name: brand.name,
-      country: brand.country,
-      logoUrl: brand.logoUrl,
-      isActive: brand.isActive,
+      country: brand.country ?? null,
+      logoUrl: brand.logoUrl ?? null,
+      isActive: brand.isActive ?? true,
+      isVerified: brand.isVerified ?? false,
       createdAt: brand.createdAt,
       updatedAt: brand.updatedAt,
-      modelsCount: Array.isArray((brand as any).models) ? (brand as any).models.length : undefined,
-    };
+    });
   }
 
   mapBrandsArrayToResponseDto(brands: VehicleBrand[]): BrandResponseDto[] {
-    return brands.map((brand) => this.mapBrandToResponseDto(brand));
+    if (!Array.isArray(brands) || brands.length === 0) return [];
+    return brands.map((b) => this.mapBrandToResponseDto(b));
   }
-
-  // ====== MODELS MAPPING ======
-
-  mapModelToResponseDto(model: VehicleModel): ModelResponseDto {
-    const dto: ModelResponseDto = {
-      id: model.id,
-      brandId: model.brandId,
-      name: model.name,
-      yearFrom: model.yearFrom,
-      yearTo: model.yearTo,
-      class: model.class,
-      isActive: model.isActive,
-      createdAt: model.createdAt,
-      updatedAt: model.updatedAt,
-      vehiclesCount: Array.isArray((model as any).vehicles) ? (model as any).vehicles.length : undefined,
-    };
-
-    if (model.brand) {
-      dto.brand = this.mapBrandToResponseDto(model.brand);
-      dto.fullName = `${model.brand.name} ${model.name}`;
-    }
-
-    return dto;
-  }
-
-  mapModelsArrayToResponseDto(models: VehicleModel[]): ModelResponseDto[] {
-    return models.map((model) => this.mapModelToResponseDto(model));
-  }
-
-  // ====== TYPES MAPPING ======
-
-  mapTypeToResponseDto(type: VehicleType): TypeResponseDto {
-    return {
-      id: type.id,
-      name: type.name,
-      description: type.description,
-      isActive: type.isActive,
-      createdAt: type.createdAt,
-      updatedAt: type.updatedAt,
-      vehiclesCount: Array.isArray((type as any).vehicles) ? (type as any).vehicles.length : undefined,
-    };
-  }
-
-  mapTypesArrayToResponseDto(types: VehicleType[]): TypeResponseDto[] {
-    return types.map((type) => this.mapTypeToResponseDto(type));
-  }
-
-  // ====== UTILITY MAPPING ======
 
   mapBrandToSelectOption(brand: VehicleBrand): { value: string; label: string; disabled?: boolean } {
     return {
       value: brand.id,
       label: brand.name,
-      disabled: !brand.isActive,
+      disabled: brand.isActive === false || (brand as any).isDeleted === true,
     };
   }
 
+  // ===== MODELS =====
+  mapModelToResponseDto(model: VehicleModel): ModelResponseDto {
+    if (!model) return undefined as unknown as ModelResponseDto;
+
+    // Если relation brand подгружен — положим нормализованный BrandResponseDto
+    const brand = (model as any).brand as VehicleBrand | undefined;
+    const brandDto = brand ? this.mapBrandToResponseDto(brand) : undefined;
+
+    const fullName = brandDto?.name ? `${brandDto.name} ${model.name}` : model.name;
+
+    return plainToInstance(ModelResponseDto, {
+      id: model.id,
+      brandId: model.brandId,
+      name: model.name,
+      yearFrom: model.yearFrom ?? null,
+      yearTo: model.yearTo ?? null,
+      class: model.class ?? null,
+      isActive: model.isActive ?? true,
+      isVerified: model.isVerified ?? false,
+      createdAt: model.createdAt,
+      updatedAt: model.updatedAt,
+      brand: brandDto,
+      fullName,
+    });
+  }
+
+  mapModelsArrayToResponseDto(models: VehicleModel[]): ModelResponseDto[] {
+    if (!Array.isArray(models) || models.length === 0) return [];
+    return models.map((m) => this.mapModelToResponseDto(m));
+  }
+
   mapModelToSelectOption(model: VehicleModel): { value: string; label: string; disabled?: boolean } {
+    const brand = (model as any).brand as VehicleBrand | undefined;
+    const label = brand?.name ? `${brand.name} ${model.name}` : model.name;
     return {
       value: model.id,
-      label: model.brand ? `${model.brand.name} ${model.name}` : model.name,
-      disabled: !model.isActive,
+      label,
+      disabled: model.isActive === false || (model as any).isDeleted === true,
     };
+  }
+
+  // ===== TYPES =====
+  mapTypeToResponseDto(type: VehicleType): TypeResponseDto {
+    if (!type) return undefined as unknown as TypeResponseDto;
+
+    return plainToInstance(TypeResponseDto, {
+      id: type.id,
+      name: type.name,
+      description: type.description ?? null,
+      isActive: type.isActive ?? true,
+      isVerified: type.isVerified ?? false,
+      createdAt: type.createdAt,
+      updatedAt: type.updatedAt,
+    });
+  }
+
+  mapTypesArrayToResponseDto(types: VehicleType[]): TypeResponseDto[] {
+    if (!Array.isArray(types) || types.length === 0) return [];
+    return types.map((t) => this.mapTypeToResponseDto(t));
   }
 
   mapTypeToSelectOption(type: VehicleType): { value: string; label: string; disabled?: boolean } {
     return {
       value: type.id,
       label: type.name,
-      disabled: !type.isActive,
+      disabled: type.isActive === false || (type as any).isDeleted === true,
     };
   }
 }

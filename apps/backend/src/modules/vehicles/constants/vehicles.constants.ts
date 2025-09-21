@@ -42,6 +42,12 @@ export const VEHICLES_CONSTANTS = {
     SERVICE_HISTORY_INTEGRATION: true,
     MILEAGE_TRACKING: true,
   },
+
+  PUBLIC: {
+    MIN_SEARCH_LENGTH: 2,
+    // Публичный поиск без ПДн: по бренду/модели/типу/цвету
+    SEARCHABLE_FIELDS: ['model.name', 'brand.name', 'vehicleType.name', 'vehicle.color'],
+  },
 } as const;
 
 export const VEHICLE_ENGINE_TYPES = {
@@ -61,4 +67,11 @@ export const VEHICLE_SEARCH_FIELDS = [
   'customer.companyName',
   'model.name',
   'model.brand.name',
+] as const;
+
+export const VEHICLE_PUBLIC_SEARCH_FIELDS = [
+  'model.name',
+  'model.brand.name',
+  'vehicleType.name',
+  'vehicle.color',
 ] as const;

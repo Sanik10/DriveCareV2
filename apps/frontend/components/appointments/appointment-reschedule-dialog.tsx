@@ -1,7 +1,7 @@
 // path: apps/frontend/components/appointments/appointment-reschedule-dialog.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -41,6 +41,14 @@ export function AppointmentRescheduleDialog({
   const [startLocal, setStartLocal] = useState<string>(() => toLocalInputValue(startTime));
   const [endLocal, setEndLocal] = useState<string>(() => toLocalInputValue(endTime));
 
+  // Синхронизация при открытии/смене входных значений
+  useEffect(() => {
+    if (open) {
+      setStartLocal(toLocalInputValue(startTime));
+      setEndLocal(toLocalInputValue(endTime));
+    }
+  }, [open, startTime, endTime]);
+
   const canSubmit = useMemo(() => {
     const s = toIsoFromLocal(startLocal);
     const e = toIsoFromLocal(endLocal);
@@ -74,12 +82,16 @@ export function AppointmentRescheduleDialog({
             Отмена
           </Button>
           <Button
-            disabled={!canSubmit || loading}
+            disabled={!canSubmit || !!loading}
             onClick={async () => {
               const s = toIsoFromLocal(startLocal)!;
               const e = toIsoFromLocal(endLocal)!;
-              await onConfirm(s, e);
-              onOpenChange(false);
+              try {
+                await onConfirm(s, e);
+                onOpenChange(false);
+              } catch {
+                // Ошибка обработается выше (toast). Диалог оставляем открытым.
+              }
             }}
           >
             {loading ? 'Перенос...' : 'Перенести'}

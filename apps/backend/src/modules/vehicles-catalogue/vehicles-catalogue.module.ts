@@ -11,14 +11,15 @@ import { CatalogueValidationService } from './services/catalogue-validation.serv
 import { CatalogueMapperService } from './services/catalogue-mapper.service';
 import { VehicleBrand, VehicleModel, VehicleType, Vehicle } from '../../database/entities';
 import { AuditService } from '../../common/audit/audit.service';
+import { ExternalCatalogueService } from './services/external-catalogue.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      VehicleBrand,    // 🔒 Основная entity для брендов
-      VehicleModel,    // 🔒 Основная entity для моделей  
-      VehicleType,     // 🔒 Основная entity для типов
-      Vehicle,         // 🔥 ОБЯЗАТЕЛЬНО: для проверки связей при удалении
+      VehicleBrand,
+      VehicleModel,
+      VehicleType,
+      Vehicle,
     ]),
   ],
   controllers: [VehiclesCatalogueController],
@@ -31,6 +32,7 @@ import { AuditService } from '../../common/audit/audit.service';
     CatalogueValidationService,
     CatalogueMapperService,
     AuditService,
+    ExternalCatalogueService,
   ],
   exports: [
     VehiclesCatalogueService,
@@ -38,6 +40,7 @@ import { AuditService } from '../../common/audit/audit.service';
     ModelsDataService,
     TypesDataService,
     CatalogueMapperService,
+    ExternalCatalogueService,
   ],
 })
 export class VehiclesCatalogueModule {}

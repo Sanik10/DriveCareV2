@@ -7,10 +7,13 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { AppLayout } from '@/components/app/AppLayout';
-import { CustomerTimeline, type TimelineEvent } from '@/components/customers/CustomerTimeline';
+import { CustomerTimeline } from '@/components/customers/CustomerTimeline';
+import type { TimelineEvent } from '@/lib/types/customers';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { customersAPI } from '@/lib/api/customers';
 import { vehiclesAPI } from '@/lib/api/vehicles';
+import { appointmentsAPI } from '@/lib/api/appointments';
+import { cn } from '@/lib/utils';
 import type { CustomerResponse } from '@/lib/types/customers';
 import type { VehicleResponse } from '@/lib/types/vehicles';
 import { 
@@ -28,7 +31,6 @@ import {
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { OrderCreateDialog } from '@/components/orders/order-create-dialog';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 
 export default function CustomerDetailsPage() {
   const params = useParams<{ id: string }>();
@@ -51,76 +53,168 @@ export default function CustomerDetailsPage() {
 
   useEffect(() => setIsMounted(true), []);
 
-  // Generate sample timeline events (in real app this would come from API)
-  const generateTimelineEvents = (customer: CustomerResponse, vehicles: VehicleResponse[]): TimelineEvent[] => {
-    const events: TimelineEvent[] = []
-    
-    // Customer registration
+  type OrderLite = {
+    id: string;
+    number?: string;
+    title?: string;
+    description?: string;
+    createdAt?: string;
+    updatedAt?: string;
+    status?: string;
+    totalAmount?: number;
+  };
+
+  type InvoiceLite = {
+    id: string;
+    number?: string;
+    createdAt?: string;
+    updatedAt?: string;
+    status?: string;
+    total?: number;
+    totalAmount?: number;
+  };
+
+  type PaymentLite = {
+    id: string;
+    amount?: number;
+    method?: string;
+    createdAt?: string;
+    processedAt?: string;
+    status?: string;
+  };
+
+  // Реальная сборка таймлайна: сначала пробуем бэкенд-эндпоинт, иначе — сборка из доступных API
+  const buildTimelineFallback = async (c: CustomerResponse, v: VehicleResponse[]): Promise<TimelineEvent[]> => {
+    const events: TimelineEvent[] = [];
+
+    // Регистрация клиента
     events.push({
-      id: `reg-${customer.id}`,
+      id: `profile-${c.id}`,
       type: 'profile',
       title: 'Регистрация клиента',
-      description: 'Клиент зарегистрирован в системе',
-      date: customer.createdAt,
-      status: 'success'
-    })
+      description: c.companyName ? `Юрлицо: ${c.companyName}` : 'Физлицо',
+      date: c.createdAt,
+      status: 'success',
+    });
 
-    // Vehicle registrations
-    vehicles.forEach(vehicle => {
+    // Автомобили клиента
+    v.forEach((vehicle) => {
+      const label = `${vehicle.model?.brand?.name || ''} ${vehicle.model?.name || ''}`.trim();
       events.push({
         id: `vehicle-${vehicle.id}`,
         type: 'vehicle',
         title: 'Добавлен автомобиль',
-        description: `${vehicle.model?.brand?.name || ''} ${vehicle.model?.name || ''} (${vehicle.licensePlate || vehicle.vin})`,
-        date: vehicle.createdAt || customer.createdAt,
+        description: `${label || 'ТС'} (${vehicle.licensePlate || vehicle.vin || '—'})`,
+        date: vehicle.createdAt || c.createdAt,
         status: 'info',
-        relatedId: vehicle.id
-      })
-    })
+        relatedId: vehicle.id,
+      });
+    });
 
-    // Sample orders (would come from orders API)
-    const sampleOrders = [
-      {
-        date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-        title: 'Заказ-наряд #1001',
-        description: 'Диагностика и замена масла',
-        amount: 5500,
-        status: 'success' as const
-      },
-      {
-        date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-        title: 'Заказ-наряд #987',
-        description: 'Замена тормозных колодок',
-        amount: 8200,
-        status: 'success' as const
+    // Записи на сервис (appointments)
+    try {
+      const appointments = await appointmentsAPI.findByCustomer(c.id);
+      (appointments || []).forEach((a) => {
+        events.push({
+          id: `apt-${a.id}`,
+          type: 'appointment',
+          title: `Запись: ${a.status === 'COMPLETED' ? 'Завершена' : 'Планируется'}`,
+          description: `${a.vehicleInfo || ''} • Механик: ${a.mechanicName || '—'}`,
+          date: a.startTime || a.createdAt || c.createdAt,
+          status: a.status === 'COMPLETED' ? 'success' : a.status === 'CANCELED' ? 'warning' : 'info',
+          relatedId: a.id,
+          metadata: { status: a.status, priority: a.priority },
+        });
+      });
+    } catch {
+      // ignore
+    }
+
+    // Заказы, счета, платежи — по возможности (best effort), без жесткой завязки на типы модулей
+    try {
+      const ordersMod = (await import('@/lib/api/orders').catch(() => null)) as unknown as {
+        ordersAPI?: {
+          list?: (q: unknown) => Promise<{ items?: OrderLite[] }>;
+          findByCustomer?: (customerId: string) => Promise<OrderLite[]>;
+        };
+      } | null;
+
+      let orders: OrderLite[] = [];
+      if (ordersMod?.ordersAPI?.list) {
+        const res = await ordersMod.ordersAPI.list({ customerId: c.id, page: 1, limit: 50, sortField: 'createdAt', sortOrder: 'desc' });
+        orders = res?.items ?? [];
+      } else if (ordersMod?.ordersAPI?.findByCustomer) {
+        orders = (await ordersMod.ordersAPI.findByCustomer(c.id)) ?? [];
       }
-    ]
 
-    sampleOrders.forEach((order, index) => {
-      events.push({
-        id: `order-${index}`,
-        type: 'order',
-        title: order.title,
-        description: order.description,
-        date: order.date,
-        amount: order.amount,
-        status: order.status,
-        relatedId: `order-${index}`
-      })
-    })
+      orders.forEach((o) => {
+        events.push({
+          id: `order-${o.id}`,
+          type: 'order',
+          title: `Заказ-наряд #${o.number || o.id.slice(0, 6)}`,
+          description: o.title || o.description || 'Заказ клиента',
+          date: o.createdAt || o.updatedAt || c.createdAt,
+          status: o.status === 'COMPLETED' || o.status === 'CLOSED' ? 'success' : 'info',
+          amount: typeof o.totalAmount === 'number' ? o.totalAmount : undefined,
+          relatedId: o.id,
+        });
+      });
+    } catch {
+      // ignore
+    }
 
-    // Sample communications
-    events.push({
-      id: 'call-1',
-      type: 'call',
-      title: 'Исходящий звонок',
-      description: 'Консультация по ремонту',
-      date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-      status: 'info'
-    })
+    try {
+      const invoicesMod = (await import('@/lib/api/invoices').catch(() => null)) as unknown as {
+        invoicesAPI?: { list?: (q: unknown) => Promise<{ items?: InvoiceLite[] }> };
+      } | null;
 
-    return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }
+      if (invoicesMod?.invoicesAPI?.list) {
+        const res = await invoicesMod.invoicesAPI.list({ customerId: c.id, page: 1, limit: 50, sortField: 'createdAt', sortOrder: 'desc' });
+        const items: InvoiceLite[] = res?.items ?? [];
+        items.forEach((inv) => {
+          events.push({
+            id: `invoice-${inv.id}`,
+            type: 'invoice',
+            title: `Счет #${inv.number || inv.id.slice(0, 6)}`,
+            description: inv.status ? `Статус: ${inv.status}` : 'Выставлен счет',
+            date: inv.createdAt || inv.updatedAt || c.createdAt,
+            status: inv.status === 'PAID' ? 'success' : inv.status === 'OVERDUE' ? 'warning' : 'info',
+            amount: typeof inv.total === 'number' ? inv.total : typeof inv.totalAmount === 'number' ? inv.totalAmount : undefined,
+            relatedId: inv.id,
+          });
+        });
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const paymentsMod = (await import('@/lib/api/payments').catch(() => null)) as unknown as {
+        paymentsAPI?: { list?: (q: unknown) => Promise<{ items?: PaymentLite[] }> };
+      } | null;
+
+      if (paymentsMod?.paymentsAPI?.list) {
+        const res = await paymentsMod.paymentsAPI.list({ customerId: c.id, page: 1, limit: 50, sortField: 'createdAt', sortOrder: 'desc' });
+        const items: PaymentLite[] = res?.items ?? [];
+        items.forEach((p) => {
+          events.push({
+            id: `payment-${p.id}`,
+            type: 'payment',
+            title: `Платеж ${p.status || ''}`.trim(),
+            description: p.method ? `Метод: ${p.method}` : undefined,
+            date: p.createdAt || p.processedAt || c.createdAt,
+            status: p.status === 'succeeded' || p.status === 'PAID' ? 'success' : p.status === 'failed' ? 'error' : 'info',
+            amount: typeof p.amount === 'number' ? p.amount : undefined,
+            relatedId: p.id,
+          });
+        });
+      }
+    } catch {
+      // ignore
+    }
+
+    return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
 
   useEffect(() => {
     if (!isMounted) return;
@@ -140,34 +234,42 @@ export default function CustomerDetailsPage() {
           customersAPI.getCustomer(id),
           vehiclesAPI.getCustomerVehicles(id).catch(() => []),
         ]);
-        if (!cancelled) {
-          setCustomer(c);
-          setVehicles(Array.isArray(v) ? v : []);
-          
-          // Generate timeline events
-          setTimelineEvents(generateTimelineEvents(c, Array.isArray(v) ? v : []))
-          
-          // Check for duplicates
-          const search = c.email || c.phone || '';
-          if (search) {
-            try {
-              const dup = await customersAPI.getCustomers({ search, page: 1, limit: 5 });
-              const others = dup.items.filter((i) => i.id !== c.id);
-              if (others.length > 0) setDuplicateHint({ count: others.length, search });
-              else setDuplicateHint(null);
-            } catch {
-              setDuplicateHint(null);
-            }
-          } else {
-            setDuplicateHint(null);
+        if (cancelled) return;
+
+        const vehiclesArr = Array.isArray(v) ? v : [];
+        setCustomer(c);
+        setVehicles(vehiclesArr);
+
+        // Timeline: сначала пробуем серверный /timeline, иначе строим из доступных API
+        try {
+          const tl = await customersAPI.getTimeline(id);
+          if (!cancelled) {
+            setTimelineEvents((tl?.events || []) as TimelineEvent[]);
           }
+        } catch {
+          const events = await buildTimelineFallback(c, vehiclesArr);
+          if (!cancelled) setTimelineEvents(events);
+        }
+
+        // Check duplicates
+        const search = c.email || c.phone || '';
+        if (search) {
+          try {
+            const dup = await customersAPI.getCustomers({ search, page: 1, limit: 5 });
+            const others = dup.items.filter((i) => i.id !== c.id);
+            if (!cancelled) setDuplicateHint(others.length > 0 ? { count: others.length, search } : null);
+          } catch {
+            if (!cancelled) setDuplicateHint(null);
+          }
+        } else {
+          if (!cancelled) setDuplicateHint(null);
         }
       } catch (e) {
         try {
           const parsed = JSON.parse((e as Error).message) as { message?: string };
-          setError(parsed.message || 'Ошибка загрузки клиента');
+          if (!cancelled) setError(parsed.message || 'Ошибка загрузки клиента');
         } catch {
-          setError('Ошибка загрузки клиента');
+          if (!cancelled) setError('Ошибка загрузки клиента');
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -433,7 +535,7 @@ export default function CustomerDetailsPage() {
                             <Car className="w-6 h-6 text-emerald-500" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium">{model}</div>
+                            <div className="font-medium">{model || 'Автомобиль'}</div>
                             <div className="text-xs text-muted-foreground line-clamp-1">
                               {v.licensePlate || v.vin || '—'} • Пробег: {v.mileage ?? '—'}
                               {history}

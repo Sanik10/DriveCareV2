@@ -1,4 +1,4 @@
-// path: apps/backend/src/vehicles/vehicles.controller.ts
+// path: apps/backend/src/modules/vehicles/vehicles.controller.ts
 import {
   Controller,
   Get,
@@ -36,6 +36,8 @@ import { CreateVehicleDto } from './dto/request/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/request/update-vehicle.dto';
 import { VehicleResponseDto } from './dto/response/vehicle-response.dto';
 import { PaginatedVehiclesResponseDto } from './dto/response/paginated-vehicles-response.dto';
+import { VehiclePublicResponseDto } from './dto/response/vehicle-public-response.dto';
+import { PaginatedVehiclesPublicResponseDto } from './dto/response/paginated-vehicles-public-response.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RequestWithUser } from '../auth/interfaces/request-with-user.interface';
 import { VehicleFilter } from './types/vehicles.types';
@@ -147,6 +149,78 @@ export class VehiclesController {
     return this.vehiclesService.findAllForUser(req.user, filter);
   }
 
+  // ======= Публичный список авто (межкомпаний, без ПДн) =======
+  @Get('public')
+  @AuthWithOwnership()
+  @Roles('company_owner', 'company_admin', 'manager', 'mechanic', 'superadmin')
+  @ApiOperation({
+    summary: 'Публичный список автомобилей (без ПДн)',
+    description: 'Список автомобилей без VIN/номера и без владельца. Доступен пользователям любых компаний.',
+  })
+  @ApiQuery({ name: 'search', required: false, description: 'Поиск по бренду/модели/типу/цвету' })
+  @ApiQuery({ name: 'modelId', required: false, description: 'ID модели для фильтрации' })
+  @ApiQuery({ name: 'vehicleTypeId', required: false, description: 'ID типа автомобиля' })
+  @ApiQuery({ name: 'engineType', required: false, description: 'Тип двигателя' })
+  @ApiQuery({ name: 'yearFrom', required: false, description: 'Год выпуска от' })
+  @ApiQuery({ name: 'yearTo', required: false, description: 'Год выпуска до' })
+  @ApiQuery({ name: 'mileageFrom', required: false, description: 'Пробег от (км)' })
+  @ApiQuery({ name: 'mileageTo', required: false, description: 'Пробег до (км)' })
+  @ApiQuery({ name: 'hasServiceHistory', required: false, description: 'Есть ли история обслуживания' })
+  @ApiQuery({ name: 'page', required: false, description: 'Номер страницы' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Размер страницы' })
+  @ApiResponse({ status: HttpStatus.OK, type: PaginatedVehiclesPublicResponseDto })
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async findAllPublic(
+    @Req() req: RequestWithUser,
+    @Query('search') search?: string,
+    @Query('modelId') modelId?: string,
+    @Query('vehicleTypeId') vehicleTypeId?: string,
+    @Query('engineType') engineType?: string,
+    @Query('yearFrom', new DefaultValuePipe(null)) yearFrom?: any,
+    @Query('yearTo', new DefaultValuePipe(null)) yearTo?: any,
+    @Query('mileageFrom', new DefaultValuePipe(null)) mileageFrom?: any,
+    @Query('mileageTo', new DefaultValuePipe(null)) mileageTo?: any,
+    @Query('hasServiceHistory', new DefaultValuePipe(null)) hasServiceHistory?: any,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('limit', new DefaultValuePipe(VEHICLES_CONSTANTS.DEFAULTS.PAGE_SIZE), ParseIntPipe)
+    limit: number = VEHICLES_CONSTANTS.DEFAULTS.PAGE_SIZE,
+    @Query('sortField', new DefaultValuePipe('createdAt')) sortField: string = 'createdAt',
+    @Query('sortOrder', new DefaultValuePipe('desc')) sortOrder: 'asc' | 'desc' = 'desc',
+  ): Promise<PaginatedVehiclesPublicResponseDto> {
+    const toNum = (v: any): number | undefined => {
+      if (v === null || v === undefined || v === '') return undefined;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const toBool = (v: any): boolean | undefined => {
+      if (v === null || v === undefined || v === '') return undefined;
+      if (typeof v === 'boolean') return v;
+      const s = String(v).toLowerCase();
+      if (['true', '1', 'yes', 'y'].includes(s)) return true;
+      if (['false', '0', 'no', 'n'].includes(s)) return false;
+      return undefined;
+    };
+    const normalizedLimit = Math.min(Math.max(1, limit), VEHICLES_CONSTANTS.DEFAULTS.MAX_ITEMS);
+
+    const filter: Partial<VehicleFilter> = {
+      search,
+      modelId,
+      vehicleTypeId,
+      engineType: engineType as any,
+      yearFrom: toNum(yearFrom),
+      yearTo: toNum(yearTo),
+      mileageFrom: toNum(mileageFrom),
+      mileageTo: toNum(mileageTo),
+      hasServiceHistory: toBool(hasServiceHistory),
+      page,
+      limit: normalizedLimit,
+      sortField: sortField as any,
+      sortOrder,
+    };
+
+    return this.vehiclesService.findAllPublic(req.user, filter);
+  }
+
   @Get('customer/:customerId')
   @AuthWithOwnership()
   @ApiOperation({
@@ -185,6 +259,25 @@ export class VehiclesController {
     }
     const targetCompanyId = req.user.role === 'superadmin' ? companyId! : req.user.companyId!;
     return this.vehiclesService.getStats(targetCompanyId);
+  }
+
+  // ======= Публичная деталка авто (межкомпаний, без ПДн) =======
+  @Get('public/:id')
+  @AuthWithOwnership()
+  @Roles('company_owner', 'company_admin', 'manager', 'mechanic', 'superadmin')
+  @ApiOperation({
+    summary: 'Публичная карточка автомобиля (без ПДн)',
+    description: 'Детальная информация об автомобиле без VIN/номера и без владельца.',
+  })
+  @ApiParam({ name: 'id', description: 'ID автомобиля' })
+  @ApiResponse({ status: HttpStatus.OK, type: VehiclePublicResponseDto })
+  @ApiNotFoundResponse({ description: 'Автомобиль не найден' })
+  @Throttle({ default: { limit: 50, ttl: 60000 } })
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  async findOnePublic(@Param('id') id: string, @Req() req: RequestWithUser): Promise<VehiclePublicResponseDto> {
+    return this.vehiclesService.findOnePublic(id, req.user);
   }
 
   @Get(':id')

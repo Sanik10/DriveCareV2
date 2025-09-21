@@ -11,8 +11,10 @@ import {
 import { Vehicle } from './vehicle.entity';
 
 @Entity('vehicle_types')
-@Index(['nameNormalized'], { unique: true, where: 'is_deleted = false' }) // Уникальность по нормализованному имени
+@Index(['nameNormalized'], { unique: true, where: 'is_deleted = false' })
 @Index(['isDeleted'])
+@Index(['isVerified'])
+@Index(['isActive'])
 export class VehicleType {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -28,6 +30,23 @@ export class VehicleType {
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
+
+  // Верификация — по умолчанию false
+  @Column({ name: 'is_verified', type: 'boolean', default: false })
+  isVerified: boolean;
+
+  // Поля модерации
+  @Column({ name: 'reviewed_at', type: 'timestamptz', nullable: true })
+  reviewedAt: Date | null;
+
+  @Column({ name: 'reviewed_by_user_id', type: 'uuid', nullable: true })
+  reviewedByUserId: string | null;
+
+  @Column({ name: 'assignee_user_id', type: 'uuid', nullable: true })
+  assigneeUserId: string | null;
+
+  @Column({ name: 'moderation_notes', type: 'text', nullable: true })
+  moderationNotes: string | null;
 
   @Column({ name: 'is_deleted', type: 'boolean', default: false })
   isDeleted: boolean;

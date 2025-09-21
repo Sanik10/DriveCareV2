@@ -12,7 +12,6 @@ import {
   HttpStatus,
   DefaultValuePipe,
   ParseIntPipe,
-  ParseBoolPipe,
   Req,
 } from '@nestjs/common';
 import {
@@ -27,7 +26,6 @@ import {
   ApiNotFoundResponse,
   ApiConflictResponse,
   ApiBadRequestResponse,
-  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AppointmentsService } from './appointments.service';
@@ -36,17 +34,73 @@ import { UpdateAppointmentDto } from './dto/request/update-appointment.dto';
 import { SmartScheduleDto, CheckAvailabilityDto } from './dto/request/smart-schedule.dto';
 import { AppointmentResponseDto } from './dto/response/appointment-response.dto';
 import { PaginatedAppointmentsResponseDto } from './dto/response/paginated-appointments-response.dto';
-import { SmartScheduleResponseDto, AppointmentTrackingDto } from './dto/response/smart-schedule-response.dto';
+import { SmartScheduleResponseDto } from './dto/response/smart-schedule-response.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RequestWithUser } from '../auth/interfaces/request-with-user.interface';
 import { AppointmentFilter } from './types/appointments.types';
 import { APPOINTMENTS_CONSTANTS } from './constants/appointments.constants';
 import { AuthWithOwnership, AppointmentResource } from '../../common';
+import { AppointmentPriority, AppointmentStatus } from '../../database/entities';
 
 @ApiTags('🕐 Управление записями')
 @Controller('appointments')
 export class AppointmentsController {
   constructor(private readonly appointmentsService: AppointmentsService) {}
+
+  // ===== Helpers (нормализация query-параметров) =====
+  private normalizeStatusParam(status?: string): AppointmentStatus | undefined {
+    if (!status) return undefined;
+    const s = String(status).trim();
+    const upper = s.toUpperCase();
+
+    const mapUpper: Record<string, AppointmentStatus> = {
+      DRAFT: AppointmentStatus.DRAFT,
+      SCHEDULED: AppointmentStatus.SCHEDULED,
+      CONFIRMED: AppointmentStatus.CONFIRMED,
+      IN_PROGRESS: AppointmentStatus.IN_PROGRESS,
+      COMPLETED: AppointmentStatus.COMPLETED,
+      CANCELED: AppointmentStatus.CANCELED,
+      CANCELLED: AppointmentStatus.CANCELED, // синоним
+      NO_SHOW: AppointmentStatus.NO_SHOW,
+      RESCHEDULED: AppointmentStatus.RESCHEDULED,
+    };
+
+    const mapLower: Record<string, AppointmentStatus> = {
+      draft: AppointmentStatus.DRAFT,
+      scheduled: AppointmentStatus.SCHEDULED,
+      confirmed: AppointmentStatus.CONFIRMED,
+      in_progress: AppointmentStatus.IN_PROGRESS,
+      completed: AppointmentStatus.COMPLETED,
+      canceled: AppointmentStatus.CANCELED,
+      cancelled: AppointmentStatus.CANCELED,
+      no_show: AppointmentStatus.NO_SHOW,
+      rescheduled: AppointmentStatus.RESCHEDULED,
+    };
+
+    return mapUpper[upper] || mapLower[s] || undefined;
+  }
+
+  private normalizePriorityParam(priority?: string): AppointmentPriority | undefined {
+    if (!priority) return undefined;
+    const p = String(priority).trim();
+    const upper = p.toUpperCase();
+
+    const mapUpper: Record<string, AppointmentPriority> = {
+      LOW: AppointmentPriority.LOW,
+      NORMAL: AppointmentPriority.NORMAL,
+      HIGH: AppointmentPriority.HIGH,
+      URGENT: AppointmentPriority.URGENT,
+    };
+
+    const mapLower: Record<string, AppointmentPriority> = {
+      low: AppointmentPriority.LOW,
+      normal: AppointmentPriority.NORMAL,
+      high: AppointmentPriority.HIGH,
+      urgent: AppointmentPriority.URGENT,
+    };
+
+    return mapUpper[upper] || mapLower[p] || undefined;
+  }
 
   @Post()
   @AuthWithOwnership()
@@ -55,41 +109,7 @@ export class AppointmentsController {
     summary: 'Создание новой записи',
     description: 'Создание записи на обслуживание для клиента. Доступно владельцам, админам и менеджерам.',
   })
-  @ApiBody({
-    type: CreateAppointmentDto,
-    examples: {
-      regularService: {
-        summary: 'Обычная запись на ТО',
-        value: {
-          customerId: '123e4567-e89b-12d3-a456-426614174000',
-          vehicleId: '456e7890-e89b-12d3-a456-426614174001',
-          mechanicId: '789e0123-e89b-12d3-a456-426614174002',
-          startTime: '2025-01-15T10:00:00.000Z',
-          endTime: '2025-01-15T12:00:00.000Z',
-          estimatedDuration: 120,
-          serviceIds: ['service-1-uuid', 'service-2-uuid'],
-          priority: 'normal',
-          description: 'Плановое ТО-1',
-          contactPhone: '+7 (495) 123-45-67',
-        },
-      },
-      urgentRepair: {
-        summary: 'Срочный ремонт',
-        value: {
-          customerId: '123e4567-e89b-12d3-a456-426614174000',
-          vehicleId: '456e7890-e89b-12d3-a456-426614174001',
-          mechanicId: '789e0123-e89b-12d3-a456-426614174002',
-          startTime: '2025-01-15T09:00:00.000Z',
-          endTime: '2025-01-15T11:00:00.000Z',
-          estimatedDuration: 120,
-          serviceIds: ['urgent-repair-uuid'],
-          priority: 'urgent',
-          description: 'Не заводится двигатель',
-          customerNotes: 'Автомобиль на эвакуаторе',
-        },
-      },
-    },
-  })
+  @ApiBody({ type: CreateAppointmentDto })
   @ApiResponse({ status: HttpStatus.CREATED, type: AppointmentResponseDto })
   @ApiConflictResponse({ description: 'Конфликт времени записи' })
   @ApiBadRequestResponse({ description: 'Некорректные данные или превышен лимит записей' })
@@ -110,14 +130,18 @@ export class AppointmentsController {
     description: 'Получение списка записей с фильтрацией и пагинацией. Каждый видит только записи своей компании.',
   })
   @ApiQuery({ name: 'search', required: false, description: 'Поиск по клиенту, описанию' })
-  @ApiQuery({ name: 'status', required: false, description: 'Фильтр по статусу' })
-  @ApiQuery({ name: 'priority', required: false, description: 'Фильтр по приоритету' })
+  @ApiQuery({ name: 'status', required: false, description: 'Фильтр по статусу (поддерживаются DRAFT|draft ...)' })
+  @ApiQuery({ name: 'priority', required: false, description: 'Фильтр по приоритету (LOW|low ...)' })
   @ApiQuery({ name: 'mechanicId', required: false, description: 'Фильтр по мастеру' })
   @ApiQuery({ name: 'customerId', required: false, description: 'Фильтр по клиенту' })
-  @ApiQuery({ name: 'dateFrom', required: false, description: 'Дата начала периода' })
-  @ApiQuery({ name: 'dateTo', required: false, description: 'Дата окончания периода' })
+  @ApiQuery({ name: 'vehicleId', required: false, description: 'Фильтр по автомобилю' })
+  @ApiQuery({ name: 'serviceId', required: false, description: 'Фильтр по услуге' })
+  @ApiQuery({ name: 'dateFrom', required: false, description: 'Дата начала периода (YYYY-MM-DD или ISO)' })
+  @ApiQuery({ name: 'dateTo', required: false, description: 'Дата окончания периода (YYYY-MM-DD или ISO)' })
   @ApiQuery({ name: 'page', required: false, description: 'Номер страницы' })
   @ApiQuery({ name: 'limit', required: false, description: 'Размер страницы' })
+  @ApiQuery({ name: 'sortField', required: false, description: 'Поле сортировки (startTime|createdAt|status|customerName|priority)' })
+  @ApiQuery({ name: 'sortOrder', required: false, description: 'Направление сортировки (asc|desc)' })
   @ApiResponse({ status: HttpStatus.OK, type: PaginatedAppointmentsResponseDto })
   @ApiUnauthorizedResponse({ description: 'Требуется авторизация' })
   @Throttle({ default: { limit: 30, ttl: 60000 } })
@@ -128,6 +152,8 @@ export class AppointmentsController {
     @Query('priority') priority?: string,
     @Query('mechanicId') mechanicId?: string,
     @Query('customerId') customerId?: string,
+    @Query('vehicleId') vehicleId?: string,
+    @Query('serviceId') serviceId?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
@@ -136,12 +162,17 @@ export class AppointmentsController {
     @Query('sortField', new DefaultValuePipe('startTime')) sortField: string = 'startTime',
     @Query('sortOrder', new DefaultValuePipe('asc')) sortOrder: 'asc' | 'desc' = 'asc',
   ): Promise<PaginatedAppointmentsResponseDto> {
+    const normalizedStatus = this.normalizeStatusParam(status);
+    const normalizedPriority = this.normalizePriorityParam(priority);
+
     const filter: AppointmentFilter = {
       search,
-      status: status as any,
-      priority: priority as any,
+      status: normalizedStatus as any,
+      priority: normalizedPriority as any,
       mechanicId,
       customerId,
+      vehicleId,
+      serviceId,
       dateFrom: dateFrom ? new Date(dateFrom) : undefined,
       dateTo: dateTo ? new Date(dateTo) : undefined,
       page,
@@ -335,9 +366,9 @@ export class AppointmentsController {
     description: 'Получение информации о текущем статусе и прогрессе выполнения записи.',
   })
   @ApiParam({ name: 'id', description: 'ID записи' })
-  @ApiResponse({ status: HttpStatus.OK, type: AppointmentTrackingDto })
+  @ApiResponse({ status: HttpStatus.OK })
   @Throttle({ default: { limit: 30, ttl: 60000 } })
-  async getTracking(@Param('id') id: string): Promise<AppointmentTrackingDto> {
+  async getTracking(@Param('id') id: string): Promise<any> {
     return this.appointmentsService.getTracking(id);
   }
 
@@ -394,9 +425,11 @@ export class AppointmentsController {
     description: 'Добавление оценки и отзыва к завершенной записи.',
   })
   @ApiParam({ name: 'id', description: 'ID записи' })
+  @ApiQuery({ name: 'rating', required: true, description: 'Оценка (1-5)' })
+  @ApiQuery({ name: 'feedback', required: false, description: 'Отзыв' })
   @ApiResponse({ status: HttpStatus.OK, type: AppointmentResponseDto })
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  async addRating(@Param('id') id: string, @Query('rating', ParseIntPipe) rating: number, @Query('feedback') feedback?: string): Promise<AppointmentResponseDto> {
+  async addRating(@Param('id') id: string, @Query('rating', new DefaultValuePipe(5), ParseIntPipe) rating: number, @Query('feedback') feedback?: string): Promise<AppointmentResponseDto> {
     return this.appointmentsService.addRating(id, rating, feedback);
   }
 }

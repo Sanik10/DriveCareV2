@@ -19,12 +19,9 @@ import {
   AlertTriangle, 
   BarChart3, 
   Download,
-  DollarSign,
   Clock,
   CheckCircle,
-  XCircle,
-  TrendingUp,
-  Zap
+  XCircle
 } from 'lucide-react';
 
 import { invoicesAPI } from '@/lib/api/invoices';
@@ -103,16 +100,23 @@ export default function List() {
   const [showSug, setShowSug] = useState(false);
   const [searchInput, setSearchInput] = useState('');
 
-  // Auto-refresh every 30 seconds for payment status updates
+  // Auto-refresh every 30 seconds (silent)
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const [autoRefresh, setAutoRefresh] = useState(true);
+
+  const listAbortRef = useRef<AbortController | null>(null);
+  const statsAbortRef = useRef<AbortController | null>(null);
+  const typeaheadAbortRef = useRef<AbortController | null>(null);
 
   const page = Number(qs.page ?? 1);
   const effectiveSearch = qs.search ?? '';
   const status = (qs.status as InvoiceStatus | 'ALL' | undefined) ?? 'ALL';
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (listAbortRef.current) listAbortRef.current.abort();
+    const controller = new AbortController();
+    listAbortRef.current = controller;
+
+    if (!opts?.silent) setLoading(true);
     setError(null);
     try {
       const query: InvoicesQuery = {
@@ -124,23 +128,30 @@ export default function List() {
       const res = await invoicesAPI.list(query);
       setData(res);
     } catch (e: unknown) {
+      if ((e as any)?.name === 'AbortError') return;
       setError((e as Error)?.message || 'Не удалось загрузить счета');
       setData(null);
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
+      listAbortRef.current = null;
     }
   }, [page, effectiveSearch, status]);
 
-  const loadStats = useCallback(async () => {
+  const loadStats = useCallback(async (opts?: { silent?: boolean }) => {
     if (!canSeeStats) {
       setStats(null);
       return;
     }
+    if (statsAbortRef.current) statsAbortRef.current.abort();
+    const controller = new AbortController();
+    statsAbortRef.current = controller;
     try {
       const s = await invoicesAPI.statsDashboard();
       setStats(s);
     } catch {
-      setStats(null);
+      if (!opts?.silent) setStats(null);
+    } finally {
+      statsAbortRef.current = null;
     }
   }, [canSeeStats]);
 
@@ -168,34 +179,30 @@ export default function List() {
   useEffect(() => {
     void load();
     void loadStats();
+    return () => {
+      listAbortRef.current?.abort();
+      statsAbortRef.current?.abort();
+    };
   }, [load, loadStats]);
 
-  // Auto-refresh setup
+  // Silent auto-refresh (no toggle)
   useEffect(() => {
-    if (!autoRefresh) {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      return;
-    }
-
     intervalRef.current = setInterval(() => {
-      // Silent refresh - update data without loading states
-      load();
-      if (canSeeStats) loadStats();
-    }, 30000); // 30 seconds
-
+      void load({ silent: true });
+      if (canSeeStats) void loadStats({ silent: true });
+    }, 30000);
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
     };
-  }, [autoRefresh, load, loadStats, canSeeStats]);
+  }, [load, loadStats, canSeeStats]);
 
-  // Typeahead suggestions
+  // Typeahead suggestions (abortable)
   useEffect(() => {
+    if (typeaheadAbortRef.current) typeaheadAbortRef.current.abort();
+    const controller = new AbortController();
+    typeaheadAbortRef.current = controller;
+
     const t = setTimeout(async () => {
       if (!searchInput || searchInput.trim().length < 2) {
         setSuggestions([]);
@@ -208,7 +215,11 @@ export default function List() {
         setSuggestions([]);
       }
     }, 250);
-    return () => clearTimeout(t);
+
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
   }, [searchInput]);
 
   const canCreate = ['company_owner', 'company_admin', 'manager'].includes(user?.role?.name || '');
@@ -225,16 +236,6 @@ export default function List() {
           Просрочки
         </Button>
       )}
-      
-      <Button 
-        variant="outline" 
-        onClick={load} 
-        className="rounded-2xl btn-outline-fixed"
-      >
-        <RefreshCw className="w-4 h-4 mr-2" />
-        Обновить
-      </Button>
-      
       {canCreate && (
         <Link href="/dashboard/invoices/new">
           <Button className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]">
@@ -263,19 +264,10 @@ export default function List() {
             <div>
               <h3 className="font-semibold text-indigo-600 dark:text-indigo-400">Интерактивные статусы оплаты</h3>
               <p className="text-sm text-muted-foreground">
-                Прогресс-бары частичных оплат, автообновление каждые 30 сек, пульсирующие индикаторы просрочек.
+                Прогресс-бары частичных оплат и автообновление каждые 30 сек.
               </p>
             </div>
             <div className="ml-auto flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-xl text-xs"
-                onClick={() => setAutoRefresh(!autoRefresh)}
-              >
-                <Zap className={cn("w-3 h-3 mr-1", autoRefresh && "text-primary")} />
-                {autoRefresh ? 'Auto ON' : 'Auto OFF'}
-              </Button>
               <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/30">
                 <CheckCircle className="w-3 h-3 mr-1" />
                 Оплачено
@@ -379,10 +371,8 @@ export default function List() {
                 >
                   Сбросить фильтры
                 </Button>
-                
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <RefreshCw className={cn("w-4 h-4", autoRefresh && "animate-spin")} />
-                  {autoRefresh ? 'Автообновление активно' : 'Автообновление отключено'}
+                  Обновление каждые 30 сек
                 </div>
               </div>
 
@@ -409,7 +399,7 @@ export default function List() {
                 <AlertTriangle className="w-6 h-6" />
                 <p className="text-lg font-medium">{error}</p>
               </div>
-              <Button onClick={load} className="rounded-2xl">
+              <Button onClick={() => load()} className="rounded-2xl">
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Повторить
               </Button>

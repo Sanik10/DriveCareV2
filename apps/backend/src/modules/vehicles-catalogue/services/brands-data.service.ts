@@ -18,29 +18,67 @@ export class BrandsDataService implements IBrandsDataService {
     return (input || '').trim().replace(/\s+/g, ' ').toLowerCase();
   }
 
+  private toBool(value: unknown): boolean | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'boolean') return value;
+    const s = String(value).trim().toLowerCase();
+    if (s === 'true') return true;
+    if (s === 'false') return false;
+    return undefined;
+  }
+
   async create(data: CreateBrandData): Promise<VehicleBrand> {
     const brand = this.brandsRepository.create({
       ...data,
       name: data.name?.trim().replace(/\s+/g, ' '),
       nameNormalized: this.normalizeName(data.name),
       isActive: data.isActive ?? true,
-    });
+      isVerified: data.isVerified ?? false,
+    } as VehicleBrand);
 
     return this.brandsRepository.save(brand);
   }
 
   async findAll(): Promise<VehicleBrand[]> {
-    return this.brandsRepository.find({
-      where: { isDeleted: false },
-      order: { name: 'ASC' },
-    });
+    return this.brandsRepository
+      .createQueryBuilder('brand')
+      .select([
+        'brand.id',
+        'brand.name',
+        'brand.nameNormalized',
+        'brand.country',
+        'brand.logoUrl',
+        'brand.isActive',
+        'brand.isVerified',
+        'brand.isDeleted',
+        'brand.deletedAt',
+        'brand.createdAt',
+        'brand.updatedAt',
+      ])
+      .where('brand.isDeleted = false')
+      .orderBy('brand.name', 'ASC')
+      .getMany();
   }
 
   async findById(id: string): Promise<VehicleBrand | null> {
-    return this.brandsRepository.findOne({
-      where: { id, isDeleted: false },
-      relations: ['models'],
-    });
+    return this.brandsRepository
+      .createQueryBuilder('brand')
+      .select([
+        'brand.id',
+        'brand.name',
+        'brand.nameNormalized',
+        'brand.country',
+        'brand.logoUrl',
+        'brand.isActive',
+        'brand.isVerified',
+        'brand.isDeleted',
+        'brand.deletedAt',
+        'brand.createdAt',
+        'brand.updatedAt',
+      ])
+      .where('brand.id = :id', { id })
+      .andWhere('brand.isDeleted = false')
+      .getOne();
   }
 
   async findByName(name: string): Promise<VehicleBrand | null> {
@@ -54,11 +92,16 @@ export class BrandsDataService implements IBrandsDataService {
     const {
       search,
       country,
-      isActive,
       includeDeleted = false,
       page = CATALOGUE_CONSTANTS.PAGINATION.DEFAULT_PAGE,
       limit = CATALOGUE_CONSTANTS.PAGINATION.DEFAULT_LIMIT,
     } = filter;
+
+    const rawIsActive = (filter as any).isActive;
+    const rawIsVerified = (filter as any).isVerified;
+
+    const isActive = this.toBool(rawIsActive);
+    const isVerified = this.toBool(rawIsVerified);
 
     const safeLimit = Math.min(
       Math.max(1, Number(limit) || CATALOGUE_CONSTANTS.PAGINATION.DEFAULT_LIMIT),
@@ -66,29 +109,50 @@ export class BrandsDataService implements IBrandsDataService {
     );
     const safePage = Math.max(1, Number(page) || CATALOGUE_CONSTANTS.PAGINATION.DEFAULT_PAGE);
 
-    const query = this.brandsRepository
+    const qb = this.brandsRepository
       .createQueryBuilder('brand')
-      .leftJoinAndSelect('brand.models', 'model', 'model.isDeleted = false');
+      .select([
+        'brand.id',
+        'brand.name',
+        'brand.nameNormalized',
+        'brand.country',
+        'brand.logoUrl',
+        'brand.isActive',
+        'brand.isVerified',
+        'brand.isDeleted',
+        'brand.deletedAt',
+        'brand.createdAt',
+        'brand.updatedAt',
+      ]);
 
     if (!includeDeleted) {
-      query.andWhere('brand.isDeleted = false');
+      qb.andWhere('brand.isDeleted = false');
     }
 
     if (search) {
-      query.andWhere('brand.name ILIKE :search', { search: `%${search.trim()}%` });
+      qb.andWhere('brand.name ILIKE :search', { search: `%${search.trim()}%` });
     }
 
     if (country) {
-      query.andWhere('brand.country ILIKE :country', { country: `%${country.trim()}%` });
+      qb.andWhere('brand.country ILIKE :country', { country: `%${country.trim()}%` });
     }
 
     if (isActive !== undefined) {
-      query.andWhere('brand.isActive = :isActive', { isActive });
+      qb.andWhere('brand.isActive = :isActive', { isActive });
     }
 
-    query.orderBy('brand.name', 'ASC').take(safeLimit).skip((safePage - 1) * safeLimit);
+    // трактуем "неподтвержденные" как false ИЛИ NULL
+    if (isVerified === true) {
+      qb.andWhere('brand.isVerified = true');
+    } else if (isVerified === false) {
+      qb.andWhere('(brand.isVerified = false OR brand.isVerified IS NULL)');
+    }
 
-    return query.getMany();
+    qb.orderBy('brand.name', 'ASC')
+      .take(safeLimit)
+      .skip((safePage - 1) * safeLimit);
+
+    return qb.getMany();
   }
 
   async update(id: string, data: UpdateBrandData): Promise<VehicleBrand> {
@@ -106,7 +170,7 @@ export class BrandsDataService implements IBrandsDataService {
       (updateData as any).nameNormalized = this.normalizeName(data.name);
     }
 
-    await this.brandsRepository.update(id, updateData);
+    await this.brandsRepository.update(id, updateData as any);
 
     const updatedBrand = await this.findById(id);
     if (!updatedBrand) {
@@ -135,6 +199,16 @@ export class BrandsDataService implements IBrandsDataService {
       throw new Error(`Brand with id ${id} not found after status update`);
     }
 
+    return updatedBrand;
+  }
+
+  // Обновление верификации (без обязательной зависимости от наличия reviewedAt колонки)
+  async setVerified(id: string, isVerified: boolean): Promise<VehicleBrand> {
+    await this.brandsRepository.update(id, { isVerified } as any);
+    const updatedBrand = await this.findById(id);
+    if (!updatedBrand) {
+      throw new Error(`Brand with id ${id} not found after verify update`);
+    }
     return updatedBrand;
   }
 

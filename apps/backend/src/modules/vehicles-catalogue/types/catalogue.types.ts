@@ -3,6 +3,7 @@ export interface BrandFilter {
   search?: string;
   country?: string;
   isActive?: boolean;
+  isVerified?: boolean;
   includeDeleted?: boolean;
   page?: number;
   limit?: number;
@@ -15,6 +16,7 @@ export interface ModelFilter {
   yearTo?: number;
   class?: string;
   isActive?: boolean;
+  isVerified?: boolean;
   includeDeleted?: boolean;
   page?: number;
   limit?: number;
@@ -23,6 +25,7 @@ export interface ModelFilter {
 export interface TypeFilter {
   search?: string;
   isActive?: boolean;
+  isVerified?: boolean;
   includeDeleted?: boolean;
   page?: number;
   limit?: number;
@@ -33,6 +36,15 @@ export interface CreateBrandData {
   country?: string;
   logoUrl?: string;
   isActive?: boolean;
+  // advanced moderation/meta (optional)
+  isVerified?: boolean;
+  aliases?: string[];
+  source?: string;
+  sourceId?: string;
+  moderationNotes?: string;
+  assigneeUserId?: string;
+  reviewedAt?: Date | null;
+  reviewedByUserId?: string | null;
 }
 
 export interface UpdateBrandData {
@@ -40,6 +52,15 @@ export interface UpdateBrandData {
   country?: string;
   logoUrl?: string;
   isActive?: boolean;
+  // advanced moderation/meta (optional)
+  isVerified?: boolean;
+  aliases?: string[];
+  source?: string | null;
+  sourceId?: string | null;
+  moderationNotes?: string | null;
+  assigneeUserId?: string | null;
+  reviewedAt?: Date | null;
+  reviewedByUserId?: string | null;
 }
 
 export interface CreateModelData {
@@ -49,6 +70,15 @@ export interface CreateModelData {
   yearTo?: number;
   class?: string;
   isActive?: boolean;
+  // advanced moderation/meta (optional)
+  isVerified?: boolean;
+  aliases?: string[];
+  source?: string;
+  sourceId?: string;
+  moderationNotes?: string;
+  assigneeUserId?: string;
+  reviewedAt?: Date | null;
+  reviewedByUserId?: string | null;
 }
 
 export interface UpdateModelData {
@@ -58,16 +88,37 @@ export interface UpdateModelData {
   yearTo?: number;
   class?: string;
   isActive?: boolean;
+  // advanced moderation/meta (optional)
+  isVerified?: boolean;
+  aliases?: string[];
+  source?: string | null;
+  sourceId?: string | null;
+  moderationNotes?: string | null;
+  assigneeUserId?: string | null;
+  reviewedAt?: Date | null;
+  reviewedByUserId?: string | null;
 }
 
 export interface CreateTypeData {
   name: string;
   description?: string;
   isActive?: boolean;
+  // moderation
+  isVerified?: boolean;
+  moderationNotes?: string;
+  assigneeUserId?: string;
+  reviewedAt?: Date | null;
+  reviewedByUserId?: string | null;
 }
 
 export interface UpdateTypeData {
   name?: string;
   description?: string;
   isActive?: boolean;
+  // moderation
+  isVerified?: boolean;
+  moderationNotes?: string | null;
+  assigneeUserId?: string | null;
+  reviewedAt?: Date | null;
+  reviewedByUserId?: string | null;
 }

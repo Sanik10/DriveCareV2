@@ -1,6 +1,6 @@
 // path: apps/backend/src/modules/appointments/services/appointments-mapper.service.ts
 import { Injectable } from '@nestjs/common';
-import { Appointment, AppointmentStatus } from '../../../database/entities';
+import { Appointment, AppointmentStatus, AppointmentPriority } from '../../../database/entities';
 import { AppointmentResponseDto } from '../dto/response/appointment-response.dto';
 import { AppointmentTracking } from '../types/appointments.types';
 import { IAppointmentsMapperService } from '../interfaces/appointments.interface';
@@ -12,6 +12,8 @@ type ServiceInfo = { id: string; name: string; price: number; duration: number }
 export class AppointmentsMapperService implements IAppointmentsMapperService {
   /**
    * Основной маппинг Entity → ResponseDto
+   * Отдаём статусы/приоритеты как enum (без преобразования в строки),
+   * чтобы соответствовать типам DTO и избежать ошибок компиляции.
    */
   mapToResponseDto(
     appointment: Appointment,
@@ -30,6 +32,7 @@ export class AppointmentsMapperService implements IAppointmentsMapperService {
       endTime: appointment.endTime,
       estimatedDuration: appointment.estimatedDuration,
       actualDuration: appointment.actualDuration ?? undefined,
+      // Отдаём значение enum напрямую
       status: appointment.status,
       priority: appointment.priority,
       services: this.formatServices(appointment, options?.serviceLookup),
@@ -76,7 +79,7 @@ export class AppointmentsMapperService implements IAppointmentsMapperService {
     return {
       id: appointment.id,
       startTime: appointment.startTime,
-      status: appointment.status,
+      status: appointment.status as unknown as string,
       customerName: this.formatCustomerName(appointment),
     };
   }
@@ -87,6 +90,7 @@ export class AppointmentsMapperService implements IAppointmentsMapperService {
   mapToTrackingDto(appointment: Appointment): AppointmentTracking {
     return {
       appointmentId: appointment.id,
+      // В интерфейсе AppointmentTracking статус — enum. Возвращаем как есть.
       status: appointment.status,
       currentStep: this.getCurrentStep(appointment),
       progress: this.calculateProgress(appointment),

@@ -6,6 +6,7 @@ import type {
   CustomerResponse,
   CreateCustomerRequest,
   UpdateCustomerRequest,
+  CustomerTimelineResponse,
 } from '@/lib/types/customers';
 
 function buildQuery(params: Record<string, unknown>) {
@@ -70,6 +71,15 @@ class CustomersAPI {
     await apiRequest<void>(`/customers/${id}`, {
       method: 'DELETE',
       idempotencyKey: generateIdempotencyKey(),
+    });
+  }
+
+  /**
+   * Timeline (если на бэке доступен /customers/:id/timeline)
+   */
+  async getTimeline(id: string): Promise<CustomerTimelineResponse> {
+    return apiRequest<CustomerTimelineResponse>(`/customers/${id}/timeline`, {
+      method: 'GET',
     });
   }
 }

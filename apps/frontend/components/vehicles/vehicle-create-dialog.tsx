@@ -2,7 +2,21 @@
 'use client';
 
 import * as React from 'react';
-import { Car, Hash, Barcode, Gauge, User, Sparkles, Plus } from 'lucide-react';
+import {
+  Car,
+  Hash,
+  Barcode,
+  Gauge,
+  User,
+  Sparkles,
+  Plus,
+  Calendar,
+  Zap,
+  Search,
+  X,
+  PencilLine,
+  Info,
+} from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -11,11 +25,12 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+  // shadcn input
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { vehiclesAPI } from '@/lib/api/vehicles';
 import { vehiclesCatalogueAPI } from '@/lib/api/vehicles-catalogue';
-import type { VehicleResponse, CreateVehicleRequest } from '@/lib/types/vehicles';
+import type { VehicleResponse, CreateVehicleRequest, EngineType } from '@/lib/types/vehicles';
 import type { CatalogueBrand, CatalogueModel, CatalogueType } from '@/lib/types/vehicles-catalogue';
 import { customersAPI } from '@/lib/api/customers';
 import type { CustomerResponse } from '@/lib/types/customers';
@@ -28,55 +43,105 @@ type Props = {
   onCreated?: (v: VehicleResponse) => void;
 };
 
+const ENGINE_TYPES: { value: EngineType; label: string }[] = [
+  { value: 'petrol', label: 'Бензин' },
+  { value: 'diesel', label: 'Дизель' },
+  { value: 'hybrid', label: 'Гибрид' },
+  { value: 'electric', label: 'Электро' },
+];
+
 function parseSmart(text: string) {
   const vinMatch = text.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i)?.[0];
   const plateMatch = text.match(/([A-ZА-Я0-9-]{5,12})/i)?.[0];
   const mileageMatch = text.match(/(\d{1,7})\s?(км|km)/i)?.[1];
+  const yearMatch = text.match(/\b(19[5-9]\d|20[0-4]\d|2050)\b/)?.[0]; // 1950..2050
+  const volumeCcMatch = text.match(/(\d{3,5})\s?(см3|см³|cc)/i)?.[1];
+  const volumeLMatch = text.match(/(\d+(?:[.,]\d)?)\s?л\b/i)?.[1];
+  // prefer liters if present, otherwise convert cc→liters (1.0 decimal)
+  let engineVolumeLiters: string | undefined = undefined;
+  if (volumeLMatch) {
+    const n = parseFloat(volumeLMatch.replace(',', '.'));
+    if (Number.isFinite(n)) engineVolumeLiters = String(n);
+  } else if (volumeCcMatch) {
+    const cc = parseInt(volumeCcMatch, 10);
+    if (Number.isFinite(cc)) engineVolumeLiters = (cc / 1000).toFixed(1);
+  }
+
   return {
     vin: vinMatch?.toUpperCase() || '',
     licensePlate: plateMatch?.toUpperCase() || '',
     mileage: mileageMatch ? parseInt(mileageMatch, 10) : undefined,
+    year: yearMatch ? parseInt(yearMatch, 10) : undefined,
+    engineVolumeLiters,
   };
 }
 
 export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
+  // Catalogue data
   const [brands, setBrands] = React.useState<CatalogueBrand[]>([]);
   const [models, setModels] = React.useState<CatalogueModel[]>([]);
   const [types, setTypes] = React.useState<CatalogueType[]>([]);
 
+  // Selected IDs
   const [brandId, setBrandId] = React.useState<string>('');
   const [modelId, setModelId] = React.useState<string>('');
   const [vehicleTypeId, setVehicleTypeId] = React.useState<string>('');
 
+  // Typed names (for create on the fly)
   const [brandName, setBrandName] = React.useState<string>('');
   const [modelName, setModelName] = React.useState<string>('');
   const [typeName, setTypeName] = React.useState<string>('');
 
+  // Dropdown visibility
+  const [brandOpen, setBrandOpen] = React.useState(false);
+  const [modelOpen, setModelOpen] = React.useState(false);
+  const [typeOpen, setTypeOpen] = React.useState(false);
+
+  // Base fields
   const [vin, setVin] = React.useState('');
   const [licensePlate, setLicensePlate] = React.useState('');
   const [mileage, setMileage] = React.useState<string>('');
+
+  // Technical fields
+  const [year, setYear] = React.useState<string>('');
+  const [color, setColor] = React.useState<string>('');
+  const [engineType, setEngineType] = React.useState<EngineType | ''>('');
+  const [engineVolume, setEngineVolume] = React.useState<string>(''); // литры (например, 2.0)
+
+  // Service dates (Update DTO only)
+  const [lastServiceDate, setLastServiceDate] = React.useState<string>('');
+  const [nextServiceDate, setNextServiceDate] = React.useState<string>('');
+
+  // Notes
+  const [notes, setNotes] = React.useState<string>('');
+
+  // Customer search
   const [customerQuery, setCustomerQuery] = React.useState<string>('');
   const [customerResults, setCustomerResults] = React.useState<CustomerResponse[]>([]);
   const [customerId, setCustomerId] = React.useState<string>('');
   const [customerLabel, setCustomerLabel] = React.useState<string>('');
 
+  // UI control
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const [openCustomerCreate, setOpenCustomerCreate] = React.useState(false);
+
+  // Create flags
   const [creatingBrand, setCreatingBrand] = React.useState(false);
   const [creatingType, setCreatingType] = React.useState(false);
   const [creatingModel, setCreatingModel] = React.useState(false);
 
+  // Load initial catalogues
   React.useEffect(() => {
     if (!open) return;
     let cancelled = false;
     (async () => {
       try {
         const [b, m, t] = await Promise.all([
-          vehiclesCatalogueAPI.brands(),
-          vehiclesCatalogueAPI.models(),
-          vehiclesCatalogueAPI.types(),
+          vehiclesCatalogueAPI.brands({ limit: 500 }),
+          vehiclesCatalogueAPI.models({ limit: 1000 }),
+          vehiclesCatalogueAPI.types({ limit: 200 }),
         ]);
         if (!cancelled) {
           setBrands(b);
@@ -92,40 +157,50 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
     };
   }, [open]);
 
+  // Ensure IDs for brand/model/type if only names were entered
   const ensureCatalogueIds = React.useCallback(async () => {
+    // Brand
     if (!brandId && brandName.trim()) {
       setCreatingBrand(true);
       try {
-        const b = await vehiclesCatalogueAPI.ensureBrand(brandName);
+        // ensureBrand must exist in vehiclesCatalogueAPI
+        const b = await vehiclesCatalogueAPI.ensureBrand(brandName.trim());
         setBrandId(b.id);
+        setBrandName(b.name);
         if (!brands.find((x) => x.id === b.id)) setBrands((prev) => [...prev, b]);
       } finally {
         setCreatingBrand(false);
       }
     }
 
+    // Type
     if (!vehicleTypeId && typeName.trim()) {
       setCreatingType(true);
       try {
-        const t = await vehiclesCatalogueAPI.ensureType(typeName);
+        // ensureType must exist in vehiclesCatalogueAPI
+        const t = await vehiclesCatalogueAPI.ensureType(typeName.trim());
         setVehicleTypeId(t.id);
+        setTypeName(t.name);
         if (!types.find((x) => x.id === t.id)) setTypes((prev) => [...prev, t]);
       } finally {
         setCreatingType(false);
       }
     }
 
+    // Model (requires brand)
     if (!modelId && modelName.trim() && (brandId || brandName.trim())) {
       if (!brandId && brandName.trim()) {
-        const b = await vehiclesCatalogueAPI.ensureBrand(brandName);
+        const b = await vehiclesCatalogueAPI.ensureBrand(brandName.trim());
         setBrandId(b.id);
+        setBrandName(b.name);
         if (!brands.find((x) => x.id === b.id)) setBrands((prev) => [...prev, b]);
       }
       if (brandId) {
         setCreatingModel(true);
         try {
-          const m = await vehiclesCatalogueAPI.ensureModel(modelName, brandId);
+          const m = await vehiclesCatalogueAPI.ensureModel(modelName.trim(), brandId);
           setModelId(m.id);
+          setModelName(m.name);
           if (!models.find((x) => x.id === m.id)) setModels((prev) => [...prev, m]);
         } finally {
           setCreatingModel(false);
@@ -134,6 +209,11 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
     }
   }, [brandId, brandName, vehicleTypeId, typeName, modelId, modelName, brands, types, models]);
 
+  const filteredModels = React.useMemo(() => {
+    if (!brandId) return models;
+    return models.filter((m) => m.brandId === brandId || m.brand?.id === brandId);
+  }, [models, brandId]);
+
   const submit = React.useCallback(async () => {
     setSubmitting(true);
     setError(null);
@@ -141,8 +221,14 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
     try {
       await ensureCatalogueIds();
 
+      // Required fields
       if (!customerId) {
         setError('Укажите владельца ТС (клиента)');
+        setSubmitting(false);
+        return;
+      }
+      if (!brandId) {
+        setError('Выберите или создайте бренд');
         setSubmitting(false);
         return;
       }
@@ -156,6 +242,8 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
         setSubmitting(false);
         return;
       }
+
+      // Validate VIN
       const vinOk = !vin || /^[A-HJ-NPR-Z0-9]{17}$/i.test(vin);
       if (vin && !vinOk) {
         setError('VIN должен содержать 17 символов (без I, O, Q)');
@@ -163,18 +251,59 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
         return;
       }
 
+      // Validate year
+      const y = year ? parseInt(year, 10) : undefined;
+      if (y && (y < 1950 || y > 2050)) {
+        setError('Год выпуска должен быть в диапазоне 1950–2050');
+        setSubmitting(false);
+        return;
+      }
+
+      // Validate engineVolume (liters)
+      const vol =
+        engineVolume && engineVolume.trim()
+          ? parseFloat(engineVolume.replace(',', '.'))
+          : undefined;
+      if (engineVolume && (!Number.isFinite(vol!) || vol! <= 0)) {
+        setError('Объем двигателя должен быть положительным числом (в литрах)');
+        setSubmitting(false);
+        return;
+      }
+
       const payload: CreateVehicleRequest = {
+        // Required
         customerId,
         modelId,
         vehicleTypeId,
+        // Optional
         vin: vin ? vin.toUpperCase() : undefined,
         licensePlate: licensePlate ? licensePlate.toUpperCase() : undefined,
         mileage: mileage ? parseInt(mileage, 10) : undefined,
+        year: y,
+        color: color?.trim() || undefined,
+        engineType: engineType || undefined,
+        engineVolume: typeof vol === 'number' ? vol : undefined, // liters
+        notes: notes?.trim() || undefined,
       };
 
       const created = await vehiclesAPI.createVehicle(payload);
+
+      // Only in Update DTO
+      if ((lastServiceDate && lastServiceDate.trim()) || (nextServiceDate && nextServiceDate.trim())) {
+        try {
+          await vehiclesAPI.updateVehicle(created.id, {
+            lastServiceDate: lastServiceDate || undefined,
+            nextServiceDate: nextServiceDate || undefined,
+          });
+        } catch {
+          // ignore, not critical for creation UX
+        }
+      }
+
       onCreated?.(created);
       onOpenChange(false);
+
+      // Reset form
       setBrandId('');
       setModelId('');
       setVehicleTypeId('');
@@ -184,6 +313,13 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
       setVin('');
       setLicensePlate('');
       setMileage('');
+      setYear('');
+      setColor('');
+      setEngineType('');
+      setEngineVolume('');
+      setLastServiceDate('');
+      setNextServiceDate('');
+      setNotes('');
       setCustomerId('');
       setCustomerLabel('');
       setCustomerQuery('');
@@ -198,7 +334,25 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
     } finally {
       setSubmitting(false);
     }
-  }, [ensureCatalogueIds, customerId, modelId, vehicleTypeId, vin, licensePlate, mileage, onCreated, onOpenChange]);
+  }, [
+    ensureCatalogueIds,
+    customerId,
+    brandId,
+    modelId,
+    vehicleTypeId,
+    vin,
+    licensePlate,
+    mileage,
+    year,
+    color,
+    engineType,
+    engineVolume,
+    lastServiceDate,
+    nextServiceDate,
+    notes,
+    onCreated,
+    onOpenChange,
+  ]);
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -216,6 +370,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onOpenChange, submit]);
 
+  // Customer search
   React.useEffect(() => {
     if (!open) return;
     const q = customerQuery.trim();
@@ -238,11 +393,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
     };
   }, [customerQuery, open]);
 
-  const filteredModels = React.useMemo(() => {
-    if (!brandId) return models;
-    return models.filter((m) => m.brandId === brandId || m.brand?.id === brandId);
-  }, [models, brandId]);
-
+  // Smart paste handler
   const handlePasteSmart: React.ClipboardEventHandler<HTMLDivElement> = (e) => {
     const text = e.clipboardData.getData('text');
     if (!text) return;
@@ -250,20 +401,89 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
     if (parsed.vin) setVin((v) => v || parsed.vin);
     if (parsed.licensePlate) setLicensePlate((v) => v || parsed.licensePlate);
     if (parsed.mileage !== undefined) setMileage((v) => v || String(parsed.mileage));
+    if (parsed.year !== undefined) setYear((v) => v || String(parsed.year));
+    if (parsed.engineVolumeLiters !== undefined)
+      setEngineVolume((v) => v || String(parsed.engineVolumeLiters));
   };
 
   const afterCreateCustomer = (c: CustomerResponse) => {
     setCustomerId(c.id);
-    const label =
-      [c.firstName, c.lastName].filter(Boolean).join(' ') || c.companyName || c.email || c.id;
+    const label = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.companyName || c.email || c.id;
     setCustomerLabel(label);
     setOpenCustomerCreate(false);
+  };
+
+  // Filter helpers
+  const brandMatches = React.useMemo(() => {
+    const q = brandName.trim().toLowerCase();
+    if (!q) return brands.slice(0, 20);
+    return brands.filter((b) => b.name.toLowerCase().includes(q)).slice(0, 20);
+  }, [brands, brandName]);
+
+  const modelMatches = React.useMemo(() => {
+    const q = modelName.trim().toLowerCase();
+    const source = filteredModels;
+    if (!q) return source.slice(0, 20);
+    return source.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 20);
+  }, [filteredModels, modelName]);
+
+  const typeMatches = React.useMemo(() => {
+    const q = typeName.trim().toLowerCase();
+    if (!q) return types.slice(0, 20);
+    return types.filter((t) => t.name.toLowerCase().includes(q)).slice(0, 20);
+  }, [types, typeName]);
+
+  const createBrandInline = async () => {
+    if (!brandName.trim()) return;
+    setCreatingBrand(true);
+    try {
+      const b = await vehiclesCatalogueAPI.ensureBrand(brandName.trim());
+      setBrandId(b.id);
+      setBrandName(b.name);
+      if (!brands.find((x) => x.id === b.id)) setBrands((prev) => [...prev, b]);
+      setBrandOpen(false);
+      setModelId(''); // reset model after brand change
+    } finally {
+      setCreatingBrand(false);
+    }
+  };
+
+  const createModelInline = async () => {
+    if (!modelName.trim()) return;
+    if (!brandId) {
+      setError('Сначала выберите бренд');
+      return;
+    }
+    setCreatingModel(true);
+    try {
+      const m = await vehiclesCatalogueAPI.ensureModel(modelName.trim(), brandId);
+      setModelId(m.id);
+      setModelName(m.name);
+      if (!models.find((x) => x.id === m.id)) setModels((prev) => [...prev, m]);
+      setModelOpen(false);
+    } finally {
+      setCreatingModel(false);
+    }
+  };
+
+  const createTypeInline = async () => {
+    if (!typeName.trim()) return;
+    setCreatingType(true);
+    try {
+      const t = await vehiclesCatalogueAPI.ensureType(typeName.trim());
+      setVehicleTypeId(t.id);
+      setTypeName(t.name);
+      if (!types.find((x) => x.id === t.id)) setTypes((prev) => [...prev, t]);
+      setTypeOpen(false);
+    } finally {
+      setCreatingType(false);
+    }
   };
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent glow className="max-w-2xl" onPaste={handlePasteSmart}>
+        <DialogContent glow className="max-w-3xl" onPaste={handlePasteSmart}>
           <DialogHeader>
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
@@ -279,10 +499,20 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
             </div>
           </DialogHeader>
 
+          {/* Required/Optional legend */}
+          <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <Info className="w-3.5 h-3.5" />
+            <span>
+              Поля со звездочкой <span className="text-rose-500">*</span> — обязательные. Остальные — опционально.
+            </span>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Владелец */}
+            {/* Владелец (обязательно) */}
             <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground mb-1">Владелец (клиент)</div>
+              <div className="text-xs text-muted-foreground mb-1">
+                Владелец (клиент) <span className="text-rose-500">*</span>
+              </div>
               {customerId ? (
                 <div className="flex items-center justify-between rounded-md border border-border/60 p-2">
                   <div className="inline-flex items-center gap-2 text-sm">
@@ -317,11 +547,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
                   {customerResults.length > 0 && (
                     <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 bg-popover shadow-lg overflow-hidden">
                       {customerResults.map((c) => {
-                        const label =
-                          [c.firstName, c.lastName].filter(Boolean).join(' ') ||
-                          c.companyName ||
-                          c.email ||
-                          c.id;
+                        const label = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.companyName || c.email || c.id;
                         return (
                           <button
                             key={c.id}
@@ -352,150 +578,206 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
               )}
             </div>
 
-            {/* Бренд/Модель с автодобавлением */}
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">Бренд</div>
-              <div className="flex gap-2">
-                <select
-                  value={brandId}
-                  onChange={(e) => {
-                    setBrandId(e.target.value);
-                    setModelId('');
-                  }}
-                  className="w-full h-10 rounded-md border border-border bg-background text-sm px-3"
-                >
-                  <option value="">Не выбрано</option>
-                  {brands.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
+            {/* Бренд (обязательно, комбобокс с созданием) */}
+            <div className="relative">
+              <div className="text-xs text-muted-foreground mb-1">
+                Бренд <span className="text-rose-500">*</span>
               </div>
-              <div className="flex gap-2 mt-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Или введите новый бренд (например, Toyota)"
+                  placeholder="Например: Toyota"
                   value={brandName}
-                  onChange={(e) => setBrandName(e.target.value)}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    if (!brandName.trim()) return;
-                    setCreatingBrand(true);
-                    try {
-                      const b = await vehiclesCatalogueAPI.ensureBrand(brandName);
-                      setBrandId(b.id);
-                      if (!brands.find((x) => x.id === b.id)) setBrands((prev) => [...prev, b]);
-                    } finally {
-                      setCreatingBrand(false);
-                    }
+                  onChange={(e) => {
+                    setBrandName(e.target.value);
+                    setBrandOpen(true);
                   }}
-                  disabled={creatingBrand}
-                >
-                  <Plus className="w-4 h-4 mr-1" /> {creatingBrand ? '...' : 'Добавить'}
-                </Button>
-              </div>
-            </div>
-
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">Модель</div>
-              <div className="flex gap-2">
-                <select
-                  value={modelId}
-                  onChange={(e) => setModelId(e.target.value)}
-                  className="w-full h-10 rounded-md border border-border bg-background text-sm px-3"
-                >
-                  <option value="">Не выбрано</option>
-                  {filteredModels.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-2 mt-2">
-                <Input
-                  placeholder="Или введите новую модель (например, Camry)"
-                  value={modelName}
-                  onChange={(e) => setModelName(e.target.value)}
+                  onFocus={() => setBrandOpen(true)}
+                  onBlur={() => setTimeout(() => setBrandOpen(false), 150)}
+                  className="pl-8"
                 />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    if (!brandId && !brandName.trim()) {
-                      setError('Сначала выберите или создайте бренд');
-                      return;
-                    }
-                    setCreatingModel(true);
-                    try {
-                      if (!brandId && brandName.trim()) {
-                        const b = await vehiclesCatalogueAPI.ensureBrand(brandName);
+                {brandId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBrandId('');
+                      setBrandName('');
+                      setModelId('');
+                      setModelName('');
+                    }}
+                    className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                    aria-label="Очистить бренд"
+                    title="Очистить бренд"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {brandOpen && (brandMatches.length > 0 || brandName.trim()) && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 bg-popover shadow-lg overflow-auto max-h-56">
+                  {brandName.trim() && !brandMatches.some((b) => b.name.toLowerCase() === brandName.trim().toLowerCase()) && (
+                    <button
+                      type="button"
+                      onClick={createBrandInline}
+                      disabled={creatingBrand}
+                      className="w-full text-left px-3 py-2 text-primary hover:bg-primary/10 text-sm"
+                    >
+                      <Plus className="inline w-3.5 h-3.5 mr-1" />
+                      {creatingBrand ? 'Создание…' : `Создать бренд «${brandName.trim()}»`}
+                    </button>
+                  )}
+                  {brandMatches.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => {
                         setBrandId(b.id);
-                        if (!brands.find((x) => x.id === b.id)) setBrands((prev) => [...prev, b]);
-                      }
-                      if (brandId && modelName.trim()) {
-                        const m = await vehiclesCatalogueAPI.ensureModel(modelName, brandId);
-                        setModelId(m.id);
-                        if (!models.find((x) => x.id === m.id)) setModels((prev) => [...prev, m]);
-                      }
-                    } finally {
-                      setCreatingModel(false);
-                    }
-                  }}
-                  disabled={creatingModel}
-                >
-                  <Plus className="w-4 h-4 mr-1" /> {creatingModel ? '...' : 'Добавить'}
-                </Button>
-              </div>
-            </div>
-
-            {/* Тип с автодобавлением */}
-            <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground mb-1">Тип автомобиля</div>
-              <div className="flex gap-2">
-                <select
-                  value={vehicleTypeId}
-                  onChange={(e) => setVehicleTypeId(e.target.value)}
-                  className="w-full h-10 rounded-md border border-border bg-background text-sm px-3"
-                >
-                  <option value="">Не выбрано</option>
-                  {types.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
+                        setBrandName(b.name);
+                        setModelId('');
+                        setModelName('');
+                        setBrandOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-accent/40 text-sm"
+                    >
+                      {b.name}
+                    </button>
                   ))}
-                </select>
-                <Input
-                  placeholder="Или новый тип (например, Седан)"
-                  value={typeName}
-                  onChange={(e) => setTypeName(e.target.value)}
-                  className="max-w-xs"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    if (!typeName.trim()) return;
-                    setCreatingType(true);
-                    try {
-                      const t = await vehiclesCatalogueAPI.ensureType(typeName);
-                      setVehicleTypeId(t.id);
-                      if (!types.find((x) => x.id === t.id)) setTypes((prev) => [...prev, t]);
-                    } finally {
-                      setCreatingType(false);
-                    }
-                  }}
-                  disabled={creatingType}
-                >
-                  <Plus className="w-4 h-4 mr-1" /> {creatingType ? '...' : 'Добавить'}
-                </Button>
-              </div>
+                </div>
+              )}
             </div>
 
-            {/* VIN / ГРЗ / Пробег */}
+            {/* Модель (обязательно, комбобокс с созданием) */}
+            <div className="relative">
+              <div className="text-xs text-muted-foreground mb-1">
+                Модель <span className="text-rose-500">*</span>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder={brandId ? 'Например: Camry' : 'Сначала выберите бренд'}
+                  value={modelName}
+                  onChange={(e) => {
+                    setModelName(e.target.value);
+                    setModelOpen(true);
+                  }}
+                  onFocus={() => setModelOpen(true)}
+                  onBlur={() => setTimeout(() => setModelOpen(false), 150)}
+                  className="pl-8"
+                  disabled={!brandId}
+                />
+                {modelId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModelId('');
+                      setModelName('');
+                    }}
+                    className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                    aria-label="Очистить модель"
+                    title="Очистить модель"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {modelOpen && brandId && (modelMatches.length > 0 || modelName.trim()) && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 bg-popover shadow-lg overflow-auto max-h-56">
+                  {modelName.trim() &&
+                    !modelMatches.some((m) => m.name.toLowerCase() === modelName.trim().toLowerCase()) && (
+                      <button
+                        type="button"
+                        onClick={createModelInline}
+                        disabled={creatingModel}
+                        className="w-full text-left px-3 py-2 text-primary hover:bg-primary/10 text-sm"
+                      >
+                        <Plus className="inline w-3.5 h-3.5 mr-1" />
+                        {creatingModel ? 'Создание…' : `Создать модель «${modelName.trim()}»`}
+                      </button>
+                    )}
+                  {modelMatches.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        setModelId(m.id);
+                        setModelName(m.name);
+                        setModelOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-accent/40 text-sm"
+                    >
+                      {m.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Тип ТС (обязательно, комбобокс с созданием) */}
+            <div className="md:col-span-2 relative">
+              <div className="text-xs text-muted-foreground mb-1">
+                Тип автомобиля <span className="text-rose-500">*</span>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Например: Седан"
+                  value={typeName}
+                  onChange={(e) => {
+                    setTypeName(e.target.value);
+                    setTypeOpen(true);
+                  }}
+                  onFocus={() => setTypeOpen(true)}
+                  onBlur={() => setTimeout(() => setTypeOpen(false), 150)}
+                  className="pl-8"
+                />
+                {vehicleTypeId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVehicleTypeId('');
+                      setTypeName('');
+                    }}
+                    className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                    aria-label="Очистить тип"
+                    title="Очистить тип"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {typeOpen && (typeMatches.length > 0 || typeName.trim()) && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 bg-popover shadow-lg overflow-auto max-h-56">
+                  {typeName.trim() &&
+                    !typeMatches.some((t) => t.name.toLowerCase() === typeName.trim().toLowerCase()) && (
+                      <button
+                        type="button"
+                        onClick={createTypeInline}
+                        disabled={creatingType}
+                        className="w-full text-left px-3 py-2 text-primary hover:bg-primary/10 text-sm"
+                      >
+                        <Plus className="inline w-3.5 h-3.5 mr-1" />
+                        {creatingType ? 'Создание…' : `Создать тип «${typeName.trim()}»`}
+                      </button>
+                    )}
+                  {typeMatches.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setVehicleTypeId(t.id);
+                        setTypeName(t.name);
+                        setTypeOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-accent/40 text-sm"
+                    >
+                      {t.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* VIN / Госномер / Пробег */}
             <div className="relative">
               <Input
                 placeholder="VIN (17 символов)"
@@ -518,6 +800,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
                 </div>
               )}
             </div>
+
             <div className="relative">
               <Input
                 placeholder="Госномер"
@@ -527,6 +810,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
               />
               <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             </div>
+
             <div className="relative">
               <Input
                 placeholder="Пробег (км)"
@@ -536,12 +820,105 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
               />
               <Gauge className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             </div>
+
+            {/* Технические характеристики */}
+            <div className="relative">
+              <Input
+                type="number"
+                placeholder="Год выпуска (например, 2016)"
+                value={year}
+                onChange={(e) => setYear(e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
+                className="pl-8"
+              />
+              <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            </div>
+
+            <div className="relative">
+              <Input
+                placeholder="Цвет (например, Белый)"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="pl-8"
+              />
+              <PencilLine className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            </div>
+
+            <div className="relative">
+              <div className="relative">
+                <select
+                  value={engineType}
+                  onChange={(e) => setEngineType((e.target.value as EngineType) || '')}
+                  className="w-full h-10 rounded-md border border-border bg-background text-sm pl-8 pr-3"
+                >
+                  <option value="">Тип двигателя (опционально)</option>
+                  {ENGINE_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+                <Zap className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+
+            <div className="relative">
+              <Input
+                type="text"
+                inputMode="decimal"
+                placeholder="Объём двигателя (л), например 2.0"
+                value={engineVolume}
+                onChange={(e) => {
+                  const val = e.target.value.replace(',', '.');
+                  // keep only digits and one dot
+                  const normalized = val.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+                  setEngineVolume(normalized);
+                }}
+                className="pl-8"
+              />
+              <Gauge className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            </div>
+
+            {/* Сервисные даты */}
+            <div className="relative">
+              <div className="text-xs text-muted-foreground mb-1">Дата последнего ТО (необязательно)</div>
+              <Input
+                type="date"
+                value={lastServiceDate}
+                onChange={(e) => setLastServiceDate(e.target.value)}
+                className=""
+              />
+            </div>
+
+            <div className="relative">
+              <div className="text-xs text-muted-foreground mb-1">Дата следующего ТО (необязательно)</div>
+              <Input
+                type="date"
+                value={nextServiceDate}
+                onChange={(e) => setNextServiceDate(e.target.value)}
+                className=""
+              />
+            </div>
+
+            {/* Примечания */}
+            <div className="md:col-span-2">
+              <div className="text-xs text-muted-foreground mb-1">Примечания (необязательно)</div>
+              <textarea
+                placeholder="Опции, комментарии, особенности (будут сохранены безопасно)"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 resize-y"
+              />
+            </div>
           </div>
 
           {error && <div className="mt-2 text-sm text-destructive">{error}</div>}
 
           <DialogFooter className="mt-2">
             <div className="hidden sm:flex items-center text-xs text-muted-foreground mr-auto">
+              <span className="mr-2">Обязательные:</span>
+              <span className="font-medium">Владелец, Бренд, Модель, Тип автомобиля</span>
+              <span className="mx-2">•</span>
               <span className="mr-2">Горячие клавиши:</span>
               <Kbd>Esc</Kbd>
               <span className="mx-1">—</span>
@@ -559,7 +936,11 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
         </DialogContent>
       </Dialog>
 
-      <CustomerCreateDialog open={openCustomerCreate} onOpenChange={setOpenCustomerCreate} onCreated={afterCreateCustomer} />
+      <CustomerCreateDialog
+        open={openCustomerCreate}
+        onOpenChange={setOpenCustomerCreate}
+        onCreated={afterCreateCustomer}
+      />
     </>
   );
 }

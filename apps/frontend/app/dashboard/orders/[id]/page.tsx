@@ -7,6 +7,8 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { AppLayout } from '@/components/app/AppLayout';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { ordersAPI } from '@/lib/api/orders';
 import type {
@@ -23,7 +25,6 @@ import {
   BadgePercent,
   Truck,
   CheckCircle2,
-  Home,
   Plus,
   Pencil,
   Trash2,
@@ -31,10 +32,22 @@ import {
   Flag,
   UserPlus,
   Save,
+  Wrench,
+  Clock,
+  Car,
+  User,
+  Phone,
+  MapPin,
+  Sparkles,
+  TrendingUp,
+  DollarSign,
+  Zap,
+  Settings,
 } from 'lucide-react';
 import { OrderServiceAddDialog } from '@/components/orders/order-service-add-dialog';
 import { OrderPartAddDialog } from '@/components/orders/order-part-add-dialog';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   new: 'Новый',
@@ -43,6 +56,14 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
   completed: 'Завершен',
   canceled: 'Отменен',
 };
+
+const STATUS_COLORS = {
+  new: { bg: 'bg-sky-500/10', text: 'text-sky-600 dark:text-sky-400', border: 'border-sky-500/20' },
+  in_progress: { bg: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-500/20' },
+  awaiting_parts: { bg: 'bg-violet-500/10', text: 'text-violet-600 dark:text-violet-400', border: 'border-violet-500/20' },
+  completed: { bg: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-500/20' },
+  canceled: { bg: 'bg-rose-500/10', text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-500/20' },
+} as const;
 
 export default function OrderDetailsPage() {
   const params = useParams<{ id: string }>();
@@ -221,143 +242,273 @@ export default function OrderDetailsPage() {
   };
 
   if (!isMounted) return null;
+
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
-  }
-  if (!isAuthenticated || !user) return null;
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-surface-1">
-      <div className="fixed inset-0 bg-gradient-surface -z-10"></div>
-      <div className="fixed top-0 right-0 w-96 h-96 bg-gradient-primary opacity-5 rounded-full blur-3xl -z-10"></div>
-      <div className="fixed bottom-0 left-0 w-64 h-64 bg-secondary/10 rounded-full blur-3xl -z-10"></div>
-
-      <header className="border-b border-border/50 backdrop-blur-sm">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard/orders">
-              <Button variant="ghost">
-                <ArrowLeft className="w-4 h-4 mr-2" /> Назад
-              </Button>
-            </Link>
-            <h1 className="text-xl font-bold">Заказ {order?.orderNumber || '...'}</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard">
-              <Button variant="ghost">
-                <Home className="w-4 h-4 mr-2" /> В дашборд
-              </Button>
-            </Link>
-            <Button variant="outline" onClick={handleRefresh}>
-              <RefreshCw className="w-4 h-4 mr-2" /> Обновить
-            </Button>
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-muted-foreground">Загрузка заказа...</span>
           </div>
         </div>
-      </header>
+      </AppLayout>
+    );
+  }
 
-      <main className="container mx-auto px-6 py-6 space-y-6">
+  if (!isAuthenticated || !user) return null;
+
+  const orderNumber = order?.orderNumber || '...';
+
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <Link href="/dashboard/orders">
+        <Button variant="outline" className="rounded-2xl btn-outline-fixed">
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          К списку
+        </Button>
+      </Link>
+      
+      <Button variant="outline" onClick={handleRefresh} className="rounded-2xl btn-outline-fixed">
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Обновить
+      </Button>
+    </div>
+  );
+
+  return (
+    <AppLayout
+      title={`Заказ ${orderNumber}`}
+      description="Детали заказ-наряда и управление работами"
+      icon={Wrench}
+      actions={headerActions}
+    >
+      <div className="container mx-auto px-6 py-6 space-y-6">
+        {/* Order Management Feature Badge */}
+        <Card className="p-4 glass border-primary/20 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-3xl">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-primary">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-primary">Полное управление заказом</h3>
+              <p className="text-sm text-muted-foreground">
+                Добавление услуг и запчастей, назначение исполнителей, отслеживание прогресса и автоматический расчет стоимости.
+              </p>
+            </div>
+            <div className="ml-auto">
+              <TrendingUp className="w-6 h-6 text-secondary" />
+            </div>
+          </div>
+        </Card>
+
         {loading ? (
-          <div className="space-y-4">
-            <div className="h-28 bg-surface-1 rounded-md animate-pulse" />
-            <div className="h-40 bg-surface-1 rounded-md animate-pulse" />
-            <div className="h-40 bg-surface-1 rounded-md animate-pulse" />
+          <div className="space-y-6">
+            {[...Array(3)].map((_, i) => (
+              <Card key={i} className="p-6 glass border-border/30 rounded-3xl">
+                <div className="space-y-4">
+                  <div className="h-8 bg-surface-1/40 rounded-2xl animate-pulse" />
+                  <div className="grid grid-cols-3 gap-4">
+                    {[...Array(3)].map((_, j) => (
+                      <div key={j} className="h-16 bg-surface-1/40 rounded-2xl animate-pulse" />
+                    ))}
+                  </div>
+                </div>
+              </Card>
+            ))}
           </div>
         ) : error ? (
-          <Card className="p-6 text-center text-destructive">{error}</Card>
+          <Card className="p-6 text-center text-destructive glass border-destructive/20 rounded-3xl">
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <Zap className="w-5 h-5" />
+              <span className="font-medium">Ошибка загрузки</span>
+            </div>
+            <p>{error}</p>
+            <Button onClick={handleRefresh} className="mt-4 rounded-2xl">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Повторить
+            </Button>
+          </Card>
         ) : !order ? (
-          <Card className="p-6 text-center text-muted-foreground">Заказ не найден</Card>
+          <Card className="p-8 text-center text-muted-foreground glass border-border/30 rounded-3xl">
+            <Wrench className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <h3 className="text-lg font-medium mb-2">Заказ не найден</h3>
+            <p className="text-sm">Возможно, заказ был удален или у вас нет прав доступа</p>
+          </Card>
         ) : (
           <>
-            {/* Overview */}
-            <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50">
-              <div className="grid md:grid-cols-3 gap-6">
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Статус</div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <StatusPill status={order.status} />
-                    <select
-                      className="h-9 rounded-md border border-border bg-background text-sm px-3"
-                      value={newStatus}
-                      onChange={(e) => setNewStatus(e.target.value as OrderStatus)}
-                    >
-                      <option value="new">Новый</option>
-                      <option value="in_progress">В работе</option>
-                      <option value="awaiting_parts">Ожидание запчастей</option>
-                      <option value="completed">Завершен</option>
-                      <option value="canceled">Отменен</option>
-                    </select>
-                    <Button size="sm" onClick={handleUpdateStatus} disabled={updating}>
-                      Обновить
-                    </Button>
+            {/* Order Header Card */}
+            <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+              <div className="grid lg:grid-cols-3 gap-6">
+                {/* Status & Controls */}
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                      <Settings className="w-4 h-4" />
+                      Управление статусом
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <StatusPill status={order.status} size="lg" />
+                      <select
+                        className="h-10 rounded-2xl border border-border/50 bg-background/80 text-sm px-3 focus:border-primary/50 transition-all duration-300"
+                        value={newStatus}
+                        onChange={(e) => setNewStatus(e.target.value as OrderStatus)}
+                      >
+                        <option value="new">Новый</option>
+                        <option value="in_progress">В работе</option>
+                        <option value="awaiting_parts">Ожидание запчастей</option>
+                        <option value="completed">Завершен</option>
+                        <option value="canceled">Отменен</option>
+                      </select>
+                      <Button size="sm" onClick={handleUpdateStatus} disabled={updating} className="rounded-xl">
+                        <Save className="w-3.5 h-3.5 mr-1" />
+                        Обновить
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Quick Actions */}
+                  <div className="flex flex-wrap gap-2">
                     {order.status === 'new' && (
-                      <Button size="sm" variant="outline" onClick={quickToInProgress}>
+                      <Button size="sm" variant="outline" onClick={quickToInProgress} className="rounded-xl btn-outline-fixed">
                         <Play className="w-3.5 h-3.5 mr-1" /> В работу
                       </Button>
                     )}
                     {order.status === 'in_progress' && (
-                      <Button size="sm" variant="outline" onClick={quickToCompleted}>
+                      <Button size="sm" variant="outline" onClick={quickToCompleted} className="rounded-xl btn-outline-fixed">
                         <Flag className="w-3.5 h-3.5 mr-1" /> Готово
                       </Button>
                     )}
-                    <Button size="sm" variant="outline" onClick={handleAssignMe}>
+                    <Button size="sm" variant="outline" onClick={handleAssignMe} className="rounded-xl btn-outline-fixed">
                       <UserPlus className="w-3.5 h-3.5 mr-1" /> Назначить меня
                     </Button>
                   </div>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Клиент</div>
-                  <div className="text-sm">
-                    {order.customer?.firstName || order.customer?.companyName || '—'}
-                  </div>
-                  <div className="text-xs text-muted-foreground">{order.customer?.phone}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Автомобиль</div>
-                  <div className="text-sm">
-                    {order.vehicle?.model?.brand?.name} {order.vehicle?.model?.name} ·{' '}
-                    {order.vehicle?.licensePlate || order.vehicle?.vin}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Пробег: {order.mileage ?? '—'}</div>
-                </div>
-              </div>
 
-              <div className="grid md:grid-cols-4 gap-4 mt-6">
-                <Kpi title="Подытог" value={`${(order.totalAmount || 0).toLocaleString('ru-RU')} ₽`} icon={Shield} />
-                <Kpi
-                  title="Скидка"
-                  value={`${(order.discountAmount || 0).toLocaleString('ru-RU')} ₽`}
-                  icon={BadgePercent}
-                />
-                <Kpi title="Налог" value={`${(order.taxAmount || 0).toLocaleString('ru-RU')} ₽`} icon={Calendar} />
-                <Kpi title="Итого" value={`${(order.finalAmount || 0).toLocaleString('ru-RU')} ₽`} icon={CheckCircle2} />
-              </div>
+                {/* Customer Info */}
+                <div className="space-y-3">
+                  <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    Клиент
+                  </div>
+                  <div className="p-3 rounded-2xl bg-surface-1/40 border border-border/30">
+                    <div className="font-medium text-sm">
+                      {order.customer?.firstName || order.customer?.companyName || 'Не указан'}
+                    </div>
+                    {order.customer?.phone && (
+                      <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                        <Phone className="w-3 h-3" />
+                        {order.customer.phone}
+                      </div>
+                    )}
+                    {order.customer?.email && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {order.customer.email}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-              <div className="mt-6">
-                <Button variant="outline" onClick={handleRecalculate} disabled={updating}>
-                  Пересчитать финансы
-                </Button>
+                {/* Vehicle Info */}
+                <div className="space-y-3">
+                  <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                    <Car className="w-4 h-4" />
+                    Автомобиль
+                  </div>
+                  <div className="p-3 rounded-2xl bg-surface-1/40 border border-border/30">
+                    <div className="font-medium text-sm">
+                      {order.vehicle?.model?.brand?.name} {order.vehicle?.model?.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1 space-y-1">
+                      {order.vehicle?.licensePlate && (
+                        <div className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          {order.vehicle.licensePlate}
+                        </div>
+                      )}
+                      {order.mileage && (
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Пробег: {order.mileage.toLocaleString('ru-RU')} км
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </Card>
 
-            {/* Services */}
-            <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50">
-              <div className="flex items-center justify-between mb-4">
-                <div className="text-lg font-semibold">Услуги</div>
-                <div className="flex items-center gap-2">
-                  <div className="text-sm text-muted-foreground">Всего: {services.length}</div>
-                  <Button size="sm" onClick={() => setOpenAddService(true)}>
-                    <Plus className="w-4 h-4 mr-2" /> Добавить услугу
+            {/* Financial Summary */}
+            <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-xl bg-gradient-to-r from-emerald-500/20 to-primary/20">
+                  <DollarSign className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold">Финансовая сводка</h3>
+                  <p className="text-sm text-muted-foreground">Расчет стоимости заказа</p>
+                </div>
+                <div className="ml-auto">
+                  <Button variant="outline" onClick={handleRecalculate} disabled={updating} className="rounded-xl btn-outline-fixed">
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Пересчитать
                   </Button>
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <FinancialKpi 
+                  title="Подытог" 
+                  value={`${(order.totalAmount || 0).toLocaleString('ru-RU')} ₽`} 
+                  icon={Shield} 
+                  color="blue"
+                />
+                <FinancialKpi 
+                  title="Скидка" 
+                  value={`${(order.discountAmount || 0).toLocaleString('ru-RU')} ₽`} 
+                  icon={BadgePercent} 
+                  color="purple"
+                />
+                <FinancialKpi 
+                  title="Налог" 
+                  value={`${(order.taxAmount || 0).toLocaleString('ru-RU')} ₽`} 
+                  icon={Calendar} 
+                  color="amber"
+                />
+                <FinancialKpi 
+                  title="Итого" 
+                  value={`${(order.finalAmount || 0).toLocaleString('ru-RU')} ₽`} 
+                  icon={CheckCircle2} 
+                  color="emerald"
+                  highlight
+                />
+              </div>
+            </Card>
+
+            {/* Services Section */}
+            <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-gradient-to-r from-blue-500/20 to-primary/20">
+                    <Wrench className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">Услуги</h3>
+                    <p className="text-sm text-muted-foreground">Работы по заказу ({services.length})</p>
+                  </div>
+                </div>
+                <Button onClick={() => setOpenAddService(true)} className="rounded-2xl bg-gradient-primary hover:opacity-90">
+                  <Plus className="w-4 h-4 mr-2" /> Добавить услугу
+                </Button>
+              </div>
+              
               {services.length === 0 ? (
-                <div className="text-sm text-muted-foreground">Услуги не добавлены</div>
+                <div className="text-center py-8 text-muted-foreground">
+                  <Wrench className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm">Услуги пока не добавлены</p>
+                </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {services.map((s) => (
                     <ServiceRow key={s.id} service={s} orderId={id} onChanged={handleRefresh} />
                   ))}
@@ -365,21 +516,30 @@ export default function OrderDetailsPage() {
               )}
             </Card>
 
-            {/* Parts */}
-            <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50">
-              <div className="flex items-center justify-between mb-4">
-                <div className="text-lg font-semibold">Запчасти</div>
-                <div className="flex items-center gap-2">
-                  <div className="text-sm text-muted-foreground">Всего: {parts.length}</div>
-                  <Button size="sm" onClick={() => setOpenAddPart(true)}>
-                    <Plus className="w-4 h-4 mr-2" /> Добавить запчасть
-                  </Button>
+            {/* Parts Section */}
+            <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20">
+                    <Truck className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">Запчасти</h3>
+                    <p className="text-sm text-muted-foreground">Материалы для заказа ({parts.length})</p>
+                  </div>
                 </div>
+                <Button onClick={() => setOpenAddPart(true)} className="rounded-2xl bg-gradient-primary hover:opacity-90">
+                  <Plus className="w-4 h-4 mr-2" /> Добавить запчасть
+                </Button>
               </div>
+              
               {parts.length === 0 ? (
-                <div className="text-sm text-muted-foreground">Запчасти не добавлены</div>
+                <div className="text-center py-8 text-muted-foreground">
+                  <Truck className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm">Запчасти пока не добавлены</p>
+                </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {parts.map((p) => (
                     <PartRow key={p.id} part={p} orderId={id} onChanged={handleRefresh} />
                   ))}
@@ -402,11 +562,12 @@ export default function OrderDetailsPage() {
             />
           </>
         )}
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
 
+// Enhanced Service Row Component
 function ServiceRow({
   service,
   orderId,
@@ -516,71 +677,94 @@ function ServiceRow({
   };
 
   return (
-    <div className="p-3 rounded-md border border-border/50">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="font-medium">{service.service?.name || 'Услуга'}</div>
-          <div className="text-xs text-muted-foreground">
-            {service.quantity} × {service.price.toLocaleString('ru-RU')} ₽ · скидка {service.discountPercent}%{' '}
-            {service.status ? `· ${service.status}` : ''}
+    <div className="p-4 rounded-2xl border border-border/30 bg-surface-1/20 hover:bg-surface-1/40 transition-all duration-300 group">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3 flex-1">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500/20 to-primary/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+            <Wrench className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </div>
-          {editing && (
-            <div className="grid grid-cols-4 gap-2 mt-2">
-              <Input value={q} onChange={(e) => setQ(e.target.value.replace(/[^\d]/g, ''))} placeholder="Кол-во" />
-              <Input
-                value={price}
-                onChange={(e) => setPrice(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
-                placeholder="Цена"
-              />
-              <Input
-                value={disc}
-                onChange={(e) => setDisc(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
-                placeholder="Скидка %"
-              />
-              <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Заметки (опц.)" />
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm mb-1">{service.service?.name || 'Услуга'}</div>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div>Количество: {service.quantity} • Цена: {service.price.toLocaleString('ru-RU')} ₽</div>
+              <div>Скидка: {service.discountPercent}% • Статус: {service.status || 'Планируется'}</div>
             </div>
-          )}
+            {editing && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-3">
+                <Input 
+                  value={q} 
+                  onChange={(e) => setQ(e.target.value.replace(/[^\d]/g, ''))} 
+                  placeholder="Кол-во"
+                  className="rounded-xl"
+                />
+                <Input
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
+                  placeholder="Цена"
+                  className="rounded-xl"
+                />
+                <Input
+                  value={disc}
+                  onChange={(e) => setDisc(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
+                  placeholder="Скидка %"
+                  className="rounded-xl"
+                />
+                <Input 
+                  value={notes} 
+                  onChange={(e) => setNotes(e.target.value)} 
+                  placeholder="Заметки"
+                  className="rounded-xl"
+                />
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {!editing ? (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-                <Pencil className="w-3.5 h-3.5 mr-1" /> Изменить
-              </Button>
-              <Button variant="outline" size="sm" onClick={assignMe} disabled={busy}>
-                <UserPlus className="w-3.5 h-3.5 mr-1" /> Мой
-              </Button>
-              {service.status !== 'in_progress' && (
-                <Button variant="outline" size="sm" onClick={start} disabled={busy}>
-                  <Play className="w-3.5 h-3.5 mr-1" /> Старт
+        
+        <div className="text-right">
+          <div className="text-sm font-semibold mb-2">
+            {service.totalAmount.toLocaleString('ru-RU')} ₽
+          </div>
+          <div className="flex items-center gap-1 flex-wrap justify-end">
+            {!editing ? (
+              <>
+                <Button variant="outline" size="sm" onClick={() => setEditing(true)} className="rounded-xl btn-outline-fixed">
+                  <Pencil className="w-3.5 h-3.5 mr-1" /> Изменить
                 </Button>
-              )}
-              {service.status !== 'completed' && (
-                <Button variant="outline" size="sm" onClick={complete} disabled={busy}>
-                  <Flag className="w-3.5 h-3.5 mr-1" /> Завершить
+                <Button variant="outline" size="sm" onClick={assignMe} disabled={busy} className="rounded-xl btn-outline-fixed">
+                  <UserPlus className="w-3.5 h-3.5 mr-1" /> Мой
                 </Button>
-              )}
-              <Button variant="destructive" size="sm" onClick={remove} disabled={busy}>
-                <Trash2 className="w-3.5 h-3.5 mr-1" /> Удалить
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button size="sm" onClick={save} disabled={busy}>
-                <Save className="w-3.5 h-3.5 mr-1" /> Сохранить
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={busy}>
-                Отмена
-              </Button>
-            </>
-          )}
+                {service.status !== 'in_progress' && (
+                  <Button variant="outline" size="sm" onClick={start} disabled={busy} className="rounded-xl btn-outline-fixed">
+                    <Play className="w-3.5 h-3.5 mr-1" /> Старт
+                  </Button>
+                )}
+                {service.status !== 'completed' && (
+                  <Button variant="outline" size="sm" onClick={complete} disabled={busy} className="rounded-xl btn-outline-fixed">
+                    <Flag className="w-3.5 h-3.5 mr-1" /> Готово
+                  </Button>
+                )}
+                <Button variant="destructive" size="sm" onClick={remove} disabled={busy} className="rounded-xl">
+                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Удалить
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button size="sm" onClick={save} disabled={busy} className="rounded-xl">
+                  <Save className="w-3.5 h-3.5 mr-1" /> Сохранить
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={busy} className="rounded-xl btn-outline-fixed">
+                  Отмена
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </div>
-      <div className="text-right mt-2 text-sm font-medium">{service.totalAmount.toLocaleString('ru-RU')} ₽</div>
     </div>
   );
 }
 
+// Enhanced Part Row Component
 function PartRow({
   part,
   orderId,
@@ -658,109 +842,146 @@ function PartRow({
   };
 
   return (
-    <div className="p-3 rounded-md border border-border/50">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded bg-secondary/20 flex items-center justify-center">
-            <Truck className="w-4 h-4 text-secondary" />
+    <div className="p-4 rounded-2xl border border-border/30 bg-surface-1/20 hover:bg-surface-1/40 transition-all duration-300 group">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3 flex-1">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+            <Truck className="w-5 h-5 text-amber-600 dark:text-amber-400" />
           </div>
-          <div>
-            <div className="font-medium">{part.part?.name || 'Запчасть'}</div>
-            <div className="text-xs text-muted-foreground">
-              {part.quantity} × {part.price.toLocaleString('ru-RU')} ₽ · скидка {part.discountPercent}%{' '}
-              {part.isCustomerProvided ? '· клиента' : '· со склада'}
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm mb-1">{part.part?.name || 'Запчасть'}</div>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div>Количество: {part.quantity} • Цена: {part.price.toLocaleString('ru-RU')} ₽</div>
+              <div className="flex items-center gap-2">
+                <span>Скидка: {part.discountPercent}%</span>
+                <Badge variant={part.isCustomerProvided ? "secondary" : "default"} className="text-xs">
+                  {part.isCustomerProvided ? 'Клиентская' : 'Со склада'}
+                </Badge>
+              </div>
             </div>
             {editing && (
-              <div className="grid grid-cols-3 gap-2 mt-2">
-                <Input value={q} onChange={(e) => setQ(e.target.value.replace(/[^\d]/g, ''))} placeholder="Кол-во" />
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                <Input 
+                  value={q} 
+                  onChange={(e) => setQ(e.target.value.replace(/[^\d]/g, ''))} 
+                  placeholder="Кол-во"
+                  className="rounded-xl"
+                />
                 <Input
                   value={price}
                   onChange={(e) => setPrice(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
                   placeholder="Цена"
+                  className="rounded-xl"
                 />
                 <Input
                   value={disc}
                   onChange={(e) => setDisc(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
                   placeholder="Скидка %"
+                  className="rounded-xl"
                 />
               </div>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {!editing ? (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-                <Pencil className="w-3.5 h-3.5 mr-1" /> Изменить
-              </Button>
-              <Button variant="outline" size="sm" onClick={toggleProvided} disabled={busy}>
-                {customerProvided ? 'Со склада' : 'Клиентская'}
-              </Button>
-              <Button variant="destructive" size="sm" onClick={remove} disabled={busy}>
-                <Trash2 className="w-3.5 h-3.5 mr-1" /> Удалить
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button size="sm" onClick={save} disabled={busy}>
-                <Save className="w-3.5 h-3.5 mr-1" /> Сохранить
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={busy}>
-                Отмена
-              </Button>
-            </>
-          )}
+        
+        <div className="text-right">
+          <div className="text-sm font-semibold mb-2">
+            {part.totalAmount.toLocaleString('ru-RU')} ₽
+          </div>
+          <div className="flex items-center gap-1 flex-wrap justify-end">
+            {!editing ? (
+              <>
+                <Button variant="outline" size="sm" onClick={() => setEditing(true)} className="rounded-xl btn-outline-fixed">
+                  <Pencil className="w-3.5 h-3.5 mr-1" /> Изменить
+                </Button>
+                <Button variant="outline" size="sm" onClick={toggleProvided} disabled={busy} className="rounded-xl btn-outline-fixed">
+                  {customerProvided ? 'Со склада' : 'Клиентская'}
+                </Button>
+                <Button variant="destructive" size="sm" onClick={remove} disabled={busy} className="rounded-xl">
+                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Удалить
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button size="sm" onClick={save} disabled={busy} className="rounded-xl">
+                  <Save className="w-3.5 h-3.5 mr-1" /> Сохранить
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={busy} className="rounded-xl btn-outline-fixed">
+                  Отмена
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </div>
-      <div className="text-right mt-2 text-sm font-medium">{part.totalAmount.toLocaleString('ru-RU')} ₽</div>
     </div>
   );
 }
 
-function StatusPill({ status }: { status: OrderStatus }) {
-  const text =
-    status === 'new'
-      ? 'text-sky-600 dark:text-sky-400'
-      : status === 'in_progress'
-      ? 'text-amber-600 dark:text-amber-400'
-      : status === 'awaiting_parts'
-      ? 'text-violet-600 dark:text-violet-400'
-      : status === 'completed'
-      ? 'text-emerald-600 dark:text-emerald-400'
-      : 'text-rose-600 dark:text-rose-400';
-  const bg =
-    status === 'new'
-      ? 'bg-sky-500/10'
-      : status === 'in_progress'
-      ? 'bg-amber-500/10'
-      : status === 'awaiting_parts'
-      ? 'bg-violet-500/10'
-      : status === 'completed'
-      ? 'bg-emerald-500/10'
-      : 'bg-rose-500/10';
+// Enhanced Status Pill Component
+function StatusPill({ status, size = 'default' }: { status: OrderStatus; size?: 'default' | 'lg' }) {
+  const colors = STATUS_COLORS[status];
+  const sizeClasses = size === 'lg' ? 'px-3 py-1.5 text-sm' : 'px-2 py-0.5 text-xs';
+  
   return (
-    <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${text} ${bg}`}>
+    <span className={cn(
+      'rounded-xl font-medium border transition-all duration-300',
+      colors.bg,
+      colors.text,
+      colors.border,
+      sizeClasses
+    )}>
       {STATUS_LABELS[status]}
     </span>
   );
 }
 
-function Kpi({
+// Enhanced Financial KPI Component
+function FinancialKpi({
   title,
   value,
   icon: Icon,
+  color = 'default',
+  highlight = false,
 }: {
   title: string;
   value: string;
   icon: React.ComponentType<{ className?: string }>;
+  color?: 'default' | 'blue' | 'purple' | 'amber' | 'emerald';
+  highlight?: boolean;
 }) {
+  const colorClasses = {
+    default: 'from-surface-1/40 to-surface-2/40 border-border/30',
+    blue: 'from-blue-500/10 to-blue-600/5 border-blue-500/20',
+    purple: 'from-purple-500/10 to-purple-600/5 border-purple-500/20',
+    amber: 'from-amber-500/10 to-amber-600/5 border-amber-500/20',
+    emerald: 'from-emerald-500/10 to-emerald-600/5 border-emerald-500/20',
+  };
+
+  const iconColorClasses = {
+    default: 'text-muted-foreground',
+    blue: 'text-blue-600 dark:text-blue-400',
+    purple: 'text-purple-600 dark:text-purple-400',
+    amber: 'text-amber-600 dark:text-amber-400',
+    emerald: 'text-emerald-600 dark:text-emerald-400',
+  };
+
   return (
-    <div className="p-3 rounded-lg border border-border/50 bg-surface-1/40">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Icon className="w-4 h-4" />
-        {title}
+    <div className={cn(
+      'p-4 rounded-2xl border bg-gradient-to-br transition-all duration-300 hover:scale-[1.02]',
+      colorClasses[color],
+      highlight && 'ring-1 ring-primary/20'
+    )}>
+      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+        <Icon className={cn('w-4 h-4', iconColorClasses[color])} />
+        <span>{title}</span>
       </div>
-      <div className="text-lg font-semibold mt-1">{value}</div>
+      <div className={cn(
+        'text-lg font-bold',
+        highlight ? 'text-emerald-600 dark:text-emerald-400' : ''
+      )}>
+        {value}
+      </div>
     </div>
   );
 }

@@ -1,14 +1,28 @@
 // path: apps/frontend/app/dashboard/invoices/[id]/_client/Details.client.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FileText, AlertTriangle, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { 
+  FileText, 
+  AlertTriangle, 
+  CheckCircle2, 
+  XCircle, 
+  Loader2, 
+  ArrowLeft,
+  Download,
+  CreditCard,
+  Clock,
+  BarChart3,
+  TrendingUp
+} from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AppLayout } from '@/components/app/AppLayout';
 
 import { invoicesAPI } from '@/lib/api/invoices';
 import type { Invoice, InvoiceStatus } from '@/lib/types/invoices';
@@ -17,6 +31,7 @@ import { useAuth } from '@/lib/hooks/use-auth';
 import { PayInvoiceButton } from '@features/pay-invoice';
 import { apiRequest } from '@/lib/api/core';
 import type { Payment } from '@/lib/types/payments';
+import { cn } from '@/lib/utils';
 
 function amountFmt(n?: number) {
   return typeof n === 'number'
@@ -33,17 +48,21 @@ function dateFmt(d?: string | Date) {
 export default function Details() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
 
+  const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [changing, setChanging] = useState<InvoiceStatus | null>(null);
   const [canceling, setCanceling] = useState(false);
 
+  const paymentsAbortRef = useRef<AbortController | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
   const [paymentsError, setPaymentsError] = useState<string | null>(null);
+
+  useEffect(() => setIsMounted(true), []);
 
   // RBAC: роль, разрешённая на оплату (CAN_RECORD_PAYMENT): owner/admin/manager (+ легаси алиасы)
   const canUpdate = useMemo(() => {
@@ -59,9 +78,16 @@ export default function Details() {
   }, [user?.role?.name]);
 
   useEffect(() => {
+    if (!isMounted) return;
+    if (authLoading) return;
+    if (!isAuthenticated || !user) {
+      router.push('/login');
+      return;
+    }
+    if (!id) return;
+
     let active = true;
     const run = async () => {
-      if (!id) return;
       setLoading(true);
       setError(null);
       try {
@@ -77,13 +103,16 @@ export default function Details() {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [isMounted, authLoading, isAuthenticated, user, router, id]);
 
-  // Загрузка последних платежей по счёту
+  // Загрузка последних платежей по счёту (abortable)
   useEffect(() => {
     if (!invoice?.id) return;
-    let cancelled = false;
+    if (paymentsAbortRef.current) paymentsAbortRef.current.abort();
     const controller = new AbortController();
+    paymentsAbortRef.current = controller;
+
+    let cancelled = false;
     setPaymentsLoading(true);
     setPaymentsError(null);
 
@@ -153,230 +182,397 @@ export default function Details() {
     invoice.status === 'ISSUED' &&
     (invoice.remainingAmount ?? 0) > 0;
 
-  return (
-    <div className="container mx-auto px-6 py-8">
-      <div className="mb-6 flex items-center gap-3">
-        <Link href="/dashboard/invoices">
-          <Button variant="ghost" className="rounded-2xl">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Назад
-          </Button>
-        </Link>
-      </div>
+  // Progressive fallback: если paidAmount не пришел — считаем из платежей (processed)
+  const paidFromPayments = useMemo(() => {
+    if (!payments || payments.length === 0) return 0;
+    // @ts-ignore — минимальная совместимость, поле статуса может называться иначе на ранних версиях
+    return payments.filter((p) => (p.status === 'processed' || p.status === 'succeeded')).reduce((sum, p) => sum + (p.amount || 0), 0);
+  }, [payments]);
 
-      {loading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-24 rounded-2xl" />
-          <Skeleton className="h-40 rounded-2xl" />
-          <Skeleton className="h-24 rounded-2xl" />
-        </div>
-      ) : error ? (
-        <Card className="p-8 text-center rounded-3xl glass border-border/30">
-          <div className="flex items-center justify-center gap-3 text-destructive">
-            <AlertTriangle className="w-5 h-5" />
-            <p>{error}</p>
+  const effectivePaid = invoice?.paidAmount ?? paidFromPayments;
+  const progressPercentage = invoice ? Math.round(((effectivePaid || 0) / (invoice.totalAmount || 1)) * 100) : 0;
+
+  if (!isMounted) return null;
+
+  if (authLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-muted-foreground">Загрузка...</span>
           </div>
-          <div className="mt-4">
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!isAuthenticated || !user) return null;
+
+  const invoiceNumber = invoice?.invoiceNumber || '...';
+
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <Link href="/dashboard/invoices">
+        <Button variant="outline" className="rounded-2xl btn-outline-fixed">
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          К списку
+        </Button>
+      </Link>
+    </div>
+  );
+
+  return (
+    <AppLayout
+      title={`Счёт ${invoiceNumber}`}
+      description="Детали счёта и история платежей"
+      icon={FileText}
+      actions={headerActions}
+    >
+      <div className="container mx-auto px-6 py-6 space-y-6">
+        {/* Payment Progress Feature Badge */}
+        <Card className="p-4 glass border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 to-blue-500/5 rounded-3xl">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-to-r from-emerald-500 to-blue-500">
+              <BarChart3 className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-emerald-600 dark:text-emerald-400">Прогресс оплаты счёта</h3>
+              <p className="text-sm text-muted-foreground">
+                Интерактивный прогресс-бар, статистика платежей и возможность онлайн оплаты. Все изменения в реальном времени.
+              </p>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/30">
+                <TrendingUp className="w-3 h-3 mr-1" />
+                {progressPercentage}% оплачен
+              </Badge>
+            </div>
+          </div>
+        </Card>
+
+        {loading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-32 rounded-3xl" />
+            <Skeleton className="h-40 rounded-3xl" />
+            <Skeleton className="h-24 rounded-3xl" />
+          </div>
+        ) : error ? (
+          <Card className="p-8 text-center text-destructive glass border-border/30 rounded-3xl">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <AlertTriangle className="w-6 h-6" />
+              <p className="text-lg font-medium">{error}</p>
+            </div>
             <Button onClick={() => window.location.reload()} className="rounded-2xl">
               Повторить
             </Button>
-          </div>
-        </Card>
-      ) : !invoice ? null : (
-        <div className="space-y-6">
-          {/* Header */}
-          <Card className="p-6 rounded-3xl glass border-border/30">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-indigo-500" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-semibold">Счёт {invoice.invoiceNumber}</h1>
-                  <p className="text-sm text-muted-foreground">
-                    Заказ: {invoice.order?.orderNumber || invoice.orderId.slice(0, 8)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <StatusPill status={invoice.status as InvoiceStatus} />
-              </div>
-            </div>
           </Card>
-
-          {/* Main info */}
-          <Card className="p-6 rounded-3xl glass border-border/30">
-            <div className="grid md:grid-cols-3 gap-6">
-              <InfoBlock title="Статус">
-                <StatusPill status={invoice.status as InvoiceStatus} />
-              </InfoBlock>
-              <InfoBlock title="Выставлен">{new Date(invoice.issueDate).toLocaleDateString('ru-RU')}</InfoBlock>
-              <InfoBlock title="Срок оплаты">{new Date(invoice.dueDate).toLocaleDateString('ru-RU')}</InfoBlock>
-              <InfoBlock title="Сумма (без НДС)">{amountFmt(invoice.amount)}</InfoBlock>
-              <InfoBlock title="НДС">{amountFmt(invoice.taxAmount)}</InfoBlock>
-              <InfoBlock title="Итого к оплате">{amountFmt(invoice.totalAmount)}</InfoBlock>
-              <InfoBlock title="Оплачено">{amountFmt(invoice.paidAmount)}</InfoBlock>
-              <InfoBlock title="Остаток">{amountFmt(invoice.remainingAmount)}</InfoBlock>
-              <InfoBlock title="Налог, %">{invoice.taxPercentage ?? 20}%</InfoBlock>
-            </div>
+        ) : !invoice ? (
+          <Card className="p-8 text-center text-muted-foreground glass border-border/30 rounded-3xl">
+            Счёт не найден
           </Card>
-
-          {/* Actions */}
-          <Card className="p-6 rounded-3xl glass border-border/30">
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                className="rounded-2xl"
-                onClick={() => changeStatus('PAID')}
-                disabled={!canMarkPaid || Boolean(changing)}
-                title={invoice.status !== 'ISSUED' ? 'Статус “Оплачен” недоступен' : undefined}
-              >
-                {changing === 'PAID' ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                )}
-                Отметить оплаченным
-              </Button>
-
-              <Button
-                variant="ghost"
-                className="rounded-2xl text-destructive"
-                onClick={cancel}
-                disabled={!canCancelAction || canceling}
-                title={invoice.status !== 'ISSUED' ? 'Отмена недоступна для текущего статуса' : undefined}
-              >
-                {canceling ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <XCircle className="w-4 h-4 mr-2" />}
-                Отменить счёт
-              </Button>
-
-              {canPayOnline ? (
-                <PayInvoiceButton
-                  invoiceId={invoice.id}
-                  amount={invoice.remainingAmount || undefined}
-                  className="rounded-2xl"
-                >
-                  Оплатить онлайн
-                </PayInvoiceButton>
-              ) : (
-                <Button className="rounded-2xl" disabled title="Оплата доступна только для статуса “Выставлен”">
-                  Оплатить онлайн
-                </Button>
-              )}
-            </div>
-          </Card>
-
-          {/* Payments by invoice */}
-          <Card className="p-6 rounded-3xl glass border-border/30">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Платежи по счёту</h3>
-              <Link href="/dashboard/payments">
-                <Button variant="ghost" className="rounded-2xl">Все платежи</Button>
-              </Link>
-            </div>
-
-            {paymentsLoading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-10 rounded-xl" />
-                <Skeleton className="h-10 rounded-xl" />
-                <Skeleton className="h-10 rounded-xl" />
-              </div>
-            ) : paymentsError ? (
-              <div className="text-sm text-destructive">{paymentsError}</div>
-            ) : payments.length === 0 ? (
-              <div className="text-sm text-muted-foreground">По этому счёту пока нет платежей.</div>
-            ) : (
-              <div className="divide-y divide-border/40 rounded-2xl overflow-hidden border border-border/30">
-                {payments.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between p-3 bg-card/50">
-                    <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-6">
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Дата: </span>
-                        <span className="font-medium">{dateFmt(p.paymentDate || p.createdAt)}</span>
-                      </div>
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Статус: </span>
-                        <span className="font-medium">{p.statusDisplay || p.status}</span>
-                      </div>
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Сумма: </span>
-                        <span className="font-medium">
-                          {typeof p.amount === 'number'
-                            ? p.amount.toLocaleString('ru-RU', { style: 'currency', currency: p.currency || 'RUB' })
-                            : '—'}
-                        </span>
-                      </div>
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Метод: </span>
-                        <span className="font-medium">{p.paymentMethod?.name || p.paymentMethod?.type || '—'}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {/* Возврат делаем из деталки платежа; кнопка возврата там уже с роль‑гейтингом */}
-                      <Link href={`/dashboard/payments/${p.id}`}>
-                        <Button variant="outline" className="rounded-2xl">Открыть</Button>
-                      </Link>
-                      {hasRefundRole && p.status === 'processed' ? (
-                        <Link href={`/dashboard/payments/${p.id}`}>
-                          <Button variant="destructive" className="rounded-2xl" title="Оформить возврат из детали платежа">
-                            Возврат
-                          </Button>
-                        </Link>
-                      ) : null}
-                    </div>
+        ) : (
+          <>
+            {/* Header Card */}
+            <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-r from-indigo-500/20 to-primary/20 border border-indigo-500/30 flex items-center justify-center">
+                    <FileText className="w-8 h-8 text-indigo-500" />
                   </div>
-                ))}
+                  <div>
+                    <h1 className="text-2xl font-bold mb-1">Счёт {invoice.invoiceNumber}</h1>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Заказ: {invoice.order?.orderNumber || invoice.orderId.slice(0, 8)}
+                    </p>
+                    <StatusPill status={invoice.status as InvoiceStatus} />
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <div className="text-3xl font-bold mb-1">{amountFmt(invoice.totalAmount)}</div>
+                  <div className="text-sm text-muted-foreground">
+                    Оплачено: {amountFmt(invoice.paidAmount ?? paidFromPayments)}
+                  </div>
+                  {(invoice.remainingAmount || 0) > 0 && (
+                    <div className="text-sm text-amber-600 dark:text-amber-400">
+                      Остаток: {amountFmt(invoice.remainingAmount)}
+                    </div>
+                  )}
+                </div>
               </div>
+            </Card>
+
+            {/* Payment Progress */}
+            {invoice.status === 'ISSUED' && (
+              <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">Прогресс оплаты</h3>
+                    <div className="text-2xl font-bold text-primary">{progressPercentage}%</div>
+                  </div>
+                  
+                  <div className="w-full bg-surface-1/60 rounded-full h-4 overflow-hidden">
+                    <div 
+                      className={cn(
+                        "h-4 transition-all duration-700 ease-out rounded-full",
+                        progressPercentage === 100 ? "bg-emerald-500" : "bg-gradient-to-r from-primary to-secondary"
+                      )}
+                      style={{ width: `${Math.min(progressPercentage, 100)}%` }}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                    <span>{amountFmt(invoice.paidAmount ?? paidFromPayments)}</span>
+                    <span>{amountFmt(invoice.totalAmount)}</span>
+                  </div>
+                  
+                  {invoice.dueDate && (
+                    <div className={cn(
+                      "text-center text-sm",
+                      invoice.isOverdue ? "text-red-500" : 
+                      invoice.daysUntilDue && invoice.daysUntilDue <= 3 ? "text-amber-500" : "text-muted-foreground"
+                    )}>
+                      Срок оплаты: {new Date(invoice.dueDate).toLocaleDateString('ru-RU')}
+                      {invoice.daysUntilDue !== undefined && (
+                        <span className="ml-2">
+                          {invoice.daysUntilDue < 0 
+                            ? `(просрочен на ${Math.abs(invoice.daysUntilDue)} дн.)`
+                            : invoice.daysUntilDue === 0 
+                              ? "(сегодня)"
+                              : `(через ${invoice.daysUntilDue} дн.)`
+                          }
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Card>
             )}
-          </Card>
 
-          {/* Customer/Vehicle/Company */}
-          <div className="grid md:grid-cols-3 gap-6">
-            <Card className="p-6 rounded-3xl glass border-border/30">
-              <h3 className="font-semibold mb-3">Клиент</h3>
-              {invoice.customer ? (
-                <div className="text-sm space-y-1">
-                  <p>
-                    {invoice.customer.companyName ||
-                      [invoice.customer.lastName, invoice.customer.firstName].filter(Boolean).join(' ')}
-                  </p>
-                  {invoice.customer.email && <p className="text-muted-foreground">{invoice.customer.email}</p>}
-                  {invoice.customer.phone && <p className="text-muted-foreground">{invoice.customer.phone}</p>}
+            {/* Invoice Details */}
+            <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+              <h3 className="text-lg font-semibold mb-4">Детали счёта</h3>
+              <div className="grid md:grid-cols-3 gap-6">
+                <InfoBlock title="Статус">
+                  <StatusPill status={invoice.status as InvoiceStatus} />
+                </InfoBlock>
+                <InfoBlock title="Выставлен">{new Date(invoice.issueDate).toLocaleDateString('ru-RU')}</InfoBlock>
+                <InfoBlock title="Срок оплаты">{new Date(invoice.dueDate).toLocaleDateString('ru-RU')}</InfoBlock>
+                <InfoBlock title="Сумма (без НДС)">{amountFmt(invoice.amount)}</InfoBlock>
+                <InfoBlock title="НДС">{amountFmt(invoice.taxAmount)}</InfoBlock>
+                <InfoBlock title="Итого к оплате">{amountFmt(invoice.totalAmount)}</InfoBlock>
+                <InfoBlock title="Оплачено">{amountFmt(invoice.paidAmount ?? paidFromPayments)}</InfoBlock>
+                <InfoBlock title="Остаток">{amountFmt(invoice.remainingAmount)}</InfoBlock>
+                <InfoBlock title="Налог, %">{invoice.taxPercentage ?? 20}%</InfoBlock>
+              </div>
+            </Card>
+
+            {/* Actions */}
+            <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]"
+                  onClick={() => changeStatus('PAID')}
+                  disabled={!canMarkPaid || Boolean(changing)}
+                  title={invoice.status !== 'ISSUED' ? 'Статус "Оплачен" недоступен' : undefined}
+                >
+                  {changing === 'PAID' ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                  )}
+                  Отметить оплаченным
+                </Button>
+
+                {canPayOnline ? (
+                  <PayInvoiceButton
+                    invoiceId={invoice.id}
+                    amount={invoice.remainingAmount || undefined}
+                    className="rounded-2xl"
+                  >
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    Оплатить онлайн
+                  </PayInvoiceButton>
+                ) : (
+                  <Button className="rounded-2xl" disabled title="Оплата доступна только для статуса 'Выставлен'">
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    Оплатить онлайн
+                  </Button>
+                )}
+
+                <Button
+                  variant="outline"
+                  className="rounded-2xl btn-outline-fixed"
+                  onClick={async () => {
+                    try {
+                      const url = `/api/invoices/${invoice.id}/pdf`;
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `invoice-${invoice.invoiceNumber}.pdf`;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                    } catch (e) {
+                      alert('Не удалось скачать PDF');
+                    }
+                  }}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Скачать PDF
+                </Button>
+
+                <Button
+                  variant="destructive"
+                  className="rounded-2xl"
+                  onClick={cancel}
+                  disabled={!canCancelAction || canceling}
+                  title={invoice.status !== 'ISSUED' ? 'Отмена недоступна для текущего статуса' : undefined}
+                >
+                  {canceling ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <XCircle className="w-4 h-4 mr-2" />}
+                  Отменить счёт
+                </Button>
+              </div>
+            </Card>
+
+            {/* Payments */}
+            <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-emerald-500/20">
+                    <CreditCard className="w-5 h-5 text-emerald-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">Платежи по счёту</h3>
+                    <p className="text-sm text-muted-foreground">История операций и статусы платежей</p>
+                  </div>
+                </div>
+                <Link href="/dashboard/payments">
+                  <Button variant="outline" className="rounded-2xl btn-outline-fixed">
+                    Все платежи
+                  </Button>
+                </Link>
+              </div>
+
+              {paymentsLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-16 rounded-2xl" />
+                  <Skeleton className="h-16 rounded-2xl" />
+                </div>
+              ) : paymentsError ? (
+                <div className="text-center py-8 text-destructive">{paymentsError}</div>
+              ) : payments.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CreditCard className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>По этому счёту пока нет платежей</p>
                 </div>
               ) : (
-                <p className="text-muted-foreground text-sm">Нет данных</p>
+                <div className="space-y-3">
+                  {payments.map((p) => (
+                    <div key={p.id} className="p-4 rounded-2xl border border-border/30 hover:border-border/50 transition-colors group">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+                            <CreditCard className="w-5 h-5 text-emerald-500" />
+                          </div>
+                          <div>
+                            <div className="font-medium">{amountFmt(p.amount)}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {dateFmt((p as any).paymentDate || (p as any).createdAt)} • {(p as any).paymentMethod?.name || (p as any).paymentMethod?.type || '—'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className={cn(
+                            (p as any).status === 'processed' ? "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/30" :
+                            (p as any).status === 'pending' ? "bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/30" :
+                            "bg-surface-1/40 text-muted-foreground border-border/30"
+                          )}>
+                            {(p as any).statusDisplay || (p as any).status}
+                          </Badge>
+                          <Link href={`/dashboard/payments/${p.id}`}>
+                            <Button variant="outline" className="rounded-xl btn-outline-fixed">
+                              Открыть
+                            </Button>
+                          </Link>
+                          {hasRefundRole && (p as any).status === 'processed' && (
+                            <Link href={`/dashboard/payments/${p.id}`}>
+                              <Button variant="destructive" className="rounded-xl" title="Оформить возврат">
+                                Возврат
+                              </Button>
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </Card>
 
-            <Card className="p-6 rounded-3xl glass border-border/30">
-              <h3 className="font-semibold mb-3">Автомобиль</h3>
-              {invoice.vehicle ? (
-                <div className="text-sm space-y-1">
-                  <p>{invoice.vehicle.displayName || invoice.vehicle.licensePlate || '—'}</p>
-                  {invoice.vehicle.vin && <p className="text-muted-foreground">VIN: {invoice.vehicle.vin}</p>}
-                  {invoice.vehicle.year && <p className="text-muted-foreground">Год: {invoice.vehicle.year}</p>}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-sm">Нет данных</p>
-              )}
-            </Card>
+            {/* Customer/Vehicle/Company Info */}
+            <div className="grid md:grid-cols-3 gap-6">
+              <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+                <h3 className="font-semibold mb-4">Клиент</h3>
+                {invoice.customer ? (
+                  <div className="space-y-2">
+                    <div className="font-medium">
+                      {invoice.customer.companyName ||
+                        [invoice.customer.lastName, invoice.customer.firstName].filter(Boolean).join(' ') ||
+                        'Без имени'}
+                    </div>
+                    {invoice.customer.email && (
+                      <div className="text-sm text-muted-foreground">{invoice.customer.email}</div>
+                    )}
+                    {invoice.customer.phone && (
+                      <div className="text-sm text-muted-foreground">{invoice.customer.phone}</div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">Нет данных о клиенте</p>
+                )}
+              </Card>
 
-            <Card className="p-6 rounded-3xl glass border-border/30">
-              <h3 className="font-semibold mb-3">Компания</h3>
-              {invoice.company ? (
-                <div className="text-sm space-y-1">
-                  <p className="font-medium">{invoice.company.name}</p>
-                  <p className="text-muted-foreground">{invoice.company.email}</p>
-                  {invoice.company.address && <p className="text-muted-foreground">{invoice.company.address}</p>}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-sm">Нет данных</p>
-              )}
-            </Card>
-          </div>
-        </div>
-      )}
-    </div>
+              <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+                <h3 className="font-semibold mb-4">Автомобиль</h3>
+                {invoice.vehicle ? (
+                  <div className="space-y-2">
+                    <div className="font-medium">
+                      {invoice.vehicle.displayName || invoice.vehicle.licensePlate || 'Неизвестно'}
+                    </div>
+                    {invoice.vehicle.vin && (
+                      <div className="text-sm text-muted-foreground">VIN: {invoice.vehicle.vin}</div>
+                    )}
+                    {invoice.vehicle.year && (
+                      <div className="text-sm text-muted-foreground">Год: {invoice.vehicle.year}</div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">Нет данных об автомобиле</p>
+                )}
+              </Card>
+
+              <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+                <h3 className="font-semibold mb-4">Компания</h3>
+                {invoice.company ? (
+                  <div className="space-y-2">
+                    <div className="font-medium">{invoice.company.name}</div>
+                    {invoice.company.email && (
+                      <div className="text-sm text-muted-foreground">{invoice.company.email}</div>
+                    )}
+                    {invoice.company.address && (
+                      <div className="text-sm text-muted-foreground">{invoice.company.address}</div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">Нет данных о компании</p>
+                )}
+              </Card>
+            </div>
+          </>
+        )}
+      </div>
+    </AppLayout>
   );
 }
 
@@ -384,17 +580,34 @@ function InfoBlock({ title, children }: { title: string; children?: React.ReactN
   return (
     <div>
       <p className="text-xs text-muted-foreground mb-1">{title}</p>
-      <p className="font-medium">{children ?? '—'}</p>
+      <div className="font-medium">{children ?? '—'}</div>
     </div>
   );
 }
 
 function StatusPill({ status }: { status: InvoiceStatus }) {
-  const map: Record<InvoiceStatus, { text: string; cls: string }> = {
-    ISSUED: { text: 'Выставлен', cls: 'bg-amber-500/15 text-amber-500 border border-amber-500/30' },
-    PAID: { text: 'Оплачен', cls: 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30' },
-    CANCELED: { text: 'Отменён', cls: 'bg-rose-500/15 text-rose-500 border border-rose-500/30' },
+  const map: Record<InvoiceStatus, { text: string; cls: string; icon: React.ComponentType<{ className?: string }> }> = {
+    ISSUED: { 
+      text: 'Выставлен', 
+      cls: 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/30',
+      icon: Clock
+    },
+    PAID: { 
+      text: 'Оплачен', 
+      cls: 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/30',
+      icon: CheckCircle2
+    },
+    CANCELED: { 
+      text: 'Отменён', 
+      cls: 'bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/30',
+      icon: XCircle
+    },
   };
-  const m = map[status] || map.ISSUED;
-  return <span className={`px-2 py-1 rounded-xl text-xs font-medium ${m.cls}`}>{m.text}</span>;
+  const { text, cls, icon: Icon } = map[status] || map.ISSUED;
+  return (
+    <Badge className={cn('text-xs font-medium border rounded-xl', cls)}>
+      <Icon className="w-3 h-3 mr-1" />
+      {text}
+    </Badge>
+  );
 }

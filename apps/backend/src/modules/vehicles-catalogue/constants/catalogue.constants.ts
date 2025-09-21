@@ -34,4 +34,11 @@ export const CATALOGUE_CONSTANTS = {
     TYPE_UPDATED: 'Обновлен тип ТС',
     TYPE_DELETED: 'Удален тип ТС',
   },
+
+  SUGGEST: {
+    MIN_QUERY_LENGTH: 2,
+    MAX_BRANDS: 10,
+    MAX_MODELS: 10,
+    SIMILARITY_THRESHOLD: 0.82, // 0..1
+  },
 } as const;

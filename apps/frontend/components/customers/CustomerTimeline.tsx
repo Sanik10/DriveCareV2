@@ -24,18 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
-
-export interface TimelineEvent {
-  id: string
-  type: 'order' | 'vehicle' | 'profile' | 'call' | 'email' | 'note' | 'payment' | 'invoice'
-  title: string
-  description?: string
-  date: string
-  status?: 'success' | 'warning' | 'error' | 'info'
-  amount?: number
-  relatedId?: string // ID связанной сущности для ссылок
-  metadata?: Record<string, unknown>
-}
+import type { TimelineEvent, TimelineEventStatus, TimelineEventType } from '@/lib/types/customers'
 
 interface TimelineGroup {
   monthKey: string
@@ -43,63 +32,30 @@ interface TimelineGroup {
   events: TimelineEvent[]
 }
 
-const EVENT_CONFIG = {
-  order: {
-    icon: Wrench,
-    bgColor: 'bg-primary/10',
-    iconColor: 'text-primary',
-    borderColor: 'border-primary/20'
-  },
-  vehicle: {
-    icon: Car,
-    bgColor: 'bg-emerald-500/10',
-    iconColor: 'text-emerald-500',
-    borderColor: 'border-emerald-500/20'
-  },
-  profile: {
-    icon: Edit3,
-    bgColor: 'bg-secondary/10',
-    iconColor: 'text-secondary',
-    borderColor: 'border-secondary/20'
-  },
-  call: {
-    icon: Phone,
-    bgColor: 'bg-accent/10',
-    iconColor: 'text-accent',
-    borderColor: 'border-accent/20'
-  },
-  email: {
-    icon: Mail,
-    bgColor: 'bg-blue-500/10',
-    iconColor: 'text-blue-500',
-    borderColor: 'border-blue-500/20'
-  },
-  payment: {
-    icon: CreditCard,
-    bgColor: 'bg-green-500/10',
-    iconColor: 'text-green-500',
-    borderColor: 'border-green-500/20'
-  },
-  invoice: {
-    icon: FileText,
-    bgColor: 'bg-purple-500/10',
-    iconColor: 'text-purple-500',
-    borderColor: 'border-purple-500/20'
-  },
-  note: {
-    icon: MessageSquare,
-    bgColor: 'bg-muted/50',
-    iconColor: 'text-muted-foreground',
-    borderColor: 'border-border'
-  }
-} as const
+const EVENT_CONFIG: Record<
+  TimelineEventType,
+  { icon: React.ComponentType<{ className?: string }>; bgColor: string; iconColor: string; borderColor: string }
+> = {
+  order:      { icon: Wrench,   bgColor: 'bg-primary/10',      iconColor: 'text-primary',      borderColor: 'border-primary/20' },
+  vehicle:    { icon: Car,      bgColor: 'bg-emerald-500/10',  iconColor: 'text-emerald-500',  borderColor: 'border-emerald-500/20' },
+  profile:    { icon: Edit3,    bgColor: 'bg-secondary/10',    iconColor: 'text-secondary',    borderColor: 'border-secondary/20' },
+  call:       { icon: Phone,    bgColor: 'bg-accent/10',       iconColor: 'text-accent',       borderColor: 'border-accent/20' },
+  email:      { icon: Mail,     bgColor: 'bg-blue-500/10',     iconColor: 'text-blue-500',     borderColor: 'border-blue-500/20' },
+  payment:    { icon: CreditCard,bgColor:'bg-green-500/10',    iconColor: 'text-green-500',    borderColor: 'border-green-500/20' },
+  invoice:    { icon: FileText, bgColor: 'bg-purple-500/10',   iconColor: 'text-purple-500',   borderColor: 'border-purple-500/20' },
+  note:       { icon: MessageSquare, bgColor:'bg-muted/50',    iconColor: 'text-muted-foreground', borderColor: 'border-border' },
+  appointment:{ icon: Calendar, bgColor: 'bg-amber-500/10',    iconColor: 'text-amber-500',    borderColor: 'border-amber-500/20' },
+}
 
-const STATUS_CONFIG = {
-  success: { icon: CheckCircle, color: 'text-emerald-500' },
-  warning: { icon: AlertTriangle, color: 'text-amber-500' },
-  error: { icon: AlertTriangle, color: 'text-destructive' },
-  info: { icon: TrendingUp, color: 'text-blue-500' }
-} as const
+const STATUS_CONFIG: Record<
+  TimelineEventStatus,
+  { icon: React.ComponentType<{ className?: string }>; color: string }
+> = {
+  success: { icon: CheckCircle,  color: 'text-emerald-500' },
+  warning: { icon: AlertTriangle,color: 'text-amber-500' },
+  error:   { icon: AlertTriangle,color: 'text-destructive' },
+  info:    { icon: TrendingUp,   color: 'text-blue-500' }
+}
 
 interface CustomerTimelineProps {
   events: TimelineEvent[]
@@ -113,7 +69,8 @@ export function CustomerTimeline({ events, loading, className }: CustomerTimelin
   const groupedEvents = useMemo(() => {
     const groups: Record<string, TimelineGroup> = {}
     
-    events
+    ;(events || [])
+      .slice()
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .forEach(event => {
         const date = new Date(event.date)
@@ -138,11 +95,8 @@ export function CustomerTimeline({ events, loading, className }: CustomerTimelin
 
   const toggleMonth = (monthKey: string) => {
     const newCollapsed = new Set(collapsedMonths)
-    if (newCollapsed.has(monthKey)) {
-      newCollapsed.delete(monthKey)
-    } else {
-      newCollapsed.add(monthKey)
-    }
+    if (newCollapsed.has(monthKey)) newCollapsed.delete(monthKey)
+    else newCollapsed.add(monthKey)
     setCollapsedMonths(newCollapsed)
   }
 
@@ -169,7 +123,7 @@ export function CustomerTimeline({ events, loading, className }: CustomerTimelin
     )
   }
 
-  if (events.length === 0) {
+  if (!events || events.length === 0) {
     return (
       <Card className={cn("p-8 text-center glass border-border/30 rounded-3xl", className)}>
         <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
@@ -240,7 +194,7 @@ export function CustomerTimeline({ events, loading, className }: CustomerTimelin
                   {visibleEvents.map((event) => {
                     const config = EVENT_CONFIG[event.type]
                     const Icon = config.icon
-                    const StatusIcon = event.status ? STATUS_CONFIG[event.status].icon : null
+                    const StatusIcon = event.status ? STATUS_CONFIG[event.status as TimelineEventStatus].icon : null
                     
                     return (
                       <div key={event.id} className="relative flex gap-4 group">
@@ -292,59 +246,68 @@ function EventContent({
   StatusIcon 
 }: { 
   event: TimelineEvent
-  StatusIcon?: React.ComponentType<{ className?: string }> 
+  StatusIcon?: React.ComponentType<{ className?: string }> | null
 }) {
-  const EventWrapper = event.relatedId ? Link : 'div'
-  const eventProps = event.relatedId ? { href: getEventLink(event) } : {}
+  const eventContentJSX = (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <h4 className="font-medium truncate">{event.title}</h4>
+          {StatusIcon && (
+            <StatusIcon className={cn(
+              "w-4 h-4",
+              event.status ? STATUS_CONFIG[event.status].color : 'text-muted-foreground'
+            )} />
+          )}
+        </div>
+        
+        {event.description && (
+          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+            {event.description}
+          </p>
+        )}
+
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            {new Date(event.date).toLocaleDateString('ru-RU', {
+              day: 'numeric',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </span>
+          
+          {typeof event.amount === 'number' && (
+            <Badge variant="outline" className="text-xs px-2 py-0.5">
+              {event.amount.toLocaleString('ru-RU')} ₽
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {event.relatedId && (
+        <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Badge variant="outline" className="text-xs">
+            Открыть
+          </Badge>
+        </div>
+      )}
+    </div>
+  )
+
+  if (event.relatedId) {
+    return (
+      <Link href={getEventLink(event)} className="block">
+        {eventContentJSX}
+      </Link>
+    )
+  }
 
   return (
-    <EventWrapper {...eventProps} className="block">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h4 className="font-medium truncate">{event.title}</h4>
-            {StatusIcon && (
-              <StatusIcon className={cn(
-                "w-4 h-4",
-                event.status ? STATUS_CONFIG[event.status].color : 'text-muted-foreground'
-              )} />
-            )}
-          </div>
-          
-          {event.description && (
-            <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-              {event.description}
-            </p>
-          )}
-
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {new Date(event.date).toLocaleDateString('ru-RU', {
-                day: 'numeric',
-                month: 'short',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </span>
-            
-            {event.amount && (
-              <Badge variant="outline" className="text-xs px-2 py-0.5">
-                {event.amount.toLocaleString('ru-RU')} ₽
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        {event.relatedId && (
-          <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Badge variant="outline" className="text-xs">
-              Открыть
-            </Badge>
-          </div>
-        )}
-      </div>
-    </EventWrapper>
+    <div className="block">
+      {eventContentJSX}
+    </div>
   )
 }
 
@@ -358,6 +321,8 @@ function getEventLink(event: TimelineEvent): string {
       return `/dashboard/invoices/${event.relatedId}`
     case 'payment':
       return `/dashboard/payments/${event.relatedId}`
+    case 'appointment':
+      return `/dashboard/appointments/${event.relatedId}`
     default:
       return '#'
   }

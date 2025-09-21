@@ -50,3 +50,37 @@ export interface CreateCustomerRequest {
 }
 
 export type UpdateCustomerRequest = Partial<CreateCustomerRequest>;
+
+/**
+ * Timeline types (для /customers/:id/timeline и UI компонента)
+ */
+export type TimelineEventType =
+  | 'order'
+  | 'vehicle'
+  | 'profile'
+  | 'call'
+  | 'email'
+  | 'note'
+  | 'payment'
+  | 'invoice'
+  | 'appointment';
+
+export type TimelineEventStatus = 'success' | 'warning' | 'error' | 'info';
+
+export interface TimelineEvent {
+  id: string;
+  type: TimelineEventType;
+  title: string;
+  description?: string;
+  date: string; // ISO
+  status?: TimelineEventStatus;
+  amount?: number;
+  relatedId?: string; // ID связанной сущности
+  metadata?: Record<string, unknown>;
+}
+
+export interface CustomerTimelineResponse {
+  events: TimelineEvent[];
+  totalEvents: number;
+  nextCursor?: string;
+}

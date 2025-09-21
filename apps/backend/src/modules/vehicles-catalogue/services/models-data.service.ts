@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VehicleModel } from '../../../database/entities/vehicle-model.entity';
+import { Vehicle } from '../../../database/entities/vehicle.entity';
 import { ModelFilter, CreateModelData, UpdateModelData } from '../types/catalogue.types';
 import { IModelsDataService } from '../interfaces/catalogue.interface';
 import { CATALOGUE_CONSTANTS } from '../constants/catalogue.constants';
@@ -18,30 +19,76 @@ export class ModelsDataService implements IModelsDataService {
     return (input || '').trim().replace(/\s+/g, ' ').toLowerCase();
   }
 
+  private toBool(value: unknown): boolean | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'boolean') return value;
+    const s = String(value).trim().toLowerCase();
+    if (s === 'true') return true;
+    if (s === 'false') return false;
+    return undefined;
+  }
+
   async create(data: CreateModelData): Promise<VehicleModel> {
     const model = this.modelsRepository.create({
       ...data,
       name: data.name?.trim().replace(/\s+/g, ' '),
       nameNormalized: this.normalizeName(data.name),
       isActive: data.isActive ?? true,
-    });
+      isVerified: data.isVerified ?? false,
+    } as VehicleModel);
 
     return this.modelsRepository.save(model);
   }
 
   async findAll(): Promise<VehicleModel[]> {
-    return this.modelsRepository.find({
-      where: { isDeleted: false },
-      relations: ['brand'],
-      order: { name: 'ASC' },
-    });
+    return this.modelsRepository
+      .createQueryBuilder('model')
+      .select([
+        'model.id',
+        'model.brandId',
+        'model.name',
+        'model.nameNormalized',
+        'model.yearFrom',
+        'model.yearTo',
+        'model.class',
+        'model.isActive',
+        'model.isVerified',
+        'model.isDeleted',
+        'model.deletedAt',
+        'model.createdAt',
+        'model.updatedAt',
+      ])
+      .leftJoin('model.brand', 'brand')
+      .addSelect(['brand.id', 'brand.name'])
+      .where('model.isDeleted = false')
+      .orderBy('brand.name', 'ASC')
+      .addOrderBy('model.name', 'ASC')
+      .getMany();
   }
 
   async findById(id: string): Promise<VehicleModel | null> {
-    return this.modelsRepository.findOne({
-      where: { id, isDeleted: false },
-      relations: ['brand'], // vehicles не подтягиваем для производительности
-    });
+    return this.modelsRepository
+      .createQueryBuilder('model')
+      .select([
+        'model.id',
+        'model.brandId',
+        'model.name',
+        'model.nameNormalized',
+        'model.yearFrom',
+        'model.yearTo',
+        'model.class',
+        'model.isActive',
+        'model.isVerified',
+        'model.isDeleted',
+        'model.deletedAt',
+        'model.createdAt',
+        'model.updatedAt',
+      ])
+      .leftJoin('model.brand', 'brand')
+      .addSelect(['brand.id', 'brand.name'])
+      .where('model.id = :id', { id })
+      .andWhere('model.isDeleted = false')
+      .getOne();
   }
 
   async findByNameAndBrand(name: string, brandId: string): Promise<VehicleModel | null> {
@@ -58,11 +105,13 @@ export class ModelsDataService implements IModelsDataService {
       yearFrom,
       yearTo,
       class: modelClass,
-      isActive,
       includeDeleted = false,
       page = CATALOGUE_CONSTANTS.PAGINATION.DEFAULT_PAGE,
       limit = CATALOGUE_CONSTANTS.PAGINATION.DEFAULT_LIMIT,
     } = filter;
+
+    const isActive = this.toBool((filter as any).isActive);
+    const isVerified = this.toBool((filter as any).isVerified);
 
     const safeLimit = Math.min(
       Math.max(1, Number(limit) || CATALOGUE_CONSTANTS.PAGINATION.DEFAULT_LIMIT),
@@ -70,47 +119,68 @@ export class ModelsDataService implements IModelsDataService {
     );
     const safePage = Math.max(1, Number(page) || CATALOGUE_CONSTANTS.PAGINATION.DEFAULT_PAGE);
 
-    const query = this.modelsRepository
+    const qb = this.modelsRepository
       .createQueryBuilder('model')
-      .leftJoinAndSelect('model.brand', 'brand');
+      .select([
+        'model.id',
+        'model.brandId',
+        'model.name',
+        'model.nameNormalized',
+        'model.yearFrom',
+        'model.yearTo',
+        'model.class',
+        'model.isActive',
+        'model.isVerified',
+        'model.isDeleted',
+        'model.deletedAt',
+        'model.createdAt',
+        'model.updatedAt',
+      ])
+      .leftJoin('model.brand', 'brand')
+      .addSelect(['brand.id', 'brand.name']);
 
     if (!includeDeleted) {
-      query.andWhere('model.isDeleted = false');
+      qb.andWhere('model.isDeleted = false');
     }
 
     if (search) {
-      query.andWhere('(model.name ILIKE :search OR brand.name ILIKE :search)', {
+      qb.andWhere('(model.name ILIKE :search OR brand.name ILIKE :search)', {
         search: `%${search.trim()}%`,
       });
     }
 
     if (brandId) {
-      query.andWhere('model.brandId = :brandId', { brandId });
+      qb.andWhere('model.brandId = :brandId', { brandId });
     }
 
     if (yearFrom !== undefined) {
-      query.andWhere('(model.yearFrom IS NULL OR model.yearFrom <= :yearFrom)', { yearFrom });
+      qb.andWhere('(model.yearFrom IS NULL OR model.yearFrom <= :yearFrom)', { yearFrom });
     }
 
     if (yearTo !== undefined) {
-      query.andWhere('(model.yearTo IS NULL OR model.yearTo >= :yearTo)', { yearTo });
+      qb.andWhere('(model.yearTo IS NULL OR model.yearTo >= :yearTo)', { yearTo });
     }
 
     if (modelClass) {
-      query.andWhere('model.class ILIKE :class', { class: `%${modelClass.trim()}%` });
+      qb.andWhere('model.class ILIKE :class', { class: `%${modelClass.trim()}%` });
     }
 
     if (isActive !== undefined) {
-      query.andWhere('model.isActive = :isActive', { isActive });
+      qb.andWhere('model.isActive = :isActive', { isActive });
     }
 
-    query
-      .orderBy('brand.name', 'ASC')
+    if (isVerified === true) {
+      qb.andWhere('model.isVerified = true');
+    } else if (isVerified === false) {
+      qb.andWhere('(model.isVerified = false OR model.isVerified IS NULL)');
+    }
+
+    qb.orderBy('brand.name', 'ASC')
       .addOrderBy('model.name', 'ASC')
       .take(safeLimit)
       .skip((safePage - 1) * safeLimit);
 
-    return query.getMany();
+    return qb.getMany();
   }
 
   async update(id: string, data: UpdateModelData): Promise<VehicleModel> {
@@ -128,7 +198,7 @@ export class ModelsDataService implements IModelsDataService {
       (updateData as any).nameNormalized = this.normalizeName(data.name);
     }
 
-    await this.modelsRepository.update(id, updateData);
+    await this.modelsRepository.update(id, updateData as any);
 
     const updatedModel = await this.findById(id);
     if (!updatedModel) {
@@ -160,6 +230,16 @@ export class ModelsDataService implements IModelsDataService {
     return updatedModel;
   }
 
+  // Верификация (минимально — только флаг)
+  async setVerified(id: string, isVerified: boolean): Promise<VehicleModel> {
+    await this.modelsRepository.update(id, { isVerified } as any);
+    const updatedModel = await this.findById(id);
+    if (!updatedModel) {
+      throw new Error(`Model with id ${id} not found after verify update`);
+    }
+    return updatedModel;
+  }
+
   async countVehicles(modelId: string): Promise<number> {
     const result = await this.modelsRepository
       .createQueryBuilder('model')
@@ -173,9 +253,40 @@ export class ModelsDataService implements IModelsDataService {
   }
 
   async findByBrand(brandId: string): Promise<VehicleModel[]> {
-    return this.modelsRepository.find({
-      where: { brandId, isDeleted: false, isActive: true },
-      order: { name: 'ASC' },
-    });
+    return this.modelsRepository
+      .createQueryBuilder('model')
+      .select([
+        'model.id',
+        'model.brandId',
+        'model.name',
+        'model.nameNormalized',
+        'model.yearFrom',
+        'model.yearTo',
+        'model.class',
+        'model.isActive',
+        'model.isVerified',
+        'model.isDeleted',
+        'model.deletedAt',
+        'model.createdAt',
+        'model.updatedAt',
+      ])
+      .where('model.brandId = :brandId', { brandId })
+      .andWhere('model.isDeleted = false')
+      .orderBy('model.name', 'ASC')
+      .getMany();
+  }
+
+  async mergeModels(sourceModelId: string, targetModelId: string): Promise<void> {
+    if (sourceModelId === targetModelId) return;
+
+    await this.modelsRepository.manager
+      .getRepository(Vehicle)
+      .createQueryBuilder()
+      .update(Vehicle)
+      .set({ modelId: targetModelId })
+      .where('model_id = :sourceModelId', { sourceModelId })
+      .execute();
+
+    await this.softDelete(sourceModelId);
   }
 }

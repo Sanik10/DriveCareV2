@@ -1,147 +1,276 @@
 // path: apps/frontend/lib/api/vehicles-catalogue.ts
-import type { CatalogueBrand, CatalogueModel, CatalogueType } from '@/lib/types/vehicles-catalogue';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-
-interface ApiError {
-  message: string;
-  statusCode?: number;
-}
+import { apiRequest, generateIdempotencyKey } from '@/lib/api/core';
+import type {
+  CatalogueBrand,
+  CatalogueModel,
+  CatalogueType,
+  ExternalBrand,
+  ExternalModel,
+  ImportExternalRequest,
+  ImportExternalResponse,
+} from '@/lib/types/vehicles-catalogue';
 
 function normalizeName(input: string) {
   const s = (input || '').trim().replace(/\s+/g, ' ');
   if (!s) return '';
-  // TitleCase для латиницы/кириллицы
   return s
     .toLowerCase()
     .replace(/(^|\s|[-_])([a-zа-яё])/giu, (m, p1, p2) => p1 + p2.toUpperCase());
 }
 
-async function get<T>(endpoint: string): Promise<T> {
-  const url = `${API_BASE}${endpoint}`;
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    credentials: 'include',
+function buildQuery(params: Record<string, unknown> = {}) {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === '') return;
+    q.set(k, String(v));
   });
-  const text = await res.text();
-  if (!res.ok) {
-    let err: ApiError;
-    try {
-      err = JSON.parse(text) as ApiError;
-    } catch {
-      err = { message: text || 'Unknown error', statusCode: res.status };
-    }
-    throw new Error(JSON.stringify(err));
-  }
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return text as unknown as T;
-  }
+  const s = q.toString();
+  return s ? `?${s}` : '';
 }
 
-async function post<T>(endpoint: string, body: unknown): Promise<T> {
-  const url = `${API_BASE}${endpoint}`;
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+export type BrandsParams = {
+  search?: string;
+  country?: string;
+  page?: number;
+  limit?: number;
+  isActive?: boolean;
+  isVerified?: boolean;
+};
+export type ModelsParams = {
+  search?: string;
+  brandId?: string;
+  page?: number;
+  limit?: number;
+  isActive?: boolean;
+  isVerified?: boolean;
+};
+export type TypesParams = { search?: string; page?: number; limit?: number };
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    credentials: 'include',
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    let err: ApiError;
-    try {
-      err = JSON.parse(text) as ApiError;
-    } catch {
-      err = { message: text || 'Unknown error', statusCode: res.status };
-    }
-    throw new Error(JSON.stringify(err));
-  }
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return text as unknown as T;
-  }
-}
+export type CatalogueSuggestResponse = {
+  query: string;
+  brands: Array<CatalogueBrand & { fullName?: string }>;
+  models: Array<CatalogueModel & { brand?: { id: string; name: string }; fullName?: string }>;
+};
+
+export type ExternalBrandsParams = { source?: 'nhtsa'; search?: string; limit?: number };
+export type ExternalModelsParams = { source?: 'nhtsa'; brandName: string; limit?: number };
 
 export const vehiclesCatalogueAPI = {
-  // Lists
-  async brands(): Promise<CatalogueBrand[]> {
-    return get<CatalogueBrand[]>('/vehicles-catalogue/brands');
-  },
-  async models(): Promise<CatalogueModel[]> {
-    return get<CatalogueModel[]>('/vehicles-catalogue/models');
-  },
-  async types(): Promise<CatalogueType[]> {
-    return get<CatalogueType[]>('/vehicles-catalogue/types');
+  // ===== Local catalogue (GET без дополнительного заголовка Cache-Control) =====
+  async brands(params: BrandsParams = {}): Promise<CatalogueBrand[]> {
+    const qs = buildQuery(params);
+    return apiRequest<CatalogueBrand[]>(`/vehicles-catalogue/brands${qs}`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
   },
 
-  // Creates (raw)
-  async createBrand(name: string): Promise<CatalogueBrand> {
-    return post<CatalogueBrand>('/vehicles-catalogue/brands', { name: normalizeName(name) });
+  async models(params: ModelsParams = {}): Promise<CatalogueModel[]> {
+    const qs = buildQuery(params);
+    return apiRequest<CatalogueModel[]>(`/vehicles-catalogue/models${qs}`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
   },
-  async createType(name: string): Promise<CatalogueType> {
-    return post<CatalogueType>('/vehicles-catalogue/types', { name: normalizeName(name) });
+
+  async types(params: TypesParams = {}): Promise<CatalogueType[]> {
+    const qs = buildQuery(params);
+    return apiRequest<CatalogueType[]>(`/vehicles-catalogue/types${qs}`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
   },
+
+  // ===== Create =====
+  async createBrand(name: string, extras?: Partial<Pick<CatalogueBrand, 'country' | 'logoUrl'>>): Promise<CatalogueBrand> {
+    return apiRequest<CatalogueBrand>('/vehicles-catalogue/brands', {
+      method: 'POST',
+      json: { name: normalizeName(name), ...extras },
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+
+  async createType(name: string, extras?: Partial<Pick<CatalogueType, 'description'>>): Promise<CatalogueType> {
+    return apiRequest<CatalogueType>('/vehicles-catalogue/types', {
+      method: 'POST',
+      json: { name: normalizeName(name), ...extras },
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+
   async createModel(name: string, brandId: string): Promise<CatalogueModel> {
-    return post<CatalogueModel>('/vehicles-catalogue/models', { name: normalizeName(name), brandId });
+    return apiRequest<CatalogueModel>('/vehicles-catalogue/models', {
+      method: 'POST',
+      json: { name: normalizeName(name), brandId },
+      idempotencyKey: generateIdempotencyKey(),
+    });
   },
 
-  // Idempotent ensure-helpers (анти-дубли: case/space insensitive)
+  // ===== Ensure helpers (get-or-create) =====
   async ensureBrand(name: string): Promise<CatalogueBrand> {
-    const target = normalizeName(name);
-    const list = await this.brands();
-    const found = list.find(b => normalizeName(b.name) === target);
+    const normalized = normalizeName(name);
+    if (!normalized) throw new Error('Название бренда не может быть пустым');
+    const list = await this.brands({ search: normalized, limit: 200 });
+    const found =
+      list.find((b) => b.name.toLowerCase() === normalized.toLowerCase()) ||
+      list.find((b) => normalizeName(b.name).toLowerCase() === normalized.toLowerCase());
     if (found) return found;
-    try {
-      return await this.createBrand(target);
-    } catch (e) {
-      // На случай гонки/409 — перечитать и вернуть найденный
-      const updated = await this.brands();
-      const again = updated.find(b => normalizeName(b.name) === target);
-      if (again) return again;
-      throw e;
-    }
-  },
-
-  async ensureType(name: string): Promise<CatalogueType> {
-    const target = normalizeName(name);
-    const list = await this.types();
-    const found = list.find(t => normalizeName(t.name) === target);
-    if (found) return found;
-    try {
-      return await this.createType(target);
-    } catch (e) {
-      const updated = await this.types();
-      const again = updated.find(t => normalizeName(t.name) === target);
-      if (again) return again;
-      throw e;
-    }
+    return this.createBrand(normalized);
   },
 
   async ensureModel(name: string, brandId: string): Promise<CatalogueModel> {
-    const target = normalizeName(name);
-    const list = await this.models();
-    const found = list.find(m => (m.brandId === brandId || m.brand?.id === brandId) && normalizeName(m.name) === target);
+    const normalized = normalizeName(name);
+    if (!normalized) throw new Error('Название модели не может быть пустым');
+    if (!brandId) throw new Error('Не указан brandId для модели');
+    const list = await this.models({ brandId, search: normalized, limit: 500 });
+    const found =
+      list.find((m) => m.name.toLowerCase() === normalized.toLowerCase()) ||
+      list.find((m) => normalizeName(m.name).toLowerCase() === normalized.toLowerCase());
     if (found) return found;
-    try {
-      return await this.createModel(target, brandId);
-    } catch (e) {
-      const updated = await this.models();
-      const again = updated.find(m => (m.brandId === brandId || m.brand?.id === brandId) && normalizeName(m.name) === target);
-      if (again) return again;
-      throw e;
-    }
+    return this.createModel(normalized, brandId);
+  },
+
+  async ensureType(name: string): Promise<CatalogueType> {
+    const normalized = normalizeName(name);
+    if (!normalized) throw new Error('Название типа не может быть пустым');
+    const list = await this.types({ search: normalized, limit: 200 });
+    const found =
+      list.find((t) => t.name.toLowerCase() === normalized.toLowerCase()) ||
+      list.find((t) => normalizeName(t.name).toLowerCase() === normalized.toLowerCase());
+    if (found) return found;
+    return this.createType(normalized);
+  },
+
+  // ===== Updates (inline edit / active toggle) =====
+  async updateBrand(
+    id: string,
+    data: Partial<Pick<CatalogueBrand, 'name' | 'country' | 'logoUrl' | 'isActive' | 'isVerified'>>,
+  ): Promise<CatalogueBrand> {
+    return apiRequest<CatalogueBrand>(`/vehicles-catalogue/brands/${id}`, {
+      method: 'PATCH',
+      json: data,
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+
+  async updateModel(
+    id: string,
+    data: Partial<Pick<CatalogueModel, 'name' | 'brandId' | 'yearFrom' | 'yearTo' | 'class' | 'isActive' | 'isVerified'>>,
+  ): Promise<CatalogueModel> {
+    return apiRequest<CatalogueModel>(`/vehicles-catalogue/models/${id}`, {
+      method: 'PATCH',
+      json: data,
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+
+  async updateType(
+    id: string,
+    data: Partial<Pick<CatalogueType, 'name' | 'description' | 'isActive' | 'isVerified'>>,
+  ): Promise<CatalogueType> {
+    return apiRequest<CatalogueType>(`/vehicles-catalogue/types/${id}`, {
+      method: 'PATCH',
+      json: data,
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+
+  // ===== Deletes (soft-delete on backend) =====
+  async deleteBrand(id: string): Promise<void> {
+    await apiRequest<void>(`/vehicles-catalogue/brands/${id}`, {
+      method: 'DELETE',
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+  async deleteModel(id: string): Promise<void> {
+    await apiRequest<void>(`/vehicles-catalogue/models/${id}`, {
+      method: 'DELETE',
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+  async deleteType(id: string): Promise<void> {
+    await apiRequest<void>(`/vehicles-catalogue/types/${id}`, {
+      method: 'DELETE',
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+
+  // ===== Suggest =====
+  async suggest(q: string, brandId?: string, limitBrands?: number, limitModels?: number): Promise<CatalogueSuggestResponse> {
+    const qs = buildQuery({ q, brandId, limitBrands, limitModels });
+    return apiRequest<CatalogueSuggestResponse>(`/vehicles-catalogue/suggest${qs}`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+  },
+
+  // ===== Verify endpoints (идемпотентные) =====
+  async verifyBrand(id: string, isVerified: boolean): Promise<CatalogueBrand> {
+    const qs = buildQuery({ isVerified });
+    return apiRequest<CatalogueBrand>(`/vehicles-catalogue/brands/${id}/verify${qs}`, {
+      method: 'PATCH',
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+  async verifyModel(id: string, isVerified: boolean): Promise<CatalogueModel> {
+    const qs = buildQuery({ isVerified });
+    return apiRequest<CatalogueModel>(`/vehicles-catalogue/models/${id}/verify${qs}`, {
+      method: 'PATCH',
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+  async verifyType(id: string, isVerified: boolean): Promise<CatalogueType> {
+    const qs = buildQuery({ isVerified });
+    return apiRequest<CatalogueType>(`/vehicles-catalogue/types/${id}/verify${qs}`, {
+      method: 'PATCH',
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+
+  // ===== Merge (идемпотентные) =====
+  async mergeBrand(sourceId: string, targetBrandId: string): Promise<void> {
+    await apiRequest<void>(`/vehicles-catalogue/brands/${sourceId}/merge`, {
+      method: 'POST',
+      json: { targetBrandId },
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+  async mergeModel(sourceId: string, targetModelId: string): Promise<void> {
+    await apiRequest<void>(`/vehicles-catalogue/models/${sourceId}/merge`, {
+      method: 'POST',
+      json: { targetModelId },
+      idempotencyKey: generateIdempotencyKey(),
+    });
+  },
+
+  // ===== External sources (preview/import) =====
+  async externalBrands(params: ExternalBrandsParams = {}): Promise<ExternalBrand[]> {
+    const qs = buildQuery({ source: params.source || 'nhtsa', search: params.search, limit: params.limit ?? 100 });
+    return apiRequest<ExternalBrand[]>(`/vehicles-catalogue/external/brands${qs}`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+  },
+
+  async externalModels(params: ExternalModelsParams): Promise<ExternalModel[]> {
+    const qs = buildQuery({ source: params.source || 'nhtsa', brandName: params.brandName, limit: params.limit ?? 200 });
+    return apiRequest<ExternalModel[]>(`/vehicles-catalogue/external/models${qs}`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+  },
+
+  async importExternal(body: ImportExternalRequest): Promise<ImportExternalResponse> {
+    return apiRequest<ImportExternalResponse>(`/vehicles-catalogue/import/external`, {
+      method: 'POST',
+      json: {
+        source: body.source || 'nhtsa',
+        brandName: body.brandName,
+        maxBrands: body.maxBrands ?? 200,
+        maxModelsPerBrand: body.maxModelsPerBrand ?? 500,
+        dryRun: !!body.dryRun,
+      },
+      idempotencyKey: generateIdempotencyKey(),
+    });
   },
 };

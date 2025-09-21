@@ -2,6 +2,7 @@
 import { Injectable } from '@nestjs/common';
 import { Vehicle } from '../../../database/entities/vehicle.entity';
 import { VehicleResponseDto } from '../dto/response/vehicle-response.dto';
+import { VehiclePublicResponseDto } from '../dto/response/vehicle-public-response.dto';
 import { VehicleBasicInfo, VehicleWithDetails } from '../types/vehicles.types';
 
 @Injectable()
@@ -28,7 +29,6 @@ export class VehiclesMapperService {
       displayName: this.formatVehicleDisplayName(vehicle),
     };
 
-    // Вложенный владелец (customer)
     if ((vehicle as any).customer) {
       const c = (vehicle as any).customer;
       dto.customer = {
@@ -42,7 +42,6 @@ export class VehiclesMapperService {
       dto.customerName = this.formatCustomerName(c);
     }
 
-    // Вложенная модель и бренд
     if ((vehicle as any).model) {
       const m = (vehicle as any).model;
       dto.model = {
@@ -53,7 +52,6 @@ export class VehiclesMapperService {
           : undefined,
       };
 
-      // Плоские поля совместимости
       dto.modelName = m.name;
       if (m.brand) {
         dto.brandName = m.brand.name;
@@ -102,6 +100,67 @@ export class VehiclesMapperService {
 
   mapArrayToResponseDto(vehicles: Vehicle[]): VehicleResponseDto[] {
     return vehicles.map((vehicle) => this.mapToResponseDto(vehicle));
+  }
+
+  // ======= Публичные маппинги (без ПДн) =======
+  mapToPublicResponseDto(vehicle: Vehicle): VehiclePublicResponseDto {
+    const dto: VehiclePublicResponseDto = {
+      id: vehicle.id,
+      modelId: vehicle.modelId,
+      vehicleTypeId: vehicle.vehicleTypeId,
+      year: vehicle.year,
+      color: vehicle.color,
+      engineType: vehicle.engineType,
+      engineVolume: vehicle.engineVolume as any,
+      mileage: vehicle.mileage,
+      lastServiceDate: vehicle.lastServiceDate,
+      nextServiceDate: vehicle.nextServiceDate,
+      createdAt: vehicle.createdAt,
+      updatedAt: vehicle.updatedAt,
+      displayName: this.formatVehiclePublicDisplayName(vehicle),
+    };
+
+    if ((vehicle as any).model) {
+      const m = (vehicle as any).model;
+      dto.model = {
+        id: vehicle.modelId,
+        name: m.name || '',
+        brand: m.brand
+          ? { id: m.brandId || (m.brand.id ?? ''), name: m.brand.name || '' }
+          : undefined,
+      };
+
+      dto.modelName = m.name;
+      if (m.brand) {
+        dto.brandName = m.brand.name;
+        dto.modelName = `${m.brand.name} ${m.name}`;
+      }
+    }
+
+    if ((vehicle as any).vehicleType) {
+      dto.vehicleTypeName = (vehicle as any).vehicleType.name;
+    }
+
+    if ((vehicle as any).serviceHistory) {
+      dto.serviceHistoryCount = ((vehicle as any).serviceHistory as any[]).length;
+    }
+
+    if (vehicle.nextServiceDate) {
+      const today = new Date();
+      const nextService = new Date(vehicle.nextServiceDate);
+      dto.needsService = nextService <= today;
+
+      const diffTime = nextService.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      dto.daysUntilService = diffDays;
+    }
+
+    // ПДн не включаем: customer/company, vin, licensePlate, notes — отсутствуют в DTO
+    return dto;
+  }
+
+  mapArrayToPublicResponseDto(vehicles: Vehicle[]): VehiclePublicResponseDto[] {
+    return vehicles.map((v) => this.mapToPublicResponseDto(v));
   }
 
   mapToBasicInfo(vehicle: Vehicle): VehicleBasicInfo {
@@ -174,20 +233,23 @@ export class VehiclesMapperService {
     return parts.length > 0 ? parts.join(' ') : `Автомобиль ${vehicle.id.slice(-8)}`;
   }
 
-  formatVehicleShortInfo(vehicle: Vehicle): string {
-    if (vehicle.licensePlate) {
-      return vehicle.licensePlate;
+  formatVehiclePublicDisplayName(vehicle: Vehicle): string {
+    // Публичное имя без VIN/номера
+    const parts: string[] = [];
+
+    if ((vehicle as any).model) {
+      if ((vehicle as any).model.brand) {
+        parts.push(`${(vehicle as any).model.brand.name} ${(vehicle as any).model.name}`);
+      } else if ((vehicle as any).model.name) {
+        parts.push((vehicle as any).model.name);
+      }
     }
 
-    if (vehicle.vin) {
-      return `VIN: ${String(vehicle.vin).slice(-6)}`;
+    if (vehicle.year) {
+      parts.push(`(${vehicle.year})`);
     }
 
-    if ((vehicle as any).model?.name) {
-      return (vehicle as any).model.name;
-    }
-
-    return `ID: ${vehicle.id.slice(-8)}`;
+    return parts.length > 0 ? parts.join(' ') : `Автомобиль ${vehicle.id.slice(-8)}`;
   }
 
   private formatCustomerName(customer: any): string {

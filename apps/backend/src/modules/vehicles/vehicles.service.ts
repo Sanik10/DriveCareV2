@@ -1,5 +1,5 @@
 // path: apps/backend/src/modules/vehicles/vehicles.service.ts
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { VehiclesDataService } from './services/vehicles-data.service';
 import { VehiclesBusinessService } from './services/vehicles-business.service';
 import { VehiclesValidationService } from './services/vehicles-validation.service';
@@ -11,6 +11,8 @@ import { PaginatedVehiclesResponseDto } from './dto/response/paginated-vehicles-
 import { VehicleFilter, CreateVehicleData, VehicleStats } from './types/vehicles.types';
 import { RequestWithUser } from '../auth/interfaces/request-with-user.interface';
 import { AuditService } from '../../common/audit/audit.service';
+import { VehiclePublicResponseDto } from './dto/response/vehicle-public-response.dto';
+import { PaginatedVehiclesPublicResponseDto } from './dto/response/paginated-vehicles-public-response.dto';
 
 @Injectable()
 export class VehiclesService {
@@ -40,7 +42,6 @@ export class VehiclesService {
     return this.vehiclesMapperService.mapToResponseDto(vehicle);
   }
 
-  // Базовая реализация (без учёта роли) — оставляем для внутренних вызовов при необходимости
   async findAll(filter: VehicleFilter): Promise<PaginatedVehiclesResponseDto> {
     const [vehicles, total] = await this.vehiclesDataService.findWithFilters(filter);
 
@@ -60,7 +61,6 @@ export class VehiclesService {
     };
   }
 
-  // User-aware: листинги с учётом роли (механики/диагносты получают маскированный ответ)
   async findAllForUser(user: RequestWithUser['user'], filter: Partial<VehicleFilter> = {}): Promise<PaginatedVehiclesResponseDto> {
     if (user.role === 'superadmin' && !filter.companyId) {
       throw new BadRequestException('companyId is required for superadmin listings');
@@ -116,6 +116,41 @@ export class VehiclesService {
     return response;
   }
 
+  // ======= Публичные листинги (межкомпаний, без ПДн) =======
+  async findAllPublic(user: RequestWithUser['user'], filter: Partial<VehicleFilter> = {}): Promise<PaginatedVehiclesPublicResponseDto> {
+    const [vehicles, total] = await this.vehiclesDataService.findPublicWithFilters(filter);
+
+    const items = this.vehiclesMapperService.mapArrayToPublicResponseDto(vehicles);
+
+    const limit = filter.limit || 20;
+    const totalPages = Math.ceil(total / limit);
+    const page = filter.page || 1;
+
+    await this.auditService.logVehiclesListed({
+      userId: user.id,
+      companyId: user.companyId,
+      metadata: {
+        page,
+        limit,
+        sortField: filter.sortField || 'createdAt',
+        sortOrder: filter.sortOrder || 'desc',
+        hasSearch: Boolean(filter.search && String(filter.search).trim().length > 0),
+        public: true,
+      },
+    });
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
+      meta: null,
+    };
+  }
+
   async findOne(id: string): Promise<VehicleResponseDto> {
     const vehicle = await this.vehiclesValidationService.validateVehicleExists(id);
     return this.vehiclesMapperService.mapToResponseDto(vehicle);
@@ -137,6 +172,26 @@ export class VehiclesService {
     });
 
     return this.vehiclesMapperService.mapToResponseDtoForRole(vehicle, user.role as any);
+  }
+
+  async findOnePublic(id: string, user: RequestWithUser['user']): Promise<VehiclePublicResponseDto> {
+    const vehicle = await this.vehiclesDataService.findPublicById(id);
+    if (!vehicle) {
+      throw new NotFoundException('Автомобиль не найден или недоступен');
+    }
+
+    await this.auditService.logVehicleViewed({
+      userId: user.id,
+      companyId: user.companyId,
+      entityId: vehicle.id,
+      entityType: 'Vehicle',
+      metadata: {
+        vehicleId: vehicle.id,
+        viewMode: 'public',
+      },
+    });
+
+    return this.vehiclesMapperService.mapToPublicResponseDto(vehicle);
   }
 
   async update(id: string, updateVehicleDto: UpdateVehicleDto): Promise<VehicleResponseDto> {

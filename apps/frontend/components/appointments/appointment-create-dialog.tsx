@@ -50,7 +50,6 @@ function toLocalInputValue(iso?: string) {
   if (!iso) return '';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
-  // YYYY-MM-DDTHH:mm
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
     d.getMinutes(),
@@ -247,11 +246,9 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
 
     setAvailStatus('checking');
     setAvailError(null);
-    console.debug('[AppointmentCreateDialog] checkAvailability payload:', payload);
 
     try {
       const res = await appointmentsAPI.checkAvailability(payload);
-      console.debug('[AppointmentCreateDialog] checkAvailability result:', res);
       setSlots(res || []);
       if (!res || res.length === 0) {
         setAvailStatus('empty');
@@ -261,7 +258,6 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
       }
     } catch (e) {
       const msg = (e as Error)?.message || 'Не удалось проверить доступность';
-      console.error('[AppointmentCreateDialog] checkAvailability error:', e);
       setAvailError(msg);
       setAvailStatus('error');
       toast.error(msg);
@@ -276,179 +272,192 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
 
   return (
     <Dialog open={open} onOpenChange={(v) => !submitting && onOpenChange(v)}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
+      {/* Full-width on mobile, max-h with scrollable body; sticky footer */}
+      <DialogContent className="sm:max-w-3xl w-[95vw] max-h-[85vh] p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-5 pb-2">
           <DialogTitle>Создать запись</DialogTitle>
-          <DialogDescription>Укажите основные данные. Обязательные поля помечены *</DialogDescription>
+          <DialogDescription>Заполните основные данные. Обязательные поля помечены *</DialogDescription>
         </DialogHeader>
 
-        <div className="grid md:grid-cols-2 gap-4 py-2">
-          <div className="md:col-span-2">
-            <label className="text-sm text-muted-foreground">Клиент *</label>
-            <CustomerSelect value={customer} onChange={(opt) => { setCustomer(opt); setVehicle(null); }} />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-sm text-muted-foreground">Автомобиль *</label>
-            <VehicleSelect customerId={customer?.id} value={vehicle} onChange={setVehicle} />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-sm text-muted-foreground">Мастер *</label>
-            <MechanicSelect value={mechanic} onChange={setMechanic} />
-          </div>
+        {/* Scrollable body */}
+        <div className="px-6 pb-4 overflow-y-auto max-h-[calc(85vh-112px)]">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <div className="text-sm text-muted-foreground mb-1">Клиент *</div>
+              <CustomerSelect value={customer} onChange={(opt) => { setCustomer(opt); setVehicle(null); }} />
+            </div>
+            <div className="md:col-span-2">
+              <div className="text-sm text-muted-foreground mb-1">Автомобиль *</div>
+              <VehicleSelect customerId={customer?.id} value={vehicle} onChange={setVehicle} />
+            </div>
+            <div className="md:col-span-2">
+              <div className="text-sm text-muted-foreground mb-1">Мастер *</div>
+              <MechanicSelect value={mechanic} onChange={setMechanic} />
+            </div>
 
-          <div>
-            <label className="text-sm text-muted-foreground">Начало *</label>
-            <Input type="datetime-local" value={startLocal} onChange={(e) => setStartLocal(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-sm text-muted-foreground">Окончание *</label>
-            <Input type="datetime-local" value={endLocal} onChange={(e) => setEndLocal(e.target.value)} />
-          </div>
-
-          <div>
-            <label className="text-sm text-muted-foreground">Длительность (мин) *</label>
-            <Input
-              value={estimatedDuration}
-              onChange={(e) => setEstimatedDuration(e.target.value)}
-              placeholder="Напр., 60"
-            />
-          </div>
-          <div>
-            <label className="text-sm text-muted-foreground">Приоритет</label>
-            <select
-              className="w-full h-9 rounded-md border border-border bg-background text-sm px-3"
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as AppointmentPriority)}
-            >
-              {PRIORITIES.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-sm text-muted-foreground">Услуги *</label>
-            <ServicesMultiSelect values={services} onChange={setServices} />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-sm text-muted-foreground">Описание работ</label>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Опционально" />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-sm text-muted-foreground">Заметки клиента</label>
-            <Input value={customerNotes} onChange={(e) => setCustomerNotes(e.target.value)} placeholder="Опционально" />
-          </div>
-
-          <div>
-            <label className="text-sm text-muted-foreground">Контактный телефон</label>
-            <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="+7..." />
-          </div>
-          <div>
-            <label className="text-sm text-muted-foreground">Контактный email</label>
-            <Input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="email@example.com" />
-          </div>
-          <div>
-            <label className="text-sm text-muted-foreground">Оценочная стоимость (₽)</label>
-            <Input value={estimatedCost} onChange={(e) => setEstimatedCost(e.target.value)} placeholder="Напр., 5000" />
-          </div>
-        </div>
-
-        {/* Smart-Schedule CTA */}
-        <div className="mt-2">
-          <Button
-            variant="outline"
-            onClick={() => setOpenSmart(true)}
-            disabled={!customer?.id || !vehicle?.id || services.length === 0}
-          >
-            Подобрать время (Smart-Schedule)
-          </Button>
-        </div>
-
-        {/* Блок: Проверка доступности */}
-        <div className="mt-4 space-y-3">
-          <div className="text-sm font-medium">Проверка доступности слотов</div>
-          <div className="grid md:grid-cols-5 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground">Дата</label>
+              <div className="text-sm text-muted-foreground mb-1">Начало *</div>
+              <Input type="datetime-local" value={startLocal} onChange={(e) => setStartLocal(e.target.value)} />
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">Окончание *</div>
+              <Input type="datetime-local" value={endLocal} onChange={(e) => setEndLocal(e.target.value)} />
+            </div>
+
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">Длительность (мин) *</div>
               <Input
-                type="date"
-                value={availDate || todayISODate}
-                onChange={(e) => setAvailDate(e.target.value)}
+                type="number"
+                min={1}
+                step={1}
+                value={estimatedDuration}
+                onChange={(e) => setEstimatedDuration(e.target.value)}
+                placeholder="Напр., 60"
               />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">С (чч:мм)</label>
-              <Input
-                placeholder="09:00"
-                value={availStart}
-                onChange={(e) => setAvailStart(e.target.value)}
-              />
+              <div className="text-sm text-muted-foreground mb-1">Приоритет</div>
+              <select
+                className="w-full h-9 rounded-md border border-border bg-background text-sm px-3"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as AppointmentPriority)}
+              >
+                {PRIORITIES.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="md:col-span-2">
+              <div className="text-sm text-muted-foreground mb-1">Услуги *</div>
+              <ServicesMultiSelect values={services} onChange={setServices} />
+            </div>
+
+            <div className="md:col-span-2">
+              <div className="text-sm text-muted-foreground mb-1">Описание работ</div>
+              <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Опционально" />
+            </div>
+            <div className="md:col-span-2">
+              <div className="text-sm text-muted-foreground mb-1">Заметки клиента</div>
+              <Input value={customerNotes} onChange={(e) => setCustomerNotes(e.target.value)} placeholder="Опционально" />
+            </div>
+
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">Контактный телефон</div>
+              <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="+7..." />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">По (чч:мм)</label>
+              <div className="text-sm text-muted-foreground mb-1">Контактный email</div>
+              <Input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="email@example.com" />
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">Оценочная стоимость (₽)</div>
               <Input
-                placeholder="17:00"
-                value={availEnd}
-                onChange={(e) => setAvailEnd(e.target.value)}
+                type="number"
+                min={0}
+                step="0.01"
+                value={estimatedCost}
+                onChange={(e) => setEstimatedCost(e.target.value)}
+                placeholder="Напр., 5000"
               />
             </div>
-            <div className="flex items-end">
+          </div>
+
+          {/* Collapsible advanced sections to reduce height */}
+          <details className="mt-4 rounded-xl border border-border/30">
+            <summary className="cursor-pointer select-none px-4 py-2 text-sm font-medium">Проверка доступности</summary>
+            <div className="p-4 grid md:grid-cols-5 gap-3">
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Дата</div>
+                <Input
+                  type="date"
+                  value={availDate || todayISODate}
+                  onChange={(e) => setAvailDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">С (чч:мм)</div>
+                <Input
+                  placeholder="09:00"
+                  value={availStart}
+                  onChange={(e) => setAvailStart(e.target.value)}
+                />
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">По (чч:мм)</div>
+                <Input
+                  placeholder="17:00"
+                  value={availEnd}
+                  onChange={(e) => setAvailEnd(e.target.value)}
+                />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  variant="outline"
+                  onClick={onCheckAvailability}
+                  disabled={availStatus === 'checking' || services.length === 0}
+                >
+                  {availStatus === 'checking' ? 'Проверяем...' : 'Проверить'}
+                </Button>
+              </div>
+
+              {/* Status/Errors */}
+              {availStatus === 'checking' && (
+                <div className="col-span-full flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                  Идёт проверка доступности...
+                </div>
+              )}
+              {availStatus === 'empty' && (
+                <div className="col-span-full text-sm text-muted-foreground">
+                  Свободных слотов не найдено. Попробуйте изменить дату или интервал.
+                </div>
+              )}
+              {availStatus === 'error' && availError && (
+                <div className="col-span-full text-sm text-destructive">Ошибка: {availError}</div>
+              )}
+            </div>
+
+            {slots.length > 0 && (
+              <div className="mt-3 rounded-xl border border-border/30 overflow-hidden">
+                <div className="px-4 py-2 text-xs text-muted-foreground bg-muted/20">Найденные слоты</div>
+                <div className="max-h-56 overflow-auto divide-y divide-border/30">
+                  {slots.map((s, idx) => (
+                    <div key={`${s.mechanicId}-${idx}`} className="flex items-center justify-between px-4 py-3 bg-card/50">
+                      <div className="text-sm">
+                        <div className="font-medium">
+                          {fmtDateTime(s.startTime)} — {fmtDateTime(s.endTime)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Механик: {s.mechanicId}</div>
+                      </div>
+                      <Button size="sm" className="rounded-xl" onClick={() => applySlot(s)}>
+                        Выбрать
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </details>
+
+          <details className="mt-3 rounded-xl border border-border/30">
+            <summary className="cursor-pointer select-none px-4 py-2 text-sm font-medium">Умное планирование (рекомендации)</summary>
+            <div className="p-4">
               <Button
                 variant="outline"
-                onClick={onCheckAvailability}
-                disabled={availStatus === 'checking' || services.length === 0}
+                onClick={() => setOpenSmart(true)}
+                disabled={!customer?.id || !vehicle?.id || services.length === 0}
               >
-                {availStatus === 'checking' ? 'Проверяем...' : 'Проверить доступность'}
+                Подобрать время (Smart-Schedule)
               </Button>
             </div>
-          </div>
-
-          {/* Статус/ошибки */}
-          {availStatus === 'checking' && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-              Идёт проверка доступности...
-            </div>
-          )}
-          {availStatus === 'empty' && (
-            <div className="text-sm text-muted-foreground">
-              Свободных слотов не найдено. Попробуйте изменить дату или временной интервал.
-            </div>
-          )}
-          {availStatus === 'error' && availError && (
-            <div className="text-sm text-destructive">Ошибка: {availError}</div>
-          )}
-          {availStatus === 'ok' && slots.length > 0 && (
-            <div className="text-sm text-muted-foreground">Найдено слотов: {slots.length}</div>
-          )}
-
-          {/* Слоты */}
-          {slots.length > 0 && (
-            <div className="rounded-xl border border-border/30 overflow-hidden">
-              <div className="px-4 py-2 text-xs text-muted-foreground bg-muted/20">Найденные слоты</div>
-              <div className="max-h-64 overflow-auto divide-y divide-border/30">
-                {slots.map((s, idx) => (
-                  <div key={`${s.mechanicId}-${idx}`} className="flex items-center justify-between px-4 py-3 bg-card/50">
-                    <div className="text-sm">
-                      <div className="font-medium">
-                        {fmtDateTime(s.startTime)} — {fmtDateTime(s.endTime)}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Механик: {s.mechanicId}</div>
-                    </div>
-                    <Button size="sm" className="rounded-xl" onClick={() => applySlot(s)}>
-                      Выбрать
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          </details>
         </div>
 
-        <DialogFooter className="gap-2 mt-4">
+        {/* Sticky footer */}
+        <DialogFooter className="gap-2 px-6 py-3 border-t bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/50 sticky bottom-0">
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>
             Отмена
           </Button>

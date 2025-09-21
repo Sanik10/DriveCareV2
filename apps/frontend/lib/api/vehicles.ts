@@ -6,6 +6,9 @@ import type {
   VehicleResponse,
   CreateVehicleRequest,
   UpdateVehicleRequest,
+  PublicVehiclesQuery,
+  PaginatedVehiclesPublicResponse,
+  VehiclePublicResponse,
 } from '@/lib/types/vehicles';
 
 function buildQuery(params: Record<string, unknown>) {
@@ -19,6 +22,7 @@ function buildQuery(params: Record<string, unknown>) {
 }
 
 class VehiclesAPI {
+  // Company-scoped (private) vehicles
   async getVehicles(query: VehiclesQuery = {}): Promise<PaginatedVehiclesResponse> {
     const qs = buildQuery(query as Record<string, unknown>);
     return apiRequest<PaginatedVehiclesResponse>(`/vehicles${qs}`, { method: 'GET' });
@@ -61,6 +65,16 @@ class VehiclesAPI {
       method: 'DELETE',
       idempotencyKey: generateIdempotencyKey(),
     });
+  }
+
+  // Cross-company public catalogue view (no PII)
+  async getPublicVehicles(query: PublicVehiclesQuery = {}): Promise<PaginatedVehiclesPublicResponse> {
+    const qs = buildQuery(query as Record<string, unknown>);
+    return apiRequest<PaginatedVehiclesPublicResponse>(`/vehicles/public${qs}`, { method: 'GET' });
+  }
+
+  async getPublicVehicle(id: string): Promise<VehiclePublicResponse> {
+    return apiRequest<VehiclePublicResponse>(`/vehicles/public/${id}`, { method: 'GET' });
   }
 }
 

@@ -24,6 +24,9 @@ export class ModelResponseDto {
   @ApiProperty({ example: true })
   isActive: boolean;
 
+  @ApiPropertyOptional({ example: true })
+  isVerified?: boolean;
+
   @ApiProperty()
   createdAt: Date;
 

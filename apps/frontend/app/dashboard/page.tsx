@@ -24,6 +24,7 @@ import {
   Zap,
   Star,
   CreditCard,
+  BookOpen,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -46,7 +47,6 @@ function detectLowPerf(): boolean {
   const lowMemory = typeof nav?.deviceMemory === 'number' ? nav.deviceMemory <= 4 : false;
   const lowCPU = typeof nav?.hardwareConcurrency === 'number' ? nav.hardwareConcurrency <= 4 : false;
 
-  // Allow manual override via localStorage: set item 'VFX' to 'off' or 'on'
   const override = (typeof window !== 'undefined' && window.localStorage?.getItem('VFX')) || null;
   if (override === 'off') return true;
   if (override === 'on') return false;
@@ -63,7 +63,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    // Determine if visual effects should be disabled for performance
     setVfxDisabled(detectLowPerf());
   }, []);
 
@@ -86,7 +85,6 @@ export default function DashboardPage() {
     checkAuth(true);
   };
 
-  // Memoized quick stats must be declared before any early return
   const quickStats = useMemo(
     () => [
       { icon: Users, label: 'Клиенты', value: '247', color: 'primary' as const },
@@ -173,7 +171,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      {/* Background (lightweight gradients only) */}
+      {/* Background */}
       <div
         className="fixed inset-0 -z-10"
         style={{
@@ -185,10 +183,9 @@ export default function DashboardPage() {
         }}
       />
 
-      {/* Optional lightweight VFX (auto-disabled on low perf) */}
+      {/* Optional VFX */}
       {!vfxDisabled && (
         <div className="fixed inset-0 -z-10 pointer-events-none">
-          {/* Main glow nodes (reduced count) */}
           <div
             className={`absolute rounded-full ${styles.dataHubMain}`}
             style={{
@@ -215,8 +212,6 @@ export default function DashboardPage() {
               willChange: 'transform',
             }}
           />
-
-          {/* Minimal data stream */}
           <div
             className={`absolute ${styles.dataStream1}`}
             style={{
@@ -273,15 +268,13 @@ export default function DashboardPage() {
       {/* Main Content */}
       <main className="relative z-10 container mx-auto px-6 py-8">
         <div className="space-y-8">
-          {/* Welcome Section */}
+          {/* Welcome */}
           <div className="text-center space-y-6">
             <div className="space-y-3">
               {!vfxDisabled && (
                 <div className="flex items-center justify-center gap-3 mb-4">
                   <Star className={`w-6 h-6 text-primary ${styles.welcomeStar}`} />
-                  <div
-                    className={`w-12 h-0.5 bg-gradient-to-r from-primary to-secondary ${styles.welcomeLine}`}
-                  />
+                  <div className={`w-12 h-0.5 bg-gradient-to-r from-primary to-secondary ${styles.welcomeLine}`} />
                   <TrendingUp className={`w-6 h-6 text-secondary ${styles.welcomeTrend}`} />
                 </div>
               )}
@@ -308,14 +301,9 @@ export default function DashboardPage() {
                   ? 'text-accent bg-accent/20'
                   : 'text-emerald-500 bg-emerald-500/20';
               return (
-                <Card
-                  key={idx}
-                  className="p-4 glass border-border/30 rounded-2xl hover:shadow-glass transition-all duration-300 group"
-                >
+                <Card key={idx} className="p-4 glass border-border/30 rounded-2xl hover:shadow-glass transition-all duration-300 group">
                   <div className="flex items-center gap-3">
-                    <div
-                      className={`w-10 h-10 rounded-xl ${colorClass} flex items-center justify-center group-hover:scale-110 transition-transform`}
-                    >
+                    <div className={`w-10 h-10 rounded-xl ${colorClass} flex items-center justify-center group-hover:scale-110 transition-transform`}>
                       <Icon className="w-5 h-5" />
                     </div>
                     <div>
@@ -344,18 +332,14 @@ export default function DashboardPage() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Security */}
             <Link href="/dashboard/security">
-              <Card
-                className={`p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group cursor-pointer rounded-3xl surface-glow ${styles.dashboardCardPriority}`}
-              >
+              <Card className={`p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group cursor-pointer rounded-3xl surface-glow ${styles.dashboardCardPriority}`}>
                 <div className="space-y-4">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-primary flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-glass">
                     <Shield className="w-7 h-7 text-white" />
                   </div>
                   <div className="space-y-2">
                     <h3 className="font-semibold text-lg">Безопасность</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Управление устройствами и двухфакторной аутентификацией
-                    </p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">Управление устройствами и двухфакторной аутентификацией</p>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-primary">
                     <CheckCircle className="w-3 h-3" />
@@ -374,14 +358,9 @@ export default function DashboardPage() {
                   </div>
                   <div className="space-y-2">
                     <h3 className="font-semibold text-lg">Заказы</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Управление заказами на ремонт и обслуживание
-                    </p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">Управление заказами на ремонт и обслуживание</p>
                   </div>
-                  <Button
-                    size="sm"
-                    className="w-full rounded-2xl bg-secondary/10 hover:bg-secondary/20 text-secondary border-secondary/30"
-                  >
+                  <Button size="sm" className="w-full rounded-2xl bg-secondary/10 hover:bg-secondary/20 text-secondary border-secondary/30">
                     Открыть
                   </Button>
                 </div>
@@ -417,10 +396,7 @@ export default function DashboardPage() {
                     <h3 className="font-semibold text-lg">Автомобили</h3>
                     <p className="text-sm text-muted-foreground leading-relaxed">Учет автомобилей и техническая информация</p>
                   </div>
-                  <Button
-                    size="sm"
-                    className="w-full rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border-emerald-500/30"
-                  >
+                  <Button size="sm" className="w-full rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border-emerald-500/30">
                     Открыть
                   </Button>
                 </div>
@@ -438,10 +414,7 @@ export default function DashboardPage() {
                     <h3 className="font-semibold text-lg">Способы оплаты</h3>
                     <p className="text-sm text-muted-foreground leading-relaxed">Методы оплаты и интеграции</p>
                   </div>
-                  <Button
-                    size="sm"
-                    className="w-full rounded-2xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 border-indigo-500/30"
-                  >
+                  <Button size="sm" className="w-full rounded-2xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 border-indigo-500/30">
                     Открыть
                   </Button>
                 </div>
@@ -459,9 +432,7 @@ export default function DashboardPage() {
                     <h3 className="font-semibold text-lg">Счета</h3>
                     <p className="text-sm text-muted-foreground leading-relaxed">Выставление счетов и управление оплатой</p>
                   </div>
-                  <Button size="sm" className="w-full rounded-2xl">
-                    Открыть
-                  </Button>
+                  <Button size="sm" className="w-full rounded-2xl">Открыть</Button>
                 </div>
               </Card>
             </Link>
@@ -477,10 +448,7 @@ export default function DashboardPage() {
                     <h3 className="font-semibold text-lg">Записи</h3>
                     <p className="text-sm text-muted-foreground leading-relaxed">Планирование и управление записями</p>
                   </div>
-                  <Button
-                    size="sm"
-                    className="w-full rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-500 border-purple-500/30"
-                  >
+                  <Button size="sm" className="w-full rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-500 border-purple-500/30">
                     Открыть
                   </Button>
                 </div>
@@ -505,7 +473,7 @@ export default function DashboardPage() {
               </Card>
             </Link>
 
-            {/* Platform: Tariffs Backoffice (visible only for platform admins) */}
+            {/* Platform: Tariffs Backoffice */}
             {isPlatformAdmin && (
               <Link href="/platform/tariffs">
                 <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group cursor-pointer rounded-3xl surface-glow">
@@ -515,9 +483,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="space-y-2">
                       <h3 className="font-semibold text-lg">Тарифы (Backoffice)</h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Создание, редактирование и управление тарифными планами
-                      </p>
+                      <p className="text-sm text-muted-foreground">Создание, редактирование и управление тарифными планами</p>
                     </div>
                     <Button size="sm" className="w-full rounded-2xl bg-pink-500/10 hover:bg-pink-500/20 text-pink-500 border-pink-500/30">
                       Открыть
@@ -527,10 +493,30 @@ export default function DashboardPage() {
               </Link>
             )}
 
+            {/* Platform: Catalogue Backoffice */}
+            {isPlatformAdmin && (
+              <Link href="/platform/catalogue">
+                <Card className="p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group cursor-pointer rounded-3xl surface-glow">
+                  <div className="space-y-4">
+                    <div className="w-14 h-14 rounded-2xl bg-teal-500/20 border border-teal-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
+                      <BookOpen className="w-7 h-7 text-teal-500" />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-lg">Каталог (Backoffice)</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Бренды, модели, типы. Верификация, слияния, импорт
+                      </p>
+                    </div>
+                    <Button size="sm" className="w-full rounded-2xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-500 border-teal-500/30">
+                      Открыть
+                    </Button>
+                  </div>
+                </Card>
+              </Link>
+            )}
+
             {/* Inventory */}
-            <Card
-              className={`p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow ${styles.dashboardCardComingSoon}`}
-            >
+            <Card className={`p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow ${styles.dashboardCardComingSoon}`}>
               <div className="space-y-4">
                 <div className="w-14 h-14 rounded-2xl bg-orange-500/20 border border-orange-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
                   <Package className="w-7 h-7 text-orange-500" />
@@ -547,9 +533,7 @@ export default function DashboardPage() {
             </Card>
 
             {/* Suppliers */}
-            <Card
-              className={`p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow ${styles.dashboardCardComingSoon}`}
-            >
+            <Card className={`p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow ${styles.dashboardCardComingSoon}`}>
               <div className="space-y-4">
                 <div className="w-14 h-14 rounded-2xl bg-slate-500/20 border border-slate-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
                   <Truck className="w-7 h-7 text-slate-500" />
@@ -566,11 +550,9 @@ export default function DashboardPage() {
             </Card>
 
             {/* Settings */}
-            <Card
-              className={`p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow ${styles.dashboardCardComingSoon}`}
-            >
+            <Card className={`p-6 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 group rounded-3xl surface-glow ${styles.dashboardCardComingSoon}`}>
               <div className="space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-teал-500/20 border border-teal-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
+                <div className="w-14 h-14 rounded-2xl bg-teal-500/20 border border-teal-500/30 flex items-center justify-center group-hover:scale-110 transition-all duration-300">
                   <Settings className="w-7 h-7 text-teal-500" />
                 </div>
                 <div className="space-y-2">
@@ -588,9 +570,7 @@ export default function DashboardPage() {
           {/* Development Notice */}
           <Card className="p-8 glass border-border/30 text-center rounded-3xl surface-glow">
             <div className="space-y-6">
-              <div
-                className={`w-20 h-20 rounded-full bg-gradient-primary/20 flex items-center justify-center mx-auto ${styles.devNoticeGlow}`}
-              >
+              <div className={`w-20 h-20 rounded-full bg-gradient-primary/20 flex items-center justify-center mx-auto ${styles.devNoticeGlow}`}>
                 <Building2 className="w-10 h-10 text-primary" />
               </div>
               <div className="space-y-3">
@@ -599,8 +579,7 @@ export default function DashboardPage() {
                   DriveCare в активной разработке
                 </h3>
                 <p className="text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-                  Мы работаем над полнофункциональной системой управления автосервисом. Новые возможности добавляются
-                  каждую неделю.
+                  Мы работаем над полнофункциональной системой управления автосервисом. Новые возможности добавляются каждую неделю.
                 </p>
               </div>
               <div className="flex items-center justify-center gap-4">
@@ -610,10 +589,7 @@ export default function DashboardPage() {
                     Обновить
                   </Button>
                 </Link>
-                <Button
-                  onClick={logout}
-                  className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-105"
-                >
+                <Button onClick={logout} className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-105">
                   Выйти из системы
                 </Button>
               </div>

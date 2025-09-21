@@ -32,6 +32,17 @@ export function AppointmentCancelDialog({ open, onOpenChange, onConfirm, loading
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Например: клиент запросил перенос"
+            onKeyDown={async (e) => {
+              if (e.key === 'Enter' && canSubmit && !loading) {
+                try {
+                  await onConfirm(reason.trim());
+                  onOpenChange(false);
+                  setReason('');
+                } catch {
+                  // Ошибку покажет родитель, диалог оставляем открытым
+                }
+              }
+            }}
           />
         </div>
 
@@ -41,11 +52,15 @@ export function AppointmentCancelDialog({ open, onOpenChange, onConfirm, loading
           </Button>
           <Button
             variant="destructive"
-            disabled={!canSubmit || loading}
+            disabled={!canSubmit || !!loading}
             onClick={async () => {
-              await onConfirm(reason.trim());
-              onOpenChange(false);
-              setReason('');
+              try {
+                await onConfirm(reason.trim());
+                onOpenChange(false);
+                setReason('');
+              } catch {
+                // Ошибку покажет родитель (toast); диалог оставляем открытым
+              }
             }}
           >
             {loading ? 'Отмена...' : 'Отменить'}

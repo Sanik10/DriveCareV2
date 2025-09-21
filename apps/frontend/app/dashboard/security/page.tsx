@@ -2,22 +2,36 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  Shield, Smartphone, Monitor, Tablet,
-  AlertTriangle, CheckCircle, Key, LogOut, RefreshCw, Home,
+  Shield, 
+  Smartphone, 
+  Monitor, 
+  Tablet,
+  AlertTriangle, 
+  CheckCircle, 
+  Key, 
+  LogOut, 
+  RefreshCw,
+  Sparkles,
+  TrendingUp,
+  Zap,
+  Users,
+  Lock
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { AppLayout } from '@/components/app/AppLayout';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { securityAPI } from '@/lib/api/security';
 import type { SessionDevice } from '@/lib/types/security';
 import { DeviceSessionCard } from '@/components/security/device-session-card';
 import { TwoFactorAuthCard } from '@/components/security/two-factor-auth-card';
 import { LogoutConfirmDialog } from '@/components/security/logout-confirm-dialog';
+import { cn } from '@/lib/utils';
 
 interface ApiError {
   message: string;
@@ -251,174 +265,217 @@ export default function SecurityPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-surface-1 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto"></div>
-          <p className="text-muted-foreground">Проверка авторизации...</p>
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-muted-foreground">Проверка авторизации...</span>
+          </div>
         </div>
-      </div>
+      </AppLayout>
     );
   }
 
   if (!isAuthenticated || !user) return null;
 
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <Button 
+        variant="outline" 
+        onClick={handleRefresh} 
+        disabled={isRefreshing || loadingRef.current}
+        className="rounded-2xl btn-outline-fixed"
+      >
+        <RefreshCw className={cn("w-4 h-4 mr-2", isRefreshing && "animate-spin")} />
+        Обновить
+      </Button>
+      <Button 
+        variant="destructive" 
+        onClick={() => confirmLogout()}
+        className="rounded-2xl"
+      >
+        <LogOut className="w-4 h-4 mr-2" />
+        Выйти везде
+      </Button>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-surface-1">
-      {/* Lightweight background glows */}
-      <div className="fixed inset-0 bg-gradient-surface -z-10"></div>
-      <div className="fixed top-0 right-0 w-72 h-72 bg-gradient-primary opacity-5 rounded-full blur-3xl -z-10"></div>
-      <div className="fixed bottom-0 left-0 w-56 h-56 bg-secondary/10 rounded-full blur-3xl -z-10"></div>
-
-      <header className="border-b border-border/50 backdrop-blur-sm">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3 p-2 rounded-lg bg-gradient-primary">
-                <Shield className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                  Безопасность
-                </h1>
-                <p className="text-xs text-muted-foreground">
-                  Управление устройствами и двухфакторной аутентификацией
-                </p>
-              </div>
+    <AppLayout
+      title="Безопасность"
+      description="Управление устройствами и двухфакторной аутентификацией"
+      icon={Shield}
+      actions={headerActions}
+    >
+      <div className="container mx-auto px-6 py-6 space-y-6">
+        {/* Security Feature Badge */}
+        <Card className="p-4 glass border-red-500/20 bg-gradient-to-r from-red-500/5 to-orange-500/5 rounded-3xl">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-to-r from-red-500 to-orange-500">
+              <Sparkles className="w-5 h-5 text-white" />
             </div>
-
-            <div className="flex items-center gap-3">
-              <Link href="/dashboard">
-                <Button variant="ghost">
-                  <Home className="w-4 h-4 mr-2" />
-                  В дашборд
-                </Button>
-              </Link>
-              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing || loadingRef.current}>
-                <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                Обновить
-              </Button>
-              <Button variant="destructive" size="sm" onClick={() => confirmLogout()}>
-                <LogOut className="w-4 h-4 mr-2" />
-                Выйти везде
-              </Button>
+            <div>
+              <h3 className="font-semibold text-red-600 dark:text-red-400">QR-коды и управление устройствами</h3>
+              <p className="text-sm text-muted-foreground">
+                Двухфакторная аутентификация с QR-кодами, мониторинг активных сессий и быстрое отключение устройств.
+              </p>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <Badge variant="outline" className="bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800/30">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                2FA {twoFAEnabled ? 'ON' : 'OFF'}
+              </Badge>
+              <Badge variant="outline" className="bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/30">
+                <Users className="w-3 h-3 mr-1" />
+                {sessions.length} устройств
+              </Badge>
             </div>
           </div>
-        </div>
-      </header>
+        </Card>
 
-      <main className="container mx-auto px-6 py-8">
-        <div className="space-y-8">
-          <TwoFactorAuthCard enabled={twoFAEnabled} onStatusChange={handle2FAStatusChange} />
+        {/* Two Factor Authentication */}
+        <TwoFactorAuthCard enabled={twoFAEnabled} onStatusChange={handle2FAStatusChange} />
 
-          <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <Smartphone className="w-5 h-5 text-primary" />
-                    Активные устройства
-                  </h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Устройства, с которых выполнен вход в ваш аккаунт
-                  </p>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {sessions.length} {sessionsCountLabel}
-                </div>
-              </div>
-
-              {isLoading ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="h-24 bg-surface-1 rounded-lg animate-pulse" />
-                  ))}
-                </div>
-              ) : sessions.length === 0 ? (
-                <div className="text-center py-8">
-                  <Smartphone className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">Активных сессий не найдено</p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Это может означать, что ваши сессии были отключены
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {sessions.map((session) => (
-                    <DeviceSessionCard
-                      key={session.id}
-                      session={session}
-                      onLogout={() => confirmLogout(session.deviceId, session.deviceName)}
-                      getDeviceIcon={getDeviceIcon}
-                      formatLastActive={formatLastActive}
-                    />
-                  ))}
-                </div>
-              )}
+        {/* Active Devices */}
+        <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-xl bg-gradient-to-r from-blue-500/20 to-purple-500/20">
+              <Smartphone className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
-          </Card>
+            <div>
+              <h3 className="text-lg font-semibold">Активные устройства</h3>
+              <p className="text-sm text-muted-foreground">
+                Устройства, с которых выполнен вход в ваш аккаунт ({sessions.length} {sessionsCountLabel})
+              </p>
+            </div>
+            <div className="ml-auto">
+              <TrendingUp className="w-6 h-6 text-secondary" />
+            </div>
+          </div>
 
-          <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50">
+          {isLoading ? (
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Shield className="w-5 h-5 text-secondary" />
-                Рекомендации по безопасности
-              </h3>
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-24 bg-surface-1/40 rounded-2xl animate-pulse" />
+              ))}
+            </div>
+          ) : sessions.length === 0 ? (
+            <div className="text-center py-8">
+              <Smartphone className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+              <h3 className="font-medium mb-2">Активных сессий не найдено</h3>
+              <p className="text-sm text-muted-foreground">
+                Это может означать, что ваши сессии были отключены
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {sessions.map((session) => (
+                <DeviceSessionCard
+                  key={session.id}
+                  session={session}
+                  onLogout={() => confirmLogout(session.deviceId, session.deviceName)}
+                  getDeviceIcon={getDeviceIcon}
+                  formatLastActive={formatLastActive}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="w-5 h-5 text-emerald-500 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-emerald-700 dark:text-emerald-400">Включите 2FA</h4>
-                      <p className="text-sm text-emerald-600 dark:text-emerald-500 mt-1">
-                        Двухфакторная аутентификация защитит ваш аккаунт даже при компрометации пароля
-                      </p>
-                    </div>
-                  </div>
-                </div>
+        {/* Security Recommendations */}
+        <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20">
+              <Shield className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold">Рекомендации по безопасности</h3>
+              <p className="text-sm text-muted-foreground">Следуйте этим советам для защиты аккаунта</p>
+            </div>
+          </div>
 
-                <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-amber-700 dark:text-amber-400">Следите за сессиями</h4>
-                      <p className="text-sm text-amber-600 dark:text-amber-500 mt-1">
-                        Регулярно проверяйте список активных устройств и отключайте неизвестные
-                      </p>
-                    </div>
-                  </div>
-                </div>
+          <div className="grid md:grid-cols-2 gap-4">
+            <SecurityTip
+              icon={CheckCircle}
+              title="Включите 2FA"
+              description="Двухфакторная аутентификация защитит ваш аккаунт даже при компрометации пароля"
+              color="emerald"
+              completed={twoFAEnabled}
+            />
 
-                <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                  <div className="flex items-start gap-3">
-                    <Key className="w-5 h-5 text-blue-500 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-blue-700 dark:text-blue-400">Используйте сильные пароли</h4>
-                      <p className="text-sm text-blue-600 dark:text-blue-500 mt-1">
-                        Минимум 8 символов с буквами, цифрами и специальными символами
-                      </p>
-                    </div>
-                  </div>
-                </div>
+            <SecurityTip
+              icon={AlertTriangle}
+              title="Следите за сессиями"
+              description="Регулярно проверяйте список активных устройств и отключайте неизвестные"
+              color="amber"
+            />
 
-                <div className="п-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
-                  <div className="flex items-start gap-3">
-                    <LogOut className="w-5 h-5 text-purple-500 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-purple-700 dark:text-purple-400">
-                        Выходите с общих компьютеров
-                      </h4>
-                      <p className="text-sm text-purple-600 dark:text-purple-500 mt-1">
-                        Всегда завершайте сессию при работе на чужих устройствах
-                      </p>
-                    </div>
-                  </div>
+            <SecurityTip
+              icon={Key}
+              title="Используйте сильные пароли"
+              description="Минимум 8 символов с буквами, цифрами и специальными символами"
+              color="blue"
+            />
+
+            <SecurityTip
+              icon={LogOut}
+              title="Выходите с общих компьютеров"
+              description="Всегда завершайте сессию при работе на чужих устройствах"
+              color="purple"
+            />
+          </div>
+        </Card>
+
+        {/* Security Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-blue-500/20">
+                <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Активных устройств</div>
+                <div className="text-xl font-bold">{sessions.length}</div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className={cn(
+            "p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300",
+            twoFAEnabled ? "border-green-500/30 bg-green-500/5" : "border-red-500/30 bg-red-500/5"
+          )}>
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "p-2 rounded-xl",
+                twoFAEnabled ? "bg-green-500/20" : "bg-red-500/20"
+              )}>
+                <Lock className={cn(
+                  "w-5 h-5",
+                  twoFAEnabled ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                )} />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">2FA статус</div>
+                <div className="text-xl font-bold">{twoFAEnabled ? 'Включен' : 'Отключен'}</div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-purple-500/20">
+                <Zap className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Текущий сеанс</div>
+                <div className="text-xl font-bold">
+                  {sessions.find(s => s.isCurrentDevice) ? 'Активен' : 'Неизвестен'}
                 </div>
               </div>
             </div>
           </Card>
         </div>
-      </main>
+      </div>
 
       <LogoutConfirmDialog
         isOpen={logoutDialog.isOpen}
@@ -427,6 +484,87 @@ export default function SecurityPage() {
         deviceName={logoutDialog.deviceName}
         isAllDevices={logoutDialog.isAllDevices}
       />
+    </AppLayout>
+  );
+}
+
+// Security Tip Component
+function SecurityTip({
+  icon: Icon,
+  title,
+  description,
+  color = 'default',
+  completed = false
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  color?: 'default' | 'emerald' | 'amber' | 'blue' | 'purple';
+  completed?: boolean;
+}) {
+  const colorStyles = {
+    default: 'bg-surface-1/40 border-border/30',
+    emerald: 'bg-emerald-500/10 border-emerald-500/20',
+    amber: 'bg-amber-500/10 border-amber-500/20',
+    blue: 'bg-blue-500/10 border-blue-500/20',
+    purple: 'bg-purple-500/10 border-purple-500/20',
+  };
+
+  const iconColorStyles = {
+    default: 'text-muted-foreground',
+    emerald: 'text-emerald-600 dark:text-emerald-400',
+    amber: 'text-amber-600 dark:text-amber-400',
+    blue: 'text-blue-600 dark:text-blue-400',
+    purple: 'text-purple-600 dark:text-purple-400',
+  };
+
+  const titleColorStyles = {
+    default: '',
+    emerald: 'text-emerald-700 dark:text-emerald-400',
+    amber: 'text-amber-700 dark:text-amber-400',
+    blue: 'text-blue-700 dark:text-blue-400',
+    purple: 'text-purple-700 dark:text-purple-400',
+  };
+
+  const descriptionColorStyles = {
+    default: 'text-muted-foreground',
+    emerald: 'text-emerald-600 dark:text-emerald-500',
+    amber: 'text-amber-600 dark:text-amber-500',
+    blue: 'text-blue-600 dark:text-blue-500',
+    purple: 'text-purple-600 dark:text-purple-500',
+  };
+
+  return (
+    <div className={cn(
+      'p-4 rounded-2xl border transition-all duration-300 hover:scale-[1.02]',
+      colorStyles[color],
+      completed && 'ring-1 ring-emerald-500/20'
+    )}>
+      <div className="flex items-start gap-3">
+        <div className={cn(
+          'p-1.5 rounded-lg mt-0.5',
+          color === 'emerald' ? 'bg-emerald-500/20' :
+          color === 'amber' ? 'bg-amber-500/20' :
+          color === 'blue' ? 'bg-blue-500/20' :
+          color === 'purple' ? 'bg-purple-500/20' :
+          'bg-surface-1/40'
+        )}>
+          <Icon className={cn('w-4 h-4', iconColorStyles[color])} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <h4 className={cn('font-medium text-sm', titleColorStyles[color])}>
+              {title}
+            </h4>
+            {completed && (
+              <CheckCircle className="w-4 h-4 text-emerald-500" />
+            )}
+          </div>
+          <p className={cn('text-sm', descriptionColorStyles[color])}>
+            {description}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
