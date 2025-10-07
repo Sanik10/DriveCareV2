@@ -1,52 +1,38 @@
+// path: apps/backend/src/database/entities/role.entity.ts
 import {
+  Entity,
+  PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  Entity,
-  JoinColumn,
-  JoinTable,
-  ManyToMany,
-  ManyToOne,
-  PrimaryGeneratedColumn,
   UpdateDateColumn,
-  Unique, // ✅ ДОБАВЛЕНО
+  Index,
+  Unique,
 } from 'typeorm';
-import { Company } from './company.entity';
-import { Permission } from './permission.entity';
 
 @Entity('roles')
-@Unique(['name', 'companyId']) // ✅ ИСПРАВЛЕНО: добавлен unique constraint
+@Unique('uq_roles_company_name', ['companyId', 'name'])
+@Index('idx_roles_company', ['companyId'])
+@Index('idx_roles_is_system', ['isSystem'])
 export class Role {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 50 })
+  @Column({ type: 'varchar', length: 100 })
   name: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description: string | null;
 
   @Column({ name: 'is_system', type: 'boolean', default: false })
   isSystem: boolean;
 
+  // null для системных ролей (глобальные)
   @Column({ name: 'company_id', type: 'uuid', nullable: true })
-  companyId: string;
+  companyId: string | null;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
-
-  // Отношения
-  @ManyToOne(() => Company, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'company_id' })
-  company: Company;
-
-  @ManyToMany(() => Permission)
-  @JoinTable({
-    name: 'role_permissions',
-    joinColumn: { name: 'role_id', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'permission_id', referencedColumnName: 'id' },
-  })
-  permissions: Permission[];
 }

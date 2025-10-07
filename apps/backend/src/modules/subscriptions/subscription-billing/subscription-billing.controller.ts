@@ -54,7 +54,7 @@ export class SubscriptionBillingController {
 
   @Post()
   @AuthWithOwnership()
-  @Roles('company_owner', 'company_admin')
+  @Roles('superadmin', 'platform_admin', 'company_owner', 'company_admin')
   @ApiOperation({
     summary: 'Создание подписки (PENDING)',
     description:
@@ -96,7 +96,7 @@ export class SubscriptionBillingController {
 
   @Post('payment')
   @AuthWithOwnership()
-  @Roles('company_owner', 'company_admin')
+  @Roles('superadmin', 'platform_admin', 'company_owner', 'company_admin')
   @ApiOperation({ summary: 'Оплата подписки', description: 'Обработка платежа. При успехе активирует подписку (ACTIVE).' })
   @ApiHeader({
     name: 'Idempotency-Key',
@@ -121,7 +121,7 @@ export class SubscriptionBillingController {
       (req.headers['x-idempotency-key'] as string) ||
       undefined;
 
-    return this.billingService.processPayment(req.user.companyId!, dto, {
+    const result = await this.billingService.processPayment(req.user.companyId!, dto, {
       userId: req.user.id,
       companyId: req.user.companyId!,
       ipAddress: (req as any).ip,
@@ -130,12 +130,13 @@ export class SubscriptionBillingController {
       correlationId: (req.headers['x-correlation-id'] as string) || undefined,
       idempotencyKey,
     });
+    return result;
   }
 
   @Delete(':id')
   @AuthWithOwnership()
-  @Roles('company_owner', 'company_admin')
-  @ApiOperation({ summary: 'Отмена подписки', description: 'Отмена в соответствии с правами потребителей. Автопродление отключено.' })
+  @Roles('superadmin', 'platform_admin', 'company_owner', 'company_admin')
+  @ApiOperation({ summary: 'Отмена подписки', description: 'Отмена в соответствии с правами потребителя. Автопродление отключено.' })
   @ApiParam({ name: 'id', description: 'ID подписки' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Подписка отменена' })
   @Throttle({ default: { limit: BILLING_CONSTANTS.RATE_LIMITS.CANCEL.limit, ttl: BILLING_CONSTANTS.RATE_LIMITS.CANCEL.ttlMs } })
@@ -157,7 +158,7 @@ export class SubscriptionBillingController {
 
   @Get('active')
   @AuthWithOwnership()
-  @Roles('company_owner', 'company_admin', 'manager', 'cashier')
+  @Roles('superadmin', 'platform_admin', 'company_owner', 'company_admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Активная подписка компании' })
   @ApiResponse({ status: HttpStatus.OK, type: BillingSubscriptionResponseDto })
   @Throttle({ default: { limit: BILLING_CONSTANTS.RATE_LIMITS.ACTIVE.limit, ttl: BILLING_CONSTANTS.RATE_LIMITS.ACTIVE.ttlMs } })
@@ -167,7 +168,7 @@ export class SubscriptionBillingController {
 
   @Get('compliance/report')
   @AuthWithOwnership()
-  @Roles('company_owner', 'company_admin')
+  @Roles('superadmin', 'platform_admin', 'company_owner', 'company_admin')
   @ApiOperation({ summary: 'Compliance-отчёт по РФ требованиям' })
   @ApiResponse({ status: HttpStatus.OK, type: ComplianceReportResponseDto })
   @Throttle({ default: { limit: BILLING_CONSTANTS.RATE_LIMITS.REPORT.limit, ttl: BILLING_CONSTANTS.RATE_LIMITS.REPORT.ttlMs } })

@@ -25,7 +25,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-  // shadcn input
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { vehiclesAPI } from '@/lib/api/vehicles';
@@ -54,10 +53,9 @@ function parseSmart(text: string) {
   const vinMatch = text.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i)?.[0];
   const plateMatch = text.match(/([A-ZА-Я0-9-]{5,12})/i)?.[0];
   const mileageMatch = text.match(/(\d{1,7})\s?(км|km)/i)?.[1];
-  const yearMatch = text.match(/\b(19[5-9]\d|20[0-4]\d|2050)\b/)?.[0]; // 1950..2050
+  const yearMatch = text.match(/\b(19[5-9]\d|20[0-4]\d|2050)\b/)?.[0];
   const volumeCcMatch = text.match(/(\d{3,5})\s?(см3|см³|cc)/i)?.[1];
   const volumeLMatch = text.match(/(\d+(?:[.,]\d)?)\s?л\b/i)?.[1];
-  // prefer liters if present, otherwise convert cc→liters (1.0 decimal)
   let engineVolumeLiters: string | undefined = undefined;
   if (volumeLMatch) {
     const n = parseFloat(volumeLMatch.replace(',', '.'));
@@ -77,62 +75,50 @@ function parseSmart(text: string) {
 }
 
 export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
-  // Catalogue data
   const [brands, setBrands] = React.useState<CatalogueBrand[]>([]);
   const [models, setModels] = React.useState<CatalogueModel[]>([]);
   const [types, setTypes] = React.useState<CatalogueType[]>([]);
 
-  // Selected IDs
   const [brandId, setBrandId] = React.useState<string>('');
   const [modelId, setModelId] = React.useState<string>('');
   const [vehicleTypeId, setVehicleTypeId] = React.useState<string>('');
 
-  // Typed names (for create on the fly)
   const [brandName, setBrandName] = React.useState<string>('');
   const [modelName, setModelName] = React.useState<string>('');
   const [typeName, setTypeName] = React.useState<string>('');
 
-  // Dropdown visibility
   const [brandOpen, setBrandOpen] = React.useState(false);
   const [modelOpen, setModelOpen] = React.useState(false);
   const [typeOpen, setTypeOpen] = React.useState(false);
 
-  // Base fields
   const [vin, setVin] = React.useState('');
   const [licensePlate, setLicensePlate] = React.useState('');
   const [mileage, setMileage] = React.useState<string>('');
 
-  // Technical fields
   const [year, setYear] = React.useState<string>('');
   const [color, setColor] = React.useState<string>('');
   const [engineType, setEngineType] = React.useState<EngineType | ''>('');
-  const [engineVolume, setEngineVolume] = React.useState<string>(''); // литры (например, 2.0)
+  const [engineVolume, setEngineVolume] = React.useState<string>('');
 
-  // Service dates (Update DTO only)
   const [lastServiceDate, setLastServiceDate] = React.useState<string>('');
   const [nextServiceDate, setNextServiceDate] = React.useState<string>('');
 
-  // Notes
   const [notes, setNotes] = React.useState<string>('');
 
-  // Customer search
   const [customerQuery, setCustomerQuery] = React.useState<string>('');
   const [customerResults, setCustomerResults] = React.useState<CustomerResponse[]>([]);
   const [customerId, setCustomerId] = React.useState<string>('');
   const [customerLabel, setCustomerLabel] = React.useState<string>('');
 
-  // UI control
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const [openCustomerCreate, setOpenCustomerCreate] = React.useState(false);
 
-  // Create flags
   const [creatingBrand, setCreatingBrand] = React.useState(false);
   const [creatingType, setCreatingType] = React.useState(false);
   const [creatingModel, setCreatingModel] = React.useState(false);
 
-  // Load initial catalogues
   React.useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -157,13 +143,10 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
     };
   }, [open]);
 
-  // Ensure IDs for brand/model/type if only names were entered
   const ensureCatalogueIds = React.useCallback(async () => {
-    // Brand
     if (!brandId && brandName.trim()) {
       setCreatingBrand(true);
       try {
-        // ensureBrand must exist in vehiclesCatalogueAPI
         const b = await vehiclesCatalogueAPI.ensureBrand(brandName.trim());
         setBrandId(b.id);
         setBrandName(b.name);
@@ -173,11 +156,9 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
       }
     }
 
-    // Type
     if (!vehicleTypeId && typeName.trim()) {
       setCreatingType(true);
       try {
-        // ensureType must exist in vehiclesCatalogueAPI
         const t = await vehiclesCatalogueAPI.ensureType(typeName.trim());
         setVehicleTypeId(t.id);
         setTypeName(t.name);
@@ -187,7 +168,6 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
       }
     }
 
-    // Model (requires brand)
     if (!modelId && modelName.trim() && (brandId || brandName.trim())) {
       if (!brandId && brandName.trim()) {
         const b = await vehiclesCatalogueAPI.ensureBrand(brandName.trim());
@@ -221,7 +201,6 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
     try {
       await ensureCatalogueIds();
 
-      // Required fields
       if (!customerId) {
         setError('Укажите владельца ТС (клиента)');
         setSubmitting(false);
@@ -243,7 +222,6 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
         return;
       }
 
-      // Validate VIN
       const vinOk = !vin || /^[A-HJ-NPR-Z0-9]{17}$/i.test(vin);
       if (vin && !vinOk) {
         setError('VIN должен содержать 17 символов (без I, O, Q)');
@@ -251,7 +229,6 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
         return;
       }
 
-      // Validate year
       const y = year ? parseInt(year, 10) : undefined;
       if (y && (y < 1950 || y > 2050)) {
         setError('Год выпуска должен быть в диапазоне 1950–2050');
@@ -259,7 +236,6 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
         return;
       }
 
-      // Validate engineVolume (liters)
       const vol =
         engineVolume && engineVolume.trim()
           ? parseFloat(engineVolume.replace(',', '.'))
@@ -271,24 +247,21 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
       }
 
       const payload: CreateVehicleRequest = {
-        // Required
         customerId,
         modelId,
         vehicleTypeId,
-        // Optional
         vin: vin ? vin.toUpperCase() : undefined,
         licensePlate: licensePlate ? licensePlate.toUpperCase() : undefined,
         mileage: mileage ? parseInt(mileage, 10) : undefined,
         year: y,
         color: color?.trim() || undefined,
         engineType: engineType || undefined,
-        engineVolume: typeof vol === 'number' ? vol : undefined, // liters
+        engineVolume: typeof vol === 'number' ? vol : undefined,
         notes: notes?.trim() || undefined,
       };
 
       const created = await vehiclesAPI.createVehicle(payload);
 
-      // Only in Update DTO
       if ((lastServiceDate && lastServiceDate.trim()) || (nextServiceDate && nextServiceDate.trim())) {
         try {
           await vehiclesAPI.updateVehicle(created.id, {
@@ -296,14 +269,13 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
             nextServiceDate: nextServiceDate || undefined,
           });
         } catch {
-          // ignore, not critical for creation UX
+          // ignore
         }
       }
 
       onCreated?.(created);
       onOpenChange(false);
 
-      // Reset form
       setBrandId('');
       setModelId('');
       setVehicleTypeId('');
@@ -370,7 +342,6 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onOpenChange, submit]);
 
-  // Customer search
   React.useEffect(() => {
     if (!open) return;
     const q = customerQuery.trim();
@@ -393,7 +364,6 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
     };
   }, [customerQuery, open]);
 
-  // Smart paste handler
   const handlePasteSmart: React.ClipboardEventHandler<HTMLDivElement> = (e) => {
     const text = e.clipboardData.getData('text');
     if (!text) return;
@@ -413,7 +383,6 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
     setOpenCustomerCreate(false);
   };
 
-  // Filter helpers
   const brandMatches = React.useMemo(() => {
     const q = brandName.trim().toLowerCase();
     if (!q) return brands.slice(0, 20);
@@ -442,7 +411,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
       setBrandName(b.name);
       if (!brands.find((x) => x.id === b.id)) setBrands((prev) => [...prev, b]);
       setBrandOpen(false);
-      setModelId(''); // reset model after brand change
+      setModelId('');
     } finally {
       setCreatingBrand(false);
     }
@@ -499,7 +468,6 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
             </div>
           </DialogHeader>
 
-          {/* Required/Optional legend */}
           <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
             <Info className="w-3.5 h-3.5" />
             <span>
@@ -508,7 +476,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Владелец (обязательно) */}
+            {/* Владелец */}
             <div className="md:col-span-2">
               <div className="text-xs text-muted-foreground mb-1">
                 Владелец (клиент) <span className="text-rose-500">*</span>
@@ -545,7 +513,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
                   />
                   <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   {customerResults.length > 0 && (
-                    <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 bg-popover shadow-lg overflow-hidden">
+                    <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 glass shadow-lg overflow-hidden">
                       {customerResults.map((c) => {
                         const label = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.companyName || c.email || c.id;
                         return (
@@ -578,7 +546,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
               )}
             </div>
 
-            {/* Бренд (обязательно, комбобокс с созданием) */}
+            {/* Бренд */}
             <div className="relative">
               <div className="text-xs text-muted-foreground mb-1">
                 Бренд <span className="text-rose-500">*</span>
@@ -614,7 +582,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
                 )}
               </div>
               {brandOpen && (brandMatches.length > 0 || brandName.trim()) && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 bg-popover shadow-lg overflow-auto max-h-56">
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 glass shadow-lg overflow-auto max-h-56">
                   {brandName.trim() && !brandMatches.some((b) => b.name.toLowerCase() === brandName.trim().toLowerCase()) && (
                     <button
                       type="button"
@@ -646,7 +614,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
               )}
             </div>
 
-            {/* Модель (обязательно, комбобокс с созданием) */}
+            {/* Модель */}
             <div className="relative">
               <div className="text-xs text-muted-foreground mb-1">
                 Модель <span className="text-rose-500">*</span>
@@ -681,7 +649,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
                 )}
               </div>
               {modelOpen && brandId && (modelMatches.length > 0 || modelName.trim()) && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 bg-popover shadow-lg overflow-auto max-h-56">
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 glass shadow-lg overflow-auto max-h-56">
                   {modelName.trim() &&
                     !modelMatches.some((m) => m.name.toLowerCase() === modelName.trim().toLowerCase()) && (
                       <button
@@ -712,7 +680,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
               )}
             </div>
 
-            {/* Тип ТС (обязательно, комбобокс с созданием) */}
+            {/* Тип ТС */}
             <div className="md:col-span-2 relative">
               <div className="text-xs text-muted-foreground mb-1">
                 Тип автомобиля <span className="text-rose-500">*</span>
@@ -746,7 +714,7 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
                 )}
               </div>
               {typeOpen && (typeMatches.length > 0 || typeName.trim()) && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 bg-popover shadow-lg overflow-auto max-h-56">
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 glass shadow-lg overflow-auto max-h-56">
                   {typeName.trim() &&
                     !typeMatches.some((t) => t.name.toLowerCase() === typeName.trim().toLowerCase()) && (
                       <button
@@ -869,7 +837,6 @@ export function VehicleCreateDialog({ open, onOpenChange, onCreated }: Props) {
                 value={engineVolume}
                 onChange={(e) => {
                   const val = e.target.value.replace(',', '.');
-                  // keep only digits and one dot
                   const normalized = val.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
                   setEngineVolume(normalized);
                 }}

@@ -20,10 +20,8 @@ export class YooKassaGateway implements PaymentGatewayInterface {
 
   async createPayment(data: PaymentData, opts?: { idempotencyKey?: string }): Promise<PaymentResult> {
     const idempotenceKey = opts?.idempotencyKey || uuidv4();
-    const returnUrl =
-      process.env.FRONTEND_URL
-        ? `${process.env.FRONTEND_URL}/billing/return`
-        : 'https://example.com/return';
+    const baseFrontend = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const returnUrl = `${baseFrontend}/dashboard/payments/result?context=subscription`;
 
     const payload = {
       amount: { value: data.amount.toFixed(2), currency: 'RUB' },
@@ -63,7 +61,6 @@ export class YooKassaGateway implements PaymentGatewayInterface {
     });
 
     const st = res.data?.status;
-    // PaymentStatus поддерживает расширенные статусы
     let status: PaymentStatus['status'] = 'pending';
     if (st === 'succeeded') status = 'succeeded';
     else if (st === 'canceled') status = 'cancelled';

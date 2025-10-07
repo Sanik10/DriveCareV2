@@ -2,9 +2,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { Calendar } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Kbd } from '@/components/ui/kbd';
 
 function toIsoFromLocal(dateTimeLocal: string | undefined): string | undefined {
   if (!dateTimeLocal) return undefined;
@@ -60,25 +62,41 @@ export function AppointmentRescheduleDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !loading && onOpenChange(v)}>
-      <DialogContent className="max-w-md">
+      <DialogContent glow className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Перенести запись</DialogTitle>
-          <DialogDescription>Выберите новое время начала и окончания</DialogDescription>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
+              <Calendar className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle>Перенести запись</DialogTitle>
+              <DialogDescription>Выберите новое время начала и окончания</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 gap-3 py-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
           <div>
-            <label className="text-sm text-muted-foreground">Начало</label>
+            <div className="text-xs text-muted-foreground mb-1">
+              Начало <span className="text-rose-500">*</span>
+            </div>
             <Input type="datetime-local" value={startLocal} onChange={(e) => setStartLocal(e.target.value)} />
           </div>
           <div>
-            <label className="text-sm text-muted-foreground">Окончание</label>
+            <div className="text-xs text-muted-foreground mb-1">
+              Окончание <span className="text-rose-500">*</span>
+            </div>
             <Input type="datetime-local" value={endLocal} onChange={(e) => setEndLocal(e.target.value)} />
           </div>
         </div>
 
-        <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>
+        <DialogFooter className="mt-4">
+          <div className="hidden sm:flex items-center text-xs text-muted-foreground mr-auto">
+            <span className="mr-2">Горячие клавиши:</span>
+            <Kbd>Esc</Kbd>
+            <span className="ml-1">— Закрыть</span>
+          </div>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Отмена
           </Button>
           <Button

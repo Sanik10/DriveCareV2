@@ -42,8 +42,8 @@ export class SubscriptionBillingService {
       subscriptionId: dto.subscriptionId,
       paymentId: result.paymentId,
       status: result.status === 'succeeded' ? 'completed' : (result.status as any),
-      amount: dto.amount,
-      currency: dto.currency,
+      amount: result.chargedAmount,
+      currency: result.currency,
       provider: result.provider,
       redirectUrl: result.redirectUrl,
     };

@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/users/services/users-mapper.service.ts
 import { Injectable } from '@nestjs/common';
 import { User } from '../../../database/entities/user.entity';
 import { UserResponseDto } from '../dto/response/user-response.dto';

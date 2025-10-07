@@ -1,4 +1,4 @@
-Привет! Помоги пожалуйста разобраться с бэйджами на карточках тарифов. Сейчас всё запутано и непонятно. При каких обстоятельствах карточка попадает на витрину топ 3, при каких обстоятельствах включается кнопка Выбрать ТОП, хотя я включил витринную подсветку. А почему витринная подсветка вообще перемещает в топ 3? Ну короче, я думаю, что ты разберёшься. Единственное что попрошу - не трогать дизайн. Только с логикой разобраться. Вот тебе маленькое введение по формату ответа и сами файлы (обязвательно запроси ещё если остались вопросы)
+Привет! Скажи пожалуйста, реально привести все-все страницы в системе к +- единому стилю? Не прям 1в1, но хотя бы единую верхнюю часть страницы сделать, вот фильтры сдеать в едном стиле? Я думаю ты понял. Но опять же, тело страницы (календари, списки и тд) пускай будут уникаьны. Их не стоит стандартизировать. А вот фильтры и расположение кнопок - можно. Давай накину все страницы и решим какой стиль использовать?
 
 mac@MacBook-2018-Pro DriveCareV2 % ls -a
 .                       .env.production         .npmrc                  ai.rewritten.patch      node_modules            turbo.json
@@ -6,15 +6,17 @@ mac@MacBook-2018-Pro DriveCareV2 % ls -a
 .DS_Store               .git                    .vscode                 apps                    package.json
 .env                    .gitignore              README.md               docker-compose.yml      packages
 .env.example            .husky                  ai.patch                docs                    scripts
+mac@MacBook-2018-Pro DriveCareV2 % cd fr
+cd: no such file or directory: fr
 mac@MacBook-2018-Pro DriveCareV2 % cd apps 
 mac@MacBook-2018-Pro apps % ls
 backend         frontend
 mac@MacBook-2018-Pro apps % cd frontend 
 mac@MacBook-2018-Pro frontend % ls -a
-.                       .gitignore              app                     features                package.json            tsconfig.json
-..                      .next                   components              lib                     postcss.config.mjs
+.                       .env.local.example      README.md               eslint.config.js        node_modules            tailwind.config.ts
+..                      .gitignore              app                     features                package.json            tsconfig.json
+.DS_Store               .next                   components              lib                     postcss.config.mjs
 .env.local              .turbo                  docs                    next-env.d.ts           public
-.env.local.example      README.md               eslint.config.js        node_modules            tailwind.config.ts
 mac@MacBook-2018-Pro frontend % ls -R app 
 (auth)          favicon.ico     fonts.ts        layout.tsx      page.tsx        providers
 dashboard       fonts           globals.css     not-found.tsx   platform        tariffs
@@ -35,13 +37,17 @@ app/(auth)/register/success:
 page.tsx                success.module.css
 
 app/dashboard:
-appointments            dashboard.module.css    orders                  parts                   payments                services
-customers               invoices                page.tsx                payment-methods         security                vehicles
+appointments            dashboard.module.css    page.tsx                payments                users
+billing                 invoices                parts                   security                vehicles
+customers               orders                  payment-methods         services
 
 app/dashboard/appointments:
 [id]            page.tsx
 
 app/dashboard/appointments/[id]:
+page.tsx
+
+app/dashboard/billing:
 page.tsx
 
 app/dashboard/customers:
@@ -104,6 +110,12 @@ page.tsx
 app/dashboard/services:
 page.tsx
 
+app/dashboard/users:
+[id]            page.tsx
+
+app/dashboard/users/[id]:
+page.tsx
+
 app/dashboard/vehicles:
 [id]            page.tsx
 
@@ -114,7 +126,22 @@ app/fonts:
 GeistMonoVF.woff        GeistVF.woff
 
 app/platform:
-tariffs
+catalogue       tariffs
+
+app/platform/catalogue:
+brands          import          models          page.tsx        types
+
+app/platform/catalogue/brands:
+page.tsx
+
+app/platform/catalogue/import:
+page.tsx
+
+app/platform/catalogue/models:
+page.tsx
+
+app/platform/catalogue/types:
+page.tsx
 
 app/platform/tariffs:
 [id]            new             page.tsx
@@ -137,10 +164,12 @@ page.tsx
 app/tariffs/compare:
 page.tsx
 mac@MacBook-2018-Pro frontend % ls -R components 
-app             customers       parts           security        tariffs         vehicles
-appointments    orders          platform        services        ui
+app             customers       parts           security        tariffs         users
+appointments    orders          platform        services        ui              vehicles
 
 components/app:
+AppLayout.tsx           PageFeatureBadge.tsx    PaginationControls.tsx  TariffBadge.tsx
+PageContentCard.tsx     PageFiltersCard.tsx     StatsCard.tsx
 
 components/appointments:
 appointment-cancel-dialog.tsx           appointment-create-dialog.tsx           appointment-reschedule-dialog.tsx       selects
@@ -150,7 +179,7 @@ components/appointments/selects:
 CustomerSelect.tsx      MechanicSelect.tsx      ServicesMultiSelect.tsx VehicleSelect.tsx
 
 components/customers:
-customer-create-dialog.tsx
+CustomerTimeline.tsx            customer-create-dialog.tsx
 
 components/orders:
 order-create-dialog.tsx         order-kanban.tsx                order-part-add-dialog.tsx       order-service-add-dialog.tsx
@@ -171,13 +200,17 @@ components/services:
 service-edit-dialog.tsx
 
 components/tariffs:
-TariffCTA.tsx           TariffCompareTable.tsx  TariffDetailView.tsx    TariffFeatures.tsx      TariffShowcase.tsx
-TariffCard.tsx          TariffCompareView.tsx   TariffFAQ.tsx           TariffHero.tsx          TariffsNav.tsx
+TariffCTA.tsx                   TariffCompareView.tsx           TariffFeatures.tsx              TariffShowcase.tsx
+TariffCard.tsx                  TariffDetailView.tsx            TariffHero.tsx                  TariffsNav.tsx
+TariffCompareTable.tsx          TariffFAQ.tsx                   TariffPurchaseDialog.tsx
 
 components/ui:
-async-combobox.tsx      button.tsx              dialog.tsx              kbd.tsx                 switch.tsx
+async-combobox.tsx      button.tsx              dialog.tsx              kbd.tsx                 switch.tsx              theme-toggle.tsx
 async-multiselect.tsx   card.tsx                dropdown-menu.tsx       skeleton.tsx            tag-input.tsx
-badge.tsx               confirm-dialog.tsx      input.tsx               status-badge.tsx        theme-toggle.tsx
+badge.tsx               confirm-dialog.tsx      input.tsx               status-badge.tsx        tariff-preview.tsx
+
+components/users:
+InvitesList.client.tsx  UsersList.client.tsx    invite-user-dialog.tsx
 
 components/vehicles:
 vehicle-create-dialog.tsx
@@ -192,1359 +225,2941 @@ pay-invoice
 features/pay-invoice:
 PayInvoiceButton.tsx    index.ts
 mac@MacBook-2018-Pro frontend % ls -R lib 
-api             api.ts          format.ts       hooks           site.ts         types           types.ts        utils.ts
+api             api.ts          format.ts       hooks           site.ts         types           types.ts        utils           utils.ts
 
 lib/api:
-appointments.ts         customers.ts            orders.ts               payments.ts             tariffs.ts              vehicles.ts
-auth.ts                 dashboard.ts            parts.ts                security.ts             users.ts
-core.ts                 invoices.ts             payment-methods.ts      services.ts             vehicles-catalogue.ts
+appointments.ts         customers.ts            orders.ts               payments.ts             subscription-billing.ts vehicles-catalogue.ts
+auth.ts                 dashboard.ts            parts.ts                security.ts             tariffs.ts              vehicles.ts
+core.ts                 invoices.ts             payment-methods.ts      services.ts             users.ts                work-schedules.ts
 
 lib/hooks:
 use-auth.ts
 
 lib/types:
-appointments.ts         invoices.ts             payment-methods.ts      services.ts             vehicles-catalogue.ts
-auth.ts                 orders.ts               payments.ts             tariffs.ts              vehicles.ts
-customers.ts            parts.ts                security.ts             users.ts
+appointments.ts         invoices.ts             payment-methods.ts      services.ts             user-invites.ts         vehicles.ts
+auth.ts                 orders.ts               payments.ts             subscriptions.ts        users.ts                work-schedules.ts
+customers.ts            parts.ts                security.ts             tariffs.ts              vehicles-catalogue.ts
+
+lib/utils:
+role-labels.ts
 mac@MacBook-2018-Pro frontend % ls -R public 
 dc-logo.svg             file-text.svg           next.svg                turborepo-light.svg     window.svg
 dc-wordmark.svg         globe.svg               turborepo-dark.svg      vercel.svg
-mac@MacBook-2018-Pro frontend %  
-
-mac@MacBook-2018-Pro DriveCareV2 % ls -a
-.                       .env.production         .npmrc                  ai.rewritten.patch      node_modules            turbo.json
-..                      .env.staging            .turbo                  ai.sanitized.patch      package-lock.json
-.DS_Store               .git                    .vscode                 apps                    package.json
-.env                    .gitignore              README.md               docker-compose.yml      packages
-.env.example            .husky                  ai.patch                docs                    scripts
-mac@MacBook-2018-Pro DriveCareV2 % cd apps 
-mac@MacBook-2018-Pro apps % ls
-backend         frontend
-                                                                                                                                                                  
-mac@MacBook-2018-Pro apps % 
-mac@MacBook-2018-Pro apps % cd backend 
-mac@MacBook-2018-Pro backend % ls -a
-.                       .DS_Store               dist                    node_modules            src                     tsconfig.build.json
-..                      .turbo                  nest-cli.json           package.json            test                    tsconfig.json
-mac@MacBook-2018-Pro backend % 
-mac@MacBook-2018-Pro backend % cd src 
-mac@MacBook-2018-Pro src % ls -R
-app.controller.ts       app.service.ts          common                  database                modules
-app.module.ts           cli                     config                  main.ts
-
-./cli:
-create-superadmin.ts
-
-./common:
-audit                   decorators              filters                 index.ts                pipes
-common.module.ts        exceptions              guards                  interceptors            redis
-
-./common/audit:
-audit.service.ts
-
-./common/decorators:
-cache-policy.decorator.ts       resource.decorator.ts
-
-./common/exceptions:
-custom-exceptions.ts    domain.exceptions.ts
-
-./common/filters:
-global-exception.filter.ts
-
-./common/guards:
-auth-with-ownership.guard.ts    company-ownership.guard.ts      roles.guard.ts
-
-./common/interceptors:
-audit-logging.interceptor.ts    security-headers.interceptor.ts
-
-./common/pipes:
-enhanced-validation.pipe.ts
-
-./common/redis:
-redis.constants.ts      redis.module.ts         redis.provider.ts
-
-./config:
-config.module.ts        config.service.ts       configuration.ts        validation.schema.ts
-
-./database:
-data-source.ts          database.config.ts      entities                migrations              seeds
-
-./database/entities:
-appointment.entity.ts                   order-service.entity.ts                 service-category.entity.ts              user-consent.entity.ts
-audit-log.entity.ts                     order.entity.ts                         service-history.entity.ts               user-session.entity.ts
-company.entity.ts                       part-category.entity.ts                 service.entity.ts                       user.entity.ts
-customer.entity.ts                      part-reservation.entity.ts              stock-movement.entity.ts                vehicle-brand.entity.ts
-index.ts                                part.entity.ts                          subscription-compliance-log.entity.ts   vehicle-model.entity.ts
-inventory-alert-settings.entity.ts      payment-method.entity.ts                subscription-consent.entity.ts          vehicle-type.entity.ts
-inventory-alert.entity.ts               payment.entity.ts                       subscription-payment-log.entity.ts      vehicle.entity.ts
-inventory.entity.ts                     permission.entity.ts                    subscription.entity.ts                  work-schedule.entity.ts
-invoice.entity.ts                       role.entity.ts                          supplier.entity.ts
-order-part.entity.ts                    schedule-exception.entity.ts            tariff.entity.ts
-
-./database/migrations:
-1757463485909-InitSchema.ts
-
-./database/seeds:
-index.ts                run-seeds.ts            seeds.module.ts         seeds.service.ts
-
-./modules:
-appointments            customers               orders                  service-history         tariffs                 vehicles-catalogue
-auth                    inventory               payment-methods         services                users                   work-schedules
-companies               invoices                payments                subscriptions           vehicles
-
-./modules/appointments:
-appointments.controller.ts      appointments.service.ts         dto                             services
-appointments.module.ts          constants                       interfaces                      types
-
-./modules/appointments/constants:
-appointments.constants.ts
-
-./modules/appointments/dto:
-request         response
-
-./modules/appointments/dto/request:
-create-appointment.dto.ts       smart-schedule.dto.ts           update-appointment.dto.ts
-
-./modules/appointments/dto/response:
-appointment-response.dto.ts             paginated-appointments-response.dto.ts  smart-schedule-response.dto.ts
-
-./modules/appointments/interfaces:
-appointments.interface.ts
-
-./modules/appointments/services:
-appointments-business.service.ts        appointments-data.service.ts            appointments-mapper.service.ts          appointments-validation.service.ts
-
-./modules/appointments/types:
-appointments.types.ts
-
-./modules/auth:
-auth.controller.ts      constants               dto                     redis.provider.ts       types
-auth.module.ts          constants.ts            guards                  services
-auth.service.ts         decorators              interfaces              strategies
-
-./modules/auth/constants:
-auth.constants.ts       redis.constants.ts
-
-./modules/auth/decorators:
-roles.decorator.ts
-
-./modules/auth/dto:
-request         response
-
-./modules/auth/dto/request:
-login.dto.ts            logout-device.dto.ts    refresh-token.dto.ts    register-company.dto.ts register-invite.dto.ts
-
-./modules/auth/dto/response:
-login-response.dto.ts                   logout-response.dto.ts                  refresh-token-response.dto.ts           register-company-response.dto.ts
-
-./modules/auth/guards:
-jwt-auth.guard.ts       local-auth.guard.ts     roles.guard.ts
-
-./modules/auth/interfaces:
-device.interface.ts             request-with-user.interface.ts  session.interface.ts            token-payload.interface.ts
-
-./modules/auth/services:
-company-onboarding.service.ts   security.service.ts             token.service.ts
-device.service.ts               session.service.ts              twofa.service.ts
-
-./modules/auth/strategies:
-jwt.strategy.ts         local.strategy.ts
-
-./modules/auth/types:
-auth.types.ts
-
-./modules/companies:
-companies.controller.ts companies.service.ts    dto                     services
-companies.module.ts     constants               interfaces              types
-
-./modules/companies/constants:
-companies.constants.ts
-
-./modules/companies/dto:
-request         response
-
-./modules/companies/dto/request:
-create-company.dto.ts   update-company.dto.ts
-
-./modules/companies/dto/response:
-company-response.dto.ts                 paginated-companies-response.dto.ts
-
-./modules/companies/interfaces:
-companies.interface.ts
-
-./modules/companies/services:
-companies-business.service.ts   companies-data.service.ts       companies-mapper.service.ts     companies-validation.service.ts
-
-./modules/companies/types:
-companies.types.ts
-
-./modules/customers:
-constants               customers.module.ts     dto                     services
-customers.controller.ts customers.service.ts    interfaces              types
-
-./modules/customers/constants:
-customers.constants.ts
-
-./modules/customers/dto:
-request         response
-
-./modules/customers/dto/request:
-create-customer.dto.ts  revoke-consent.dto.ts   update-customer.dto.ts
-
-./modules/customers/dto/response:
-customer-response.dto.ts                paginated-customers-response.dto.ts
-
-./modules/customers/interfaces:
-customers.interface.ts
-
-./modules/customers/services:
-customer-anonymization.service.ts       customer-retention.scheduler.ts         customers-data.service.ts               customers-validation.service.ts
-customer-export.service.ts              customers-business.service.ts           customers-mapper.service.ts
-
-./modules/customers/types:
-customers.types.ts
-
-./modules/inventory:
-constants               interfaces              inventory.controller.ts inventory.service.ts    services                suppliers
-dto                     inventory-alerts        inventory.module.ts     parts                   stock-movements         types
-
-./modules/inventory/constants:
-inventory.constants.ts
-
-./modules/inventory/dto:
-request         response
-
-./modules/inventory/dto/request:
-update-inventory.dto.ts
-
-./modules/inventory/dto/response:
-inventory-response.dto.ts               low-stock-alerts-response.dto.ts        paginated-inventory-response.dto.ts     stock-summary-response.dto.ts
-
-./modules/inventory/interfaces:
-
-./modules/inventory/inventory-alerts:
-alerts.scheduler.ts             inventory-alerts.controller.ts  inventory-alerts.service.ts     types
-dto                             inventory-alerts.module.ts      services
-
-./modules/inventory/inventory-alerts/dto:
-request         response
-
-./modules/inventory/inventory-alerts/dto/request:
-alert-settings.dto.ts           test-notification.dto.ts
-
-./modules/inventory/inventory-alerts/dto/response:
-alert-response.dto.ts                   alert-settings-response.dto.ts          paginated-alerts-response.dto.ts        test-notification-response.dto.ts
-
-./modules/inventory/inventory-alerts/services:
-alerts-business.service.ts      alerts-data.service.ts          alerts-mapper.service.ts        alerts-notification.service.ts  alerts-validation.service.ts
-
-./modules/inventory/inventory-alerts/types:
-alerts.types.ts
-
-./modules/inventory/parts:
-constants               parts.controller.ts     parts.service.ts        types
-dto                     parts.module.ts         services
-
-./modules/inventory/parts/constants:
-parts.constants.ts
-
-./modules/inventory/parts/dto:
-request         response
-
-./modules/inventory/parts/dto/request:
-bulk-update-parts.dto.ts        create-part.dto.ts              update-part.dto.ts
-
-./modules/inventory/parts/dto/response:
-paginated-parts-response.dto.ts part-response.dto.ts
-
-./modules/inventory/parts/services:
-parts-business.service.ts       parts-data.service.ts           parts-mapper.service.ts         parts-validation.service.ts
-
-./modules/inventory/parts/types:
-parts.types.ts
-
-./modules/inventory/services:
-inventory-business.service.ts   inventory-data.service.ts       inventory-mapper.service.ts     inventory-validation.service.ts reservations.scheduler.ts
-
-./modules/inventory/stock-movements:
-dto                             stock-movements.controller.ts   stock-movements.service.ts
-services                        stock-movements.module.ts       types
-
-./modules/inventory/stock-movements/dto:
-request         response
-
-./modules/inventory/stock-movements/dto/request:
-barcode-movement.dto.ts bulk-movements.dto.ts   create-movement.dto.ts  update-movement.dto.ts
-
-./modules/inventory/stock-movements/dto/response:
-movement-response.dto.ts                movement-summary-response.dto.ts        paginated-movements-response.dto.ts
-
-./modules/inventory/stock-movements/services:
-stock-movements-business.service.ts     stock-movements-data.service.ts         stock-movements-mapper.service.ts       stock-movements-validation.service.ts
-
-./modules/inventory/stock-movements/types:
-stock-movements.types.ts
-
-./modules/inventory/suppliers:
-dto                     services                suppliers.controller.ts suppliers.module.ts     suppliers.service.ts    types
-
-./modules/inventory/suppliers/dto:
-request         response
-
-./modules/inventory/suppliers/dto/request:
-bulk-suppliers.dto.ts   create-supplier.dto.ts  rate-supplier.dto.ts    update-supplier.dto.ts
-
-./modules/inventory/suppliers/dto/response:
-paginated-suppliers-response.dto.ts     supplier-analytics-response.dto.ts      supplier-rating-response.dto.ts         supplier-response.dto.ts
-
-./modules/inventory/suppliers/services:
-suppliers-business.service.ts   suppliers-data.service.ts       suppliers-mapper.service.ts     suppliers-validation.service.ts
-
-./modules/inventory/suppliers/types:
-suppliers.types.ts
-
-./modules/inventory/types:
-inventory.types.ts
-
-./modules/invoices:
-constants               invoices.controller.ts  invoices.service.ts     types
-dto                     invoices.module.ts      services
-
-./modules/invoices/constants:
-invoices.constants.ts
-
-./modules/invoices/dto:
-request         response
-
-./modules/invoices/dto/request:
-create-invoice.dto.ts   update-invoice.dto.ts
-
-./modules/invoices/dto/response:
-invoice-response.dto.ts                 paginated-invoices-response.dto.ts
-
-./modules/invoices/services:
-invoices-business.service.ts    invoices-data.service.ts        invoices-mapper.service.ts      invoices-validation.service.ts
-
-./modules/invoices/types:
-invoices.types.ts
-
-./modules/orders:
-constants               interfaces              order-services          orders.module.ts        services
-dto                     order-parts             orders.controller.ts    orders.service.ts       types
-
-./modules/orders/constants:
-orders.constants.ts
-
-./modules/orders/dto:
-request         response
-
-./modules/orders/dto/request:
-create-order.dto.ts     update-order.dto.ts
-
-./modules/orders/dto/response:
-order-part-response.dto.ts              order-response.dto.ts                   order-service-response.dto.ts           paginated-orders-response.dto.ts
-
-./modules/orders/interfaces:
-orders.interface.ts
-
-./modules/orders/order-parts:
-dto                             order-parts.module.ts           services
-order-parts.controller.ts       order-parts.service.ts          types
-
-./modules/orders/order-parts/dto:
-request         response
-
-./modules/orders/order-parts/dto/request:
-add-part-to-order.dto.ts        bulk-add-parts.dto.ts           update-order-part.dto.ts
-
-./modules/orders/order-parts/dto/response:
-order-part-response.dto.ts              order-parts-list-response.dto.ts
-
-./modules/orders/order-parts/services:
-order-parts-business.service.ts         order-parts-data.service.ts             order-parts-mapper.service.ts           order-parts-validation.service.ts
-
-./modules/orders/order-parts/types:
-order-parts.types.ts
-
-./modules/orders/order-services:
-dto                             order-services.module.ts        services
-order-services.controller.ts    order-services.service.ts       types
-
-./modules/orders/order-services/dto:
-request         response
-
-./modules/orders/order-services/dto/request:
-add-service-to-order.dto.ts     bulk-add-services.dto.ts        update-order-service.dto.ts
-
-./modules/orders/order-services/dto/response:
-order-service-response.dto.ts           order-services-list-response.dto.ts
-
-./modules/orders/order-services/services:
-order-services-business.service.ts      order-services-data.service.ts          order-services-mapper.service.ts        order-services-validation.service.ts
-
-./modules/orders/order-services/types:
-order-services.types.ts
-
-./modules/orders/services:
-orders-business.service.ts      orders-data.service.ts          orders-mapper.service.ts        orders-validation.service.ts    pricing-engine.ts
-
-./modules/orders/types:
-orders.types.ts
-
-./modules/payment-methods:
-constants                       interfaces                      payment-methods.module.ts       services
-dto                             payment-methods.controller.ts   payment-methods.service.ts      types
-
-./modules/payment-methods/constants:
-payment-methods.constants.ts
-
-./modules/payment-methods/dto:
-request         response
-
-./modules/payment-methods/dto/request:
-create-payment-method.dto.ts    update-payment-method.dto.ts
-
-./modules/payment-methods/dto/response:
-paginated-payment-methods-response.dto.ts       payment-method-response.dto.ts
-
-./modules/payment-methods/interfaces:
-payment-methods.interface.ts
-
-./modules/payment-methods/services:
-payment-methods-business.service.ts     payment-methods-data.service.ts         payment-methods-mapper.service.ts       payment-methods-validation.service.ts
-
-./modules/payment-methods/types:
-payment-methods.types.ts
-
-./modules/payments:
-constants               guards                  payments.controller.ts  payments.service.ts     types
-dto                     interfaces              payments.module.ts      services                webhooks
-
-./modules/payments/constants:
-payments.constants.ts
-
-./modules/payments/dto:
-request         response
-
-./modules/payments/dto/request:
-online-init.dto.ts      record-payment.dto.ts   refund-payment.dto.ts   update-payment.dto.ts
-
-./modules/payments/dto/response:
-company-balance.dto.ts                  paginated-payments-response.dto.ts      payment-statistics.dto.ts
-online-init-response.dto.ts             payment-response.dto.ts
-
-./modules/payments/guards:
-webhook-ip-acl.guard.ts
-
-./modules/payments/interfaces:
-payments.interface.ts
-
-./modules/payments/services:
-payments-business.service.ts    payments-mapper.service.ts      webhook-idempotency.service.ts
-payments-data.service.ts        payments-validation.service.ts  yookassa-payments.client.ts
-
-./modules/payments/types:
-payments.types.ts
-
-./modules/payments/webhooks:
-payments-webhooks.controller.ts
-
-./modules/service-history:
-constants                       interfaces                      service-history.module.ts       services
-dto                             service-history.controller.ts   service-history.service.ts      types
-
-./modules/service-history/constants:
-service-history.constants.ts
-
-./modules/service-history/dto:
-request         response
-
-./modules/service-history/dto/request:
-create-service-history.dto.ts   update-service-history.dto.ts
-
-./modules/service-history/dto/response:
-paginated-service-history-response.dto.ts       service-history-response.dto.ts
-
-./modules/service-history/interfaces:
-service-history.interface.ts
-
-./modules/service-history/services:
-service-history-business.service.ts     service-history-data.service.ts         service-history-mapper.service.ts       service-history-validation.service.ts
-
-./modules/service-history/types:
-service-history.types.ts
-
-./modules/services:
-categories              dto                     services                services.module.ts      types
-constants               interfaces              services.controller.ts  services.service.ts
-
-./modules/services/categories:
-categories.controller.ts        constants                       interfaces                      types
-categories.service.ts           dto                             services
-
-./modules/services/categories/constants:
-categories.constants.ts
-
-./modules/services/categories/dto:
-request         response
-
-./modules/services/categories/dto/request:
-create-category.dto.ts  update-category.dto.ts
-
-./modules/services/categories/dto/response:
-category-response.dto.ts                paginated-categories-response.dto.ts
-
-./modules/services/categories/interfaces:
-categories.interface.ts
-
-./modules/services/categories/services:
-categories-business.service.ts          categories-data.service.ts              categories-mapper.service.ts            categories-validation.service.ts
-
-./modules/services/categories/types:
-categories.types.ts
-
-./modules/services/constants:
-services.constants.ts
-
-./modules/services/dto:
-request         response
-
-./modules/services/dto/request:
-bulk-update-services.dto.ts     create-service.dto.ts           update-service.dto.ts
-
-./modules/services/dto/response:
-paginated-services-response.dto.ts      service-response.dto.ts
-
-./modules/services/interfaces:
-services.interface.ts
-
-./modules/services/services:
-services-business.service.ts    services-data.service.ts        services-mapper.service.ts      services-validation.service.ts
-
-./modules/services/types:
-services.types.ts
-
-./modules/subscriptions:
-constants                       interfaces                      subscription-billing            subscriptions.module.ts         types
-dto                             services                        subscriptions.controller.ts     subscriptions.service.ts
-
-./modules/subscriptions/constants:
-subscriptions.constants.ts
-
-./modules/subscriptions/dto:
-request         response
-
-./modules/subscriptions/dto/request:
-create-subscription.dto.ts      update-subscription.dto.ts
-
-./modules/subscriptions/dto/response:
-paginated-subscriptions-response.dto.ts subscription-response.dto.ts
-
-./modules/subscriptions/interfaces:
-subscriptions.interface.ts
-
-./modules/subscriptions/services:
-subscription-limits.service.ts          subscriptions-data.service.ts           subscriptions-validation.service.ts
-subscriptions-business.service.ts       subscriptions-mapper.service.ts
-
-./modules/subscriptions/subscription-billing:
-constants                               interfaces                              subscription-billing.module.ts
-dto                                     services                                subscription-billing.service.ts
-guards                                  subscription-billing.controller.ts      types
-
-./modules/subscriptions/subscription-billing/constants:
-billing.constants.ts
-
-./modules/subscriptions/subscription-billing/dto:
-request         response
-
-./modules/subscriptions/subscription-billing/dto/request:
-cancel-subscription.dto.ts              create-billing-subscription.dto.ts      process-payment.dto.ts
-
-./modules/subscriptions/subscription-billing/dto/response:
-billing-subscription-response.dto.ts    compliance-report-response.dto.ts       consumer-rights-response.dto.ts         payment-status-response.dto.ts
-
-./modules/subscriptions/subscription-billing/guards:
-webhook-signature.guard.ts
-
-./modules/subscriptions/subscription-billing/interfaces:
-billing.interface.ts            compliance.interface.ts         notification.interface.ts       payment-gateway.interface.ts
-
-./modules/subscriptions/subscription-billing/services:
-billing-business.service.ts     billing-compliance.service.ts   billing-notification.service.ts billing-payment.service.ts      gateways
-
-./modules/subscriptions/subscription-billing/services/gateways:
-tinkoff.gateway.ts      yookassa.gateway.ts
-
-./modules/subscriptions/subscription-billing/types:
-billing.types.ts
-
-./modules/subscriptions/types:
-subscriptions.types.ts
-
-./modules/tariffs:
-constants               interfaces              tariffs.controller.ts   tariffs.service.ts
-dto                     services                tariffs.module.ts       types
-
-./modules/tariffs/constants:
-tariffs.constants.ts
-
-./modules/tariffs/dto:
-request         response
-
-./modules/tariffs/dto/request:
-create-tariff.dto.ts    update-tariff.dto.ts
-
-./modules/tariffs/dto/response:
-tariff-response.dto.ts
-
-./modules/tariffs/interfaces:
-tariffs.interface.ts
-
-./modules/tariffs/services:
-tariffs-business.service.ts     tariffs-data.service.ts         tariffs-mapper.service.ts       tariffs-validation.service.ts
-
-./modules/tariffs/types:
-tariffs.types.ts
-
-./modules/users:
-constants               interfaces              types                   users.module.ts
-dto                     services                users.controller.ts     users.service.ts
-
-./modules/users/constants:
-users.constants.ts
-
-./modules/users/dto:
-request         response
-
-./modules/users/dto/request:
-change-password.dto.ts          create-user.dto.ts              update-user-profile.dto.ts      update-user-role.dto.ts         update-user-status.dto.ts
-
-./modules/users/dto/response:
-paginated-users-response.dto.ts profile-response.dto.ts         role.dto.ts                     user-response.dto.ts
-
-./modules/users/interfaces:
-users.interface.ts
-
-./modules/users/services:
-users-business.service.ts       users-consents.service.ts       users-data.service.ts           users-mapper.service.ts         users-validation.service.ts
-
-./modules/users/types:
-users.types.ts
-
-./modules/vehicles:
-constants               interfaces              types                   vehicles.module.ts
-dto                     services                vehicles.controller.ts  vehicles.service.ts
-
-./modules/vehicles/constants:
-vehicles.constants.ts
-
-./modules/vehicles/dto:
-request         response
-
-./modules/vehicles/dto/request:
-create-vehicle.dto.ts   update-vehicle.dto.ts
-
-./modules/vehicles/dto/response:
-paginated-vehicles-response.dto.ts      vehicle-response.dto.ts
-
-./modules/vehicles/interfaces:
-vehicles.interface.ts
-
-./modules/vehicles/services:
-vehicles-business.service.ts    vehicles-data.service.ts        vehicles-mapper.service.ts      vehicles-validation.service.ts
-
-./modules/vehicles/types:
-vehicles.types.ts
-
-./modules/vehicles-catalogue:
-constants                               interfaces                              types                                   vehicles-catalogue.module.ts
-dto                                     services                                vehicles-catalogue.controller.ts        vehicles-catalogue.service.ts
-
-./modules/vehicles-catalogue/constants:
-catalogue.constants.ts
-
-./modules/vehicles-catalogue/dto:
-brands  models  types
-
-./modules/vehicles-catalogue/dto/brands:
-brand-response.dto.ts   create-brand.dto.ts     update-brand.dto.ts
-
-./modules/vehicles-catalogue/dto/models:
-create-model.dto.ts     model-response.dto.ts   update-model.dto.ts
-
-./modules/vehicles-catalogue/dto/types:
-create-type.dto.ts      type-response.dto.ts    update-type.dto.ts
-
-./modules/vehicles-catalogue/interfaces:
-catalogue.interface.ts
-
-./modules/vehicles-catalogue/services:
-brands-data.service.ts          catalogue-mapper.service.ts     models-data.service.ts
-catalogue-business.service.ts   catalogue-validation.service.ts types-data.service.ts
-
-./modules/vehicles-catalogue/types:
-catalogue.types.ts
-
-./modules/work-schedules:
-constants                       interfaces                      types                           work-schedules.module.ts
-dto                             services                        work-schedules.controller.ts    work-schedules.service.ts
-
-./modules/work-schedules/constants:
-work-schedules.constants.ts
-
-./modules/work-schedules/dto:
-request         response
-
-./modules/work-schedules/dto/request:
-create-exception.dto.ts         create-schedule.dto.ts          optimize-request.dto.ts         update-exception-status.dto.ts  update-schedule.dto.ts
-
-./modules/work-schedules/dto/response:
-capacity-response.dto.ts                optimization-response.dto.ts            schedule-response.dto.ts
-exception-response.dto.ts               paginated-schedules-response.dto.ts
-
-./modules/work-schedules/interfaces:
-work-schedules.interface.ts
-
-./modules/work-schedules/services:
-work-schedules-business.service.ts      work-schedules-mapper.service.ts        work-schedules-validation.service.ts
-work-schedules-data.service.ts          work-schedules-retention.scheduler.ts
-
-./modules/work-schedules/types:
-work-schedules.types.ts
-mac@MacBook-2018-Pro src % 
-
-
-2) Edits (path‑blocks)
-Миграции можно не делать! Ты можешь просто заменить код в сущности! Я могу спокойно удалить БД и создать заново!
-- Если нет точного содержимого файлов → сначала верни блок “NEED FILES”.
-- Если точные версии есть → присылай только path‑blocks (один блок = один файл, всегда полный валидный контент).
-
-Шаблон запроса точных версий файлов (если они нужны)
-```
-NEED FILES (нужны точные текущие версии файлов для корректных правок):
-- apps/backend/src/.../file-a.ts
-- apps/backend/src/.../file-b.ts
-Причина: правки в формате path‑blocks требуют полного, актуального содержимого, иначе велика вероятность ошибок.
-```
-
-Формат path‑blocks (обязателен)
-
-- Один файл — один блок. Полный валидный контент файла.
-- В каждом блоке обязательно:
-  1) HTML‑комментарий с путём (для скрипта)
-  2) Тот же путь первой строкой комментария внутри файла (если язык поддерживает комментарии)
-- Пути от корня репозитория:
-  - apps/backend/src/...
-  - apps/frontend/src/...
-  - .env.example, turbo.json и т.д.
-- Действия: replace|delete|append|move (replace по умолчанию). Для move обязательно from.
-
-Синтаксис блока
-<!-- path: относительный/путь/к/файлу[, action: delete|replace|append|move, from: старый/путь] -->
-```lang
-// path: относительный/путь/к/файлу
-<полное содержимое файла>
-```
-
-- lang: ts, js, tsx, json, yaml, md, sh и т.д.
-- Если формат без комментариев (JSON/YAML/ENV) — внутренний комментарий не вставлять.
-
-Примеры
-
-1) Замена/создание файла
-<!-- path: apps/backend/src/modules/users/users.service.ts -->
-```ts
-// path: apps/backend/src/modules/users/users.service.ts
-import { Injectable } from '@nestjs/common';
-import { UsersRepository } from './services/users-data.service';
-
-@Injectable()
-export class UsersService {
-  constructor(private readonly repo: UsersRepository) {}
-  // ...
+mac@MacBook-2018-Pro frontend % 
+
+// path: apps/frontend/app/dashboard/appointments/page.tsx
+'use client';
+
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { AppLayout } from '@/components/app/AppLayout';
+import { useAuth } from '@/lib/hooks/use-auth';
+import { appointmentsAPI } from '@/lib/api/appointments';
+import { workSchedulesAPI } from '@/lib/api/work-schedules';
+import { cn } from '@/lib/utils';
+import type {
+  Appointment,
+  AppointmentStatus,
+  AppointmentsQuery,
+} from '@/lib/types/appointments';
+import type { WorkSchedule } from '@/lib/types/work-schedules';
+import { APPOINTMENT_STATUS_LABELS } from '@/lib/types/appointments';
+import { 
+  CalendarDays, 
+  Plus, 
+  RefreshCw, 
+  ChevronLeft, 
+  ChevronRight, 
+  Clock,
+  Zap,
+  CheckCircle,
+  Search,
+  Filter,
+  Sparkles,
+  AlertTriangle,
+} from 'lucide-react';
+import { AppointmentCreateDialog } from '@/components/appointments/appointment-create-dialog';
+import { MechanicSelect, type MechanicOption } from '@/components/appointments/selects/MechanicSelect';
+
+type CalendarView = 'day' | 'week' | 'month';
+
+const VIEW_LABELS: Record<CalendarView, string> = {
+  day: 'День',
+  week: 'Неделя', 
+  month: 'Месяц'
+};
+
+// Local date to YYYY-MM-DD (без UTC-сдвига)
+function toYMD(d: Date) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
-```
 
-2) Удаление файла
-<!-- path: apps/backend/src/modules/old/obsolete.service.ts, action: delete -->
-```ts
-// path: apps/backend/src/modules/old/obsolete.service.ts
-```
+// Парсинг часов: старт округляем вниз (floor), конец — вверх (ceil) до часа
+function parseStartHour(hhmm?: string): number | null {
+  if (!hhmm || typeof hhmm !== 'string') return null;
+  const [h, m] = hhmm.split(':').map((x) => parseInt(x || '0', 10));
+  if (Number.isNaN(h) || h < 0 || h > 23) return null;
+  if (Number.isNaN(m) || m < 0 || m > 59) return Math.max(0, Math.min(23, h));
+  return Math.max(0, Math.min(23, h)); // floor
+}
+function parseEndHour(hhmm?: string): number | null {
+  if (!hhmm || typeof hhmm !== 'string') return null;
+  const [h, m] = hhmm.split(':').map((x) => parseInt(x || '0', 10));
+  if (Number.isNaN(h) || h < 0 || h > 23) return null;
+  if (Number.isNaN(m) || m < 0 || m > 59) return Math.max(0, Math.min(23, h));
+  return Math.max(0, Math.min(23, m === 0 ? h : h + 1)); // ceil
+}
 
-3) Добавление строк в конец
-<!-- path: .env.example, action: append -->
-```dotenv
-# path: .env.example
-NEW_FEATURE_FLAG=true
-```
-
-4) Перемещение
-<!-- path: apps/backend/src/modules/foo/bar.service.ts, action: move, from: apps/backend/src/modules/old/bar.service.ts -->
-```ts
-// path: apps/backend/src/modules/foo/bar.service.ts
-// обновлённый контент (если нужен)
-```
-
-Правила отправки ответа
-- Только path‑blocks. Никаких diff/patch.
-- В каждый изменённый файл — полный валидный контент (не фрагменты).
-- Без дублей одного и того же файла; присылай финальную версию один раз.
-- UTF‑8 без BOM, переводы строк LF, без невидимых символов; пустая строка в конце файла.
-- JSON/YAML/ENV — строго валидный синтаксис.
-
-Подсказка по комментариям внутри файла
-- TS/JS/TSX/JSX/Go/C#: // path: apps/backend/src/...
-- CSS/SCSS/Less: /* path: apps/backend/src/... */
-- HTML/XML/SVG/MD: <!-- path: apps/backend/src/... -->
-- Shell/YAML/ENV/INI/TOML/Python/Ruby/SQL: # или -- в SQL
-- Для форматов без комментариев (JSON/YAML/ENV) — внутренний комментарий не использовать.
-P.S. писать любые сообщения и комменатрии между блоками, а может и вопросы задавать после блоков кода - можно и даже нужно! Скрипт сам выберет код из сообщения
-
-как ясна задача? Сейчас я тебе скину конкретные файлы с фронтенда
-
-[
-  {
-    "id": "f30c0aaf-abe9-4642-9e73-417728b9a557",
-    "name": "Старт",
-    "description": "Для небольших автосервисов, чтобы быстро начать",
-    "priceMonthly": 990,
-    "priceYearly": 9990,
-    "yearlyDiscount": 15.91,
-    "maxUsers": 3,
-    "maxCustomers": 200,
-    "maxVehicles": 400,
-    "maxOrders": 1000,
-    "features": {
-      "badge": "new",
-      "reports": true,
-      "analytics": false,
-      "highlight": true,
-      "api_access": false,
-      "recommended": false,
-      "white_label": false,
-      "integrations": false,
-      "custom_fields": true,
-      "shelf_position": 10,
-      "advanced_reports": false,
-      "priority_support": false
-    },
-    "isActive": true,
-    "createdAt": "2025-09-15T20:04:41.209Z",
-    "updatedAt": "2025-09-16T18:57:58.984Z",
-    "isRecommended": false
-  },
-  {
-    "id": "99df0889-20a7-49e8-af12-d05de48f651e",
-    "name": "Стандарт",
-    "description": "Оптимальный план",
-    "priceMonthly": 1990,
-    "priceYearly": 19990,
-    "yearlyDiscount": 16.29,
-    "maxUsers": 10,
-    "maxCustomers": 1000,
-    "maxVehicles": 2000,
-    "maxOrders": 5000,
-    "features": {
-      "tags": [
-        "дешёвый",
-        "быстрый старт"
-      ],
-      "badge": "best_value",
-      "reports": true,
-      "analytics": true,
-      "highlight": true,
-      "api_access": false,
-      "recommended": false,
-      "white_label": false,
-      "integrations": true,
-      "custom_fields": true,
-      "shelf_position": 50,
-      "advanced_reports": false,
-      "priority_support": true
-    },
-    "isActive": true,
-    "createdAt": "2025-09-15T20:26:35.913Z",
-    "updatedAt": "2025-09-16T18:47:32.297Z",
-    "isRecommended": false
-  },
-  {
-    "id": "b7e3e3e9-70f3-4e6a-aa86-5e109f3f76ad",
-    "name": "Тест 3",
-    "description": "Тест 3",
-    "priceMonthly": 2999,
-    "priceYearly": 35600,
-    "yearlyDiscount": 1.08,
-    "maxUsers": null,
-    "maxCustomers": null,
-    "maxVehicles": null,
-    "maxOrders": null,
-    "features": {
-      "reports": true,
-      "analytics": true,
-      "highlight": false,
-      "api_access": true,
-      "recommended": false,
-      "white_label": true,
-      "integrations": true,
-      "custom_fields": true,
-      "advanced_reports": true,
-      "priority_support": true
-    },
-    "isActive": true,
-    "createdAt": "2025-09-16T18:08:46.128Z",
-    "updatedAt": "2025-09-16T18:25:08.576Z",
-    "isRecommended": false
-  },
-  {
-    "id": "0702f13f-f79e-495c-aca0-5c12c2547633",
-    "name": "Тест 6",
-    "description": "Тест 6",
-    "priceMonthly": 2999,
-    "priceYearly": 35000,
-    "yearlyDiscount": 2.75,
-    "maxUsers": null,
-    "maxCustomers": null,
-    "maxVehicles": null,
-    "maxOrders": null,
-    "features": {
-      "reports": true,
-      "analytics": false,
-      "highlight": false,
-      "api_access": false,
-      "recommended": false,
-      "white_label": false,
-      "integrations": false,
-      "custom_fields": false,
-      "advanced_reports": false,
-      "priority_support": false
-    },
-    "isActive": true,
-    "createdAt": "2025-09-16T18:10:55.519Z",
-    "updatedAt": "2025-09-16T18:25:48.963Z",
-    "isRecommended": false
-  },
-  {
-    "id": "78691ff9-f096-4f78-b105-aaa0871697c7",
-    "name": "Тест 2",
-    "description": "Тест 2",
-    "priceMonthly": 3999,
-    "priceYearly": 47296,
-    "yearlyDiscount": 1.44,
-    "maxUsers": null,
-    "maxCustomers": null,
-    "maxVehicles": null,
-    "maxOrders": null,
-    "features": {
-      "badge": "sale",
-      "reports": true,
-      "analytics": false,
-      "highlight": false,
-      "api_access": false,
-      "recommended": false,
-      "white_label": false,
-      "integrations": false,
-      "custom_fields": false,
-      "advanced_reports": false,
-      "priority_support": false
-    },
-    "isActive": true,
-    "createdAt": "2025-09-16T18:07:32.684Z",
-    "updatedAt": "2025-09-16T18:12:03.994Z",
-    "isRecommended": false
-  },
-  {
-    "id": "886754cd-5383-4ffd-926e-5e2f50d10bf3",
-    "name": "Премиум",
-    "description": "Максимум возможностей",
-    "priceMonthly": 4990,
-    "priceYearly": 49900,
-    "yearlyDiscount": 16.67,
-    "maxUsers": null,
-    "maxCustomers": null,
-    "maxVehicles": null,
-    "maxOrders": null,
-    "features": {
-      "badge": "recommended",
-      "reports": true,
-      "analytics": true,
-      "highlight": true,
-      "api_access": true,
-      "recommended": false,
-      "white_label": true,
-      "integrations": true,
-      "custom_fields": true,
-      "shelf_position": 100,
-      "advanced_reports": false,
-      "priority_support": true
-    },
-    "isActive": true,
-    "createdAt": "2025-09-15T20:29:46.151Z",
-    "updatedAt": "2025-09-16T18:58:30.493Z",
-    "isRecommended": false
-  },
-  {
-    "id": "9c66fca2-eeec-4276-a98d-7b1d3b62246f",
-    "name": "Тест",
-    "description": "Тест",
-    "priceMonthly": 4999,
-    "priceYearly": 58997,
-    "yearlyDiscount": 1.65,
-    "maxUsers": null,
-    "maxCustomers": null,
-    "maxVehicles": null,
-    "maxOrders": null,
-    "features": {
-      "reports": true,
-      "analytics": false,
-      "highlight": false,
-      "api_access": false,
-      "recommended": false,
-      "white_label": false,
-      "integrations": false,
-      "custom_fields": true,
-      "advanced_reports": false,
-      "priority_support": false
-    },
-    "isActive": true,
-    "createdAt": "2025-09-16T18:06:56.976Z",
-    "updatedAt": "2025-09-16T18:26:51.833Z",
-    "isRecommended": false
-  },
-  {
-    "id": "642bd555-4734-407c-8d30-d16bbe3bd929",
-    "name": "Тест 5",
-    "description": "Тест 5",
-    "priceMonthly": 5999,
-    "priceYearly": 59995,
-    "yearlyDiscount": 16.66,
-    "maxUsers": null,
-    "maxCustomers": null,
-    "maxVehicles": null,
-    "maxOrders": null,
-    "features": {
-      "tags": [
-        "Тег",
-        "тег",
-        "тег тег"
-      ],
-      "reports": true,
-      "analytics": true,
-      "highlight": false,
-      "api_access": true,
-      "recommended": false,
-      "white_label": true,
-      "integrations": true,
-      "custom_fields": true,
-      "advanced_reports": true,
-      "priority_support": true
-    },
-    "isActive": true,
-    "createdAt": "2025-09-16T18:09:56.679Z",
-    "updatedAt": "2025-09-16T18:27:17.866Z",
-    "isRecommended": false
-  },
-  {
-    "id": "f742cbac-cfd7-4479-9365-6a86e4b1da85",
-    "name": "Enterprise",
-    "description": "Для больших автосервисов",
-    "priceMonthly": 49990,
-    "priceYearly": 489990,
-    "yearlyDiscount": 18.32,
-    "maxUsers": null,
-    "maxCustomers": null,
-    "maxVehicles": null,
-    "maxOrders": null,
-    "features": {
-      "reports": true,
-      "analytics": true,
-      "highlight": false,
-      "api_access": true,
-      "recommended": false,
-      "white_label": true,
-      "integrations": true,
-      "custom_fields": true,
-      "shelf_position": 101,
-      "advanced_reports": true,
-      "priority_support": true
-    },
-    "isActive": true,
-    "createdAt": "2025-09-16T17:34:20.726Z",
-    "updatedAt": "2025-09-16T18:29:09.287Z",
-    "isRecommended": false
+function makeTimeSlots(minHour: number, maxHour: number): string[] {
+  const start = Math.max(0, Math.min(23, minHour));
+  const end = Math.max(start, Math.min(23, maxHour));
+  const arr: string[] = [];
+  for (let h = start; h <= end; h++) {
+    arr.push(`${String(h).padStart(2, '0')}:00`);
   }
-]
-
-// path: apps/frontend/lib/api/tariffs.ts
-import { apiRequest } from '@/lib/api/core';
-import type { Tariff, TariffsPaginated, TariffListParams } from '@/lib/types/tariffs';
-
-function toQuery(params?: Record<string, unknown>): string {
-  if (!params) return '';
-  const q = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v === undefined || v === null || v === '') return;
-    q.set(k, Array.isArray(v) ? (v as unknown[]).join(',') : String(v));
-  });
-  const qs = q.toString();
-  return qs ? `?${qs}` : '';
+  return arr;
 }
 
-interface RawTariff {
-  id?: unknown;
-  name?: unknown;
-  description?: unknown;
-  priceMonthly?: unknown;
-  priceYearly?: unknown;
-  yearlyDiscount?: unknown;
-  maxUsers?: unknown;
-  maxCustomers?: unknown;
-  maxVehicles?: unknown;
-  maxOrders?: unknown;
-  features?: unknown;
-  isActive?: unknown;
-  createdAt?: unknown;
-  updatedAt?: unknown;
-  subscriptionsCount?: unknown;
-  isRecommended?: unknown;
-  activeSubscribers?: unknown;
-  totalSubscribers?: unknown;
+function getEnvDefaultRange(): { min: number; max: number } {
+  const min = Number(process.env.NEXT_PUBLIC_CALENDAR_DEFAULT_MIN_HOUR ?? 8);
+  const max = Number(process.env.NEXT_PUBLIC_CALENDAR_DEFAULT_MAX_HOUR ?? 18);
+  const safeMin = Number.isFinite(min) ? Math.max(0, Math.min(23, min)) : 8;
+  const safeMax = Number.isFinite(max) ? Math.max(safeMin, Math.min(23, max)) : Math.max(safeMin, 18);
+  return { min: safeMin, max: safeMax };
 }
 
-function toNumber(v: unknown): number {
-  const n = typeof v === 'string' || typeof v === 'number' ? Number(v) : NaN;
-  return Number.isFinite(n) ? n : 0;
-}
-function toNumberOrUndefined(v: unknown): number | undefined {
-  const n = typeof v === 'string' || typeof v === 'number' ? Number(v) : NaN;
-  return Number.isFinite(n) ? n : undefined;
-}
-function toNullableNumber(v: unknown): number | null {
-  if (v === null || v === undefined || v === '') return null;
-  const n = typeof v === 'string' || typeof v === 'number' ? Number(v) : NaN;
-  return Number.isFinite(n) ? n : null;
-}
-function toIsoString(v: unknown): string {
-  if (!v) return '';
-  if (typeof v === 'string') return v;
-  try {
-    return new Date(v as string).toISOString();
-  } catch {
-    return String(v);
-  }
-}
-function normalizeTariff(t: RawTariff): Tariff {
-  const activeSubscribers = toNumberOrUndefined(t.activeSubscribers);
-  const totalSubscribers = toNumberOrUndefined(t.totalSubscribers);
-  return {
-    id: String(t.id ?? ''),
-    name: String(t.name ?? ''),
-    description: t.description ? String(t.description) : undefined,
-    priceMonthly: toNumber(t.priceMonthly),
-    priceYearly: toNumber(t.priceYearly),
-    yearlyDiscount: toNumberOrUndefined(t.yearlyDiscount),
-    maxUsers: toNullableNumber(t.maxUsers),
-    maxCustomers: toNullableNumber(t.maxCustomers),
-    maxVehicles: toNullableNumber(t.maxVehicles),
-    maxOrders: toNullableNumber(t.maxOrders),
-    features:
-      typeof t.features === 'object' && t.features !== null ? (t.features as Record<string, unknown>) : {},
-    isActive: Boolean(t.isActive),
-    createdAt: toIsoString(t.createdAt),
-    updatedAt: toIsoString(t.updatedAt),
-    subscriptionsCount: toNumberOrUndefined(t.subscriptionsCount),
-    isRecommended: typeof t.isRecommended === 'boolean' ? t.isRecommended : undefined,
-    activeSubscribers,
-    totalSubscribers,
+const LS_KEY_ALL_HOURS = 'dc.appts.showAllHours';
+
+export default function AppointmentsPage() {
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const canCreate = useMemo(() => {
+    const r = user?.role?.name || '';
+    return ['company_owner', 'company_admin', 'manager', 'owner', 'admin'].includes(r);
+  }, [user?.role?.name]);
+
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<Appointment[]>([]);
+
+  // Calendar state
+  const [view, setView] = useState<CalendarView>('week');
+  const [currentDate, setCurrentDate] = useState(new Date());
+  
+  // Filters
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<AppointmentStatus | ''>('');
+  const [mechanic, setMechanic] = useState<MechanicOption | null>(null);
+
+  const [openCreate, setOpenCreate] = useState(false);
+
+  // Work schedules state (for dynamic hours)
+  const [showAllHours, setShowAllHours] = useState(false);
+  // Map dayOfWeek (0..6) -> intervals and hour bounds
+  const [scheduleMap, setScheduleMap] = useState<Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }>>({});
+
+  // Restore "all hours" from URL/localStorage once
+  useEffect(() => {
+    // URL has priority
+    const urlVal = searchParams?.get('all');
+    if (urlVal !== null) {
+      const val = urlVal === '1';
+      setShowAllHours(val);
+      localStorage.setItem(LS_KEY_ALL_HOURS, val ? '1' : '0');
+      return;
+    }
+    // LocalStorage fallback
+    const ls = localStorage.getItem(LS_KEY_ALL_HOURS);
+    if (ls === '1' || ls === '0') {
+      setShowAllHours(ls === '1');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once, after mount
+
+  const updateAllHours = useCallback((val: boolean) => {
+    setShowAllHours(val);
+    try {
+      localStorage.setItem(LS_KEY_ALL_HOURS, val ? '1' : '0');
+    } catch {}
+    // Update URL param without full reload
+    try {
+      const sp = new URLSearchParams(Array.from(searchParams?.entries?.() || []));
+      if (val) sp.set('all', '1');
+      else sp.delete('all');
+      const qs = sp.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    } catch {}
+  }, [pathname, router, searchParams]);
+
+  // Date navigation helpers
+  const navigateDate = (direction: 'prev' | 'next' | 'today') => {
+    const newDate = new Date(currentDate);
+    if (direction === 'today') {
+      setCurrentDate(new Date());
+      return;
+    }
+    switch (view) {
+      case 'day': newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1)); break;
+      case 'week': newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7)); break;
+      case 'month': newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1)); break;
+    }
+    setCurrentDate(newDate);
   };
-}
 
-function isItemsPaginated(
-  data: unknown,
-): data is { items: unknown[]; total?: unknown; page?: unknown; limit?: unknown; totalPages?: unknown } {
-  return typeof data === 'object' && data !== null && Array.isArray((data as { items?: unknown[] }).items);
-}
-function isDataPaginated(
-  data: unknown,
-): data is { data: unknown[]; pagination?: { total?: unknown; page?: unknown; limit?: unknown; totalPages?: unknown } } {
-  return typeof data === 'object' && data !== null && Array.isArray((data as { data?: unknown[] }).data);
-}
+  // Строки диапазона дат для запроса (стабильные зависимости, без Date-объектов)
+  const { rangeStartStr, rangeEndStr } = useMemo(() => {
+    let start = new Date(currentDate);
+    let end = new Date(currentDate);
 
-export const tariffsAPI = {
-  // Backoffice list — всегда без кэша; admin endpoint (скрывает метрики от публичного каталога)
-  async list(params?: TariffListParams): Promise<TariffsPaginated> {
-    const url = `/tariffs/admin${toQuery(params as Record<string, unknown>)}`;
-    const data = await apiRequest<unknown>(url, {
-      method: 'GET',
-      requireAuth: 'auto',
-      cache: 'no-store',
-    });
-
-    if (Array.isArray(data)) {
-      const items = (data as unknown[]).map((x) => normalizeTariff(x as RawTariff));
-      return { items, total: items.length, page: 1, limit: items.length, totalPages: 1 };
+    switch (view) {
+      case 'day':
+        break;
+      case 'week': {
+        const s = new Date(currentDate);
+        const dayOfWeek = s.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Пн
+        s.setDate(s.getDate() + diff);
+        const e = new Date(s);
+        e.setDate(s.getDate() + 6);
+        start = s;
+        end = e;
+        break;
+      }
+      case 'month': {
+        const s = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        const e = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+        start = s;
+        end = e;
+        break;
+      }
     }
-    if (isItemsPaginated(data)) {
-      const items = (data.items as unknown[]).map((x) => normalizeTariff(x as RawTariff));
-      return {
-        items,
-        total: toNumber((data as { total?: unknown }).total),
-        page: toNumber((data as { page?: unknown }).page) || 1,
-        limit: toNumber((data as { limit?: unknown }).limit) || items.length,
-        totalPages: toNumber((data as { totalPages?: unknown }).totalPages) || 1,
+
+    return {
+      rangeStartStr: toYMD(start),
+      rangeEndStr: toYMD(end),
+    };
+  }, [currentDate, view]);
+
+  // Load appointments
+  const loadAppointments = useCallback(async () => {
+    setLoading(true);
+    try {
+      const query: AppointmentsQuery = {
+        search: search.trim() || undefined,
+        status: (status || undefined) as AppointmentStatus | undefined,
+        mechanicId: mechanic?.id || undefined,
+        dateFrom: rangeStartStr,
+        dateTo: rangeEndStr,
+        sortField: 'startTime',
+        sortOrder: 'asc',
+        limit: 1000,
       };
+      const res = await appointmentsAPI.list(query);
+      setItems(res.items || []);
+    } catch (e) {
+      console.error('Failed to load appointments:', e);
+    } finally {
+      setLoading(false);
     }
-    if (isDataPaginated(data)) {
-      const items = (data.data as unknown[]).map((x) => normalizeTariff(x as RawTariff));
-      const pag = (
-        data as {
-          pagination?: { total?: unknown; page?: unknown; limit?: unknown; totalPages?: unknown };
+  }, [search, status, mechanic?.id, rangeStartStr, rangeEndStr]);
+
+  // Load schedules (for dynamic hours). Рекомендательный характер: мы только визуально подсвечиваем
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+
+    const fetchSchedules = async () => {
+      try {
+        const res = await workSchedulesAPI.getSchedules({ isActive: true, page: 1, limit: 200 });
+        const list = (res.items || []) as WorkSchedule[];
+
+        // Map dayOfWeek -> intervals + bounds
+        const tmp: Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }> = {};
+        for (let d = 0; d <= 6; d++) {
+          tmp[d] = { intervals: [], minHour: 23, maxHour: 0 };
         }
-      ).pagination || {};
-      return {
-        items,
-        total: toNumber(pag.total),
-        page: toNumber(pag.page) || 1,
-        limit: toNumber(pag.limit) || items.length,
-        totalPages: toNumber(pag.totalPages) || 1,
-      };
+
+        list.forEach((s) => {
+          if (s.isDayOff) return;
+          const startH = parseStartHour(s.startTime);
+          const endH = parseEndHour(s.endTime);
+          if (startH === null || endH === null) return;
+          if (endH <= startH) return;
+
+          const day = s.dayOfWeek;
+          tmp[day].intervals.push({ start: startH, end: endH });
+          tmp[day].minHour = Math.min(tmp[day].minHour, startH);
+          tmp[day].maxHour = Math.max(tmp[day].maxHour, endH);
+        });
+
+        // Пустые дни = неизвестно (min/max = -1). Будет фолбэк к дефолту/апп-интервалам
+        for (let d = 0; d <= 6; d++) {
+          if (tmp[d].intervals.length === 0) {
+            tmp[d].minHour = -1;
+            tmp[d].maxHour = -1;
+          }
+        }
+
+        if (!cancelled) setScheduleMap(tmp);
+      } catch (e) {
+        // Если расписание недоступно — помечаем как "неопределено" (fallback ниже)
+        if (!cancelled) {
+          const tmp: Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }> = {};
+          for (let d = 0; d <= 6; d++) {
+            tmp[d] = { intervals: [], minHour: -1, maxHour: -1 };
+          }
+          setScheduleMap(tmp);
+        }
+      }
+    };
+
+    void fetchSchedules();
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadAppointments();
     }
-    return { items: [], total: 0, page: 1, limit: 0, totalPages: 0 };
-  },
+  }, [isAuthenticated, loadAppointments]);
 
-  // Публичные — без метрик
-  async active(): Promise<Tariff[]> {
-    const data = await apiRequest<unknown[]>(`/tariffs/active`, { method: 'GET', requireAuth: 'auto' });
-    return (data ?? []).map((x) => normalizeTariff(x as RawTariff));
-  },
-
-  async popular(limit = 6): Promise<Tariff[]> {
-    const data = await apiRequest<unknown[]>(`/tariffs/popular${toQuery({ limit })}`, {
-      method: 'GET',
-      requireAuth: 'auto',
+  // Filter appointments by search
+  const filteredAppointments = useMemo(() => {
+    return items.filter(apt => {
+      if (
+        search &&
+        !apt.customerName?.toLowerCase().includes(search.toLowerCase()) &&
+        !apt.vehicleInfo?.toLowerCase().includes(search.toLowerCase()) &&
+        !apt.mechanicName?.toLowerCase().includes(search.toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
     });
-    return (data ?? []).map((x) => normalizeTariff(x as RawTariff));
-  },
+  }, [items, search]);
 
-  async get(id: string): Promise<Tariff> {
-    const data = await apiRequest<unknown>(`/tariffs/${id}`, { method: 'GET', requireAuth: 'auto' });
-    return normalizeTariff(data as RawTariff);
-  },
+  const hasAnySchedule = useMemo(
+    () => Object.values(scheduleMap).some((v) => v && v.minHour >= 0 && v.maxHour >= 0),
+    [scheduleMap]
+  );
 
-  async compare(ids: string[]): Promise<Tariff[]> {
-    const data = await apiRequest<unknown[]>(`/tariffs/compare${toQuery({ ids })}`, {
-      method: 'GET',
-      requireAuth: 'auto',
+  // Получить часовой диапазон для конкретной даты (учитывая расписание, либо данные аппов, либо дефолт из env)
+  const getDayHourRange = useCallback((date: Date): { min: number; max: number } => {
+    const dow = date.getDay(); // 0..6
+    const conf = scheduleMap[dow];
+
+    // 1) Если есть интервалы расписания — используем их
+    if (conf && conf.minHour >= 0 && conf.maxHour >= 0) {
+      return { min: conf.minHour, max: conf.maxHour };
+    }
+
+    // 2) Иначе — пробуем вычислить по имеющимся апойнтментам за этот день
+    const dateStr = toYMD(date);
+    const hours: number[] = [];
+    filteredAppointments.forEach((apt) => {
+      const aptDate = toYMD(new Date(apt.startTime));
+      if (aptDate === dateStr) {
+        hours.push(new Date(apt.startTime).getHours());
+        hours.push(new Date(apt.endTime).getHours());
+      }
     });
-    return (data ?? []).map((x) => normalizeTariff(x as RawTariff));
-  },
+    if (hours.length > 0) {
+      const min = Math.max(0, Math.min(...hours));
+      const max = Math.min(23, Math.max(...hours));
+      if (max >= min) return { min, max };
+    }
 
-  async create(json: {
-    name: string;
-    description?: string;
-    priceMonthly: number;
-    priceYearly: number;
-    maxUsers?: number;
-    maxCustomers?: number;
-    maxVehicles?: number;
-    maxOrders?: number;
-    features?: Record<string, unknown>;
-    isActive?: boolean;
-  }): Promise<Tariff> {
-    const data = await apiRequest<unknown>(`/tariffs`, { method: 'POST', json });
-    return normalizeTariff(data as RawTariff);
-  },
+    // 3) Фоллбек — дефолтные "бизнес-часы" (не 24 часа)
+    return getEnvDefaultRange();
+  }, [scheduleMap, filteredAppointments]);
 
-  async update(
-    id: string,
-    json: Partial<{
-      name: string;
-      description: string;
-      priceMonthly: number;
-      priceYearly: number;
-      maxUsers: number;
-      maxCustomers: number;
-      maxVehicles: number;
-      maxOrders: number;
-      features: Record<string, unknown>;
-      isActive: boolean;
-    }>,
-  ): Promise<Tariff> {
-    const data = await apiRequest<unknown>(`/tariffs/${id}`, { method: 'PATCH', json });
-    return normalizeTariff(data as RawTariff);
-  },
+  // Compute dynamic time slots for current view (either show all 24h or business hours derived from schedules/appointments)
+  const timeSlots = useMemo(() => {
+    if (showAllHours) return makeTimeSlots(0, 23);
 
-  async setActive(id: string, isActive: boolean): Promise<Tariff> {
-    const data = await apiRequest<unknown>(`/tariffs/${id}/status${toQuery({ isActive })}`, { method: 'PATCH' });
-    return normalizeTariff(data as RawTariff);
-  },
+    switch (view) {
+      case 'day': {
+        const { min, max } = getDayHourRange(currentDate);
+        return makeTimeSlots(min, max);
+      }
+      case 'week': {
+        const startOfWeek = new Date(currentDate);
+        const dow = startOfWeek.getDay();
+        const diff = dow === 0 ? -6 : 1 - dow;
+        startOfWeek.setDate(startOfWeek.getDate() + diff);
+        let min = 23;
+        let max = 0;
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(startOfWeek);
+          d.setDate(startOfWeek.getDate() + i);
+          const r = getDayHourRange(d);
+          min = Math.min(min, r.min);
+          max = Math.max(max, r.max);
+        }
+        if (max < min) {
+          const def = getEnvDefaultRange();
+          return makeTimeSlots(def.min, def.max);
+        }
+        return makeTimeSlots(min, max);
+      }
+      case 'month':
+        // Month view не использует time slots, вернем любой диапазон — не критично
+        return makeTimeSlots(8, 18);
+    }
+  }, [showAllHours, view, currentDate, getDayHourRange]);
 
-  async remove(id: string): Promise<void> {
-    await apiRequest<void>(`/tariffs/${id}`, { method: 'DELETE' });
+  // Helpers for working/non-working highlight
+  const isWorkingHour = useCallback((date: Date, hour: number): boolean => {
+    const conf = scheduleMap[date.getDay()];
+    if (!conf || conf.intervals.length === 0) {
+      // Нет явного расписания: считаем нейтральным (рабочим), чтобы не "серить" всё
+      return true;
+    }
+    return conf.intervals.some((itv) => hour >= itv.start && hour < itv.end);
+  }, [scheduleMap]);
+
+  // Get appointments for specific date/time slot (локальная дата, без UTC сдвига)
+  const getSlotAppointments = (date: Date, timeSlot?: string) => {
+    const dateStr = toYMD(date);
+    return filteredAppointments.filter(apt => {
+      const aptStart = new Date(apt.startTime);
+      const aptEnd = new Date(apt.endTime);
+      const aptDate = toYMD(aptStart);
+      if (aptDate !== dateStr) return false;
+
+      if (timeSlot && view !== 'month') {
+        const slotHour = parseInt(timeSlot.split(':')[0], 10);
+        const slotStart = new Date(date);
+        slotStart.setHours(slotHour, 0, 0, 0);
+        const slotEnd = new Date(date);
+        slotEnd.setHours(Math.min(23, slotHour + 1), 0, 0, 0);
+        return aptStart < slotEnd && aptEnd > slotStart; // перекрытие слота
+      }
+      return true;
+    });
+  };
+
+  // Get slot status color
+  const getSlotStatus = (date: Date, timeSlot?: string) => {
+    const appointments = getSlotAppointments(date, timeSlot);
+    if (appointments.length === 0) return 'free';
+    if (appointments.some(apt => apt.status === 'IN_PROGRESS')) return 'busy';
+    if (appointments.some(apt => apt.priority === 'URGENT')) return 'urgent';
+    return 'booked';
+  };
+
+  const statusColors = {
+    free: 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/30',
+    booked: 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/30 hover:bg-blue-100 dark:hover:bg-blue-950/30',
+    busy: 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/30 hover:bg-amber-100 dark:hover:bg-amber-950/30',
+    urgent: 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/30 hover:bg-red-100 dark:hover:bg-red-950/30 animate-pulse',
+  };
+
+  const nonWorkingClass =
+    'opacity-60 grayscale-[15%] hover:grayscale-0 border-dashed border-muted/50';
+
+  const handleSlotClick = () => {
+    // Рекомендационный характер: можно создавать запись даже вне расписания
+    if (canCreate) {
+      setOpenCreate(true);
+    }
+  };
+
+  const formatDateHeader = () => {
+    const formatter = new Intl.DateTimeFormat('ru-RU', {
+      year: 'numeric',
+      month: 'long',
+      day: view === 'day' ? 'numeric' : undefined,
+    });
+    return formatter.format(currentDate);
+  };
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    const total = filteredAppointments.length;
+    const inProgress = filteredAppointments.filter(apt => apt.status === 'IN_PROGRESS').length;
+    const urgent = filteredAppointments.filter(apt => apt.priority === 'URGENT').length;
+    const completed = filteredAppointments.filter(apt => apt.status === 'COMPLETED').length;
+    return { total, inProgress, urgent, completed };
+  }, [filteredAppointments]);
+
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        className="rounded-2xl btn-outline-fixed"
+        onClick={() => loadAppointments()}
+      >
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Обновить
+      </Button>
+      {canCreate && (
+        <Button 
+          className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]"
+          onClick={() => setOpenCreate(true)}
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Новая запись
+        </Button>
+      )}
+    </div>
+  );
+
+  // "Сейчас" — подсветка текущего часа
+  const now = new Date();
+  const isTodayCurrent = now.toDateString() === currentDate.toDateString();
+  const currentHour = now.getHours();
+  const nowSlotClass = 'ring-2 ring-primary/50';
+
+  if (authLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-muted-foreground">Загрузка календаря...</span>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  return (
+    <AppLayout 
+      title="Календарь записей" 
+      description="Интерактивная календарная сетка с цветовым кодированием времени"
+      icon={CalendarDays}
+      actions={headerActions}
+    >
+      <div className="container mx-auto px-6 py-6 space-y-6">
+        {/* Calendar Feature Badge */}
+        <Card className="p-4 glass border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-3xl">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-indigo-600 dark:text-indigo-400">Календарная сетка с динамичными часами</h3>
+              <p className="text-sm text-muted-foreground">
+                Поддержка 24/7 и ночных смен. Нерабочие часы подсвечиваются, но не блокируются — всё рекомендательно.
+              </p>
+              {!hasAnySchedule && !showAllHours && (
+                <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  Расписание не задано — показаны дефолтные бизнес‑часы ({getEnvDefaultRange().min}:00–{getEnvDefaultRange().max}:00)
+                </div>
+              )}
+            </div>
+            <div className="ml-auto flex items-center gap-3">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Все 24 часа</span>
+                <Switch checked={showAllHours} onCheckedChange={updateAllHours} />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Calendar Controls */}
+        <Card className="p-4 glass border-border/30 rounded-3xl surface-glow">
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Navigation */}
+            <div className="flex items-center gap-2">
+              <Button variant="outline" className="rounded-xl btn-outline-fixed" onClick={() => navigateDate('prev')}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button variant="outline" className="rounded-xl btn-outline-fixed min-w-[120px]" onClick={() => navigateDate('today')}>
+                Сегодня
+              </Button>
+              <Button variant="outline" className="rounded-xl btn-outline-fixed" onClick={() => navigateDate('next')}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <div className="text-lg font-semibold ml-4">{formatDateHeader()}</div>
+            </div>
+
+            {/* View Toggles */}
+            <div className="flex items-center gap-1 bg-surface-1/50 rounded-xl p-1">
+              {(['day', 'week', 'month'] as CalendarView[]).map((v) => (
+                <Button
+                  key={v}
+                  variant={view === v ? 'default' : 'ghost'}
+                  size="sm"
+                  className={cn(
+                    "rounded-lg text-xs transition-all duration-300",
+                    view === v && "bg-gradient-primary text-white shadow-glass"
+                  )}
+                  onClick={() => setView(v)}
+                >
+                  {VIEW_LABELS[v]}
+                </Button>
+              ))}
+            </div>
+
+            {/* Filters */}
+            <div className="flex items-center gap-2 ml-auto">
+              <div className="relative">
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Поиск записей..."
+                  className="w-48 h-8 rounded-xl text-sm pl-8"
+                />
+                <Search className="w-4 h-4 absolute left-2.5 top-2 text-muted-foreground" />
+              </div>
+              <div className="relative">
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as AppointmentStatus | '')}
+                  className="h-8 rounded-xl border border-border/50 bg-background text-sm px-3 pr-8 appearance-none"
+                >
+                  <option value="">Все статусы</option>
+                  {(Object.keys(APPOINTMENT_STATUS_LABELS) as AppointmentStatus[]).map((s) => (
+                    <option key={s} value={s}>
+                      {APPOINTMENT_STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+                <Filter className="w-3 h-3 absolute right-2.5 top-2.5 text-muted-foreground pointer-events-none" />
+              </div>
+              {/* Mechanic filter */}
+              <div className="w-56">
+                <MechanicSelect value={mechanic} onChange={setMechanic} placeholder="Фильтр: мастер" />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-blue-500/20">
+                <CalendarDays className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Всего записей</div>
+                <div className="text-xl font-bold">{stats.total}</div>
+              </div>
+            </div>
+          </Card>
+          
+          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/20">
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">В работе</div>
+                <div className="text-xl font-bold">{stats.inProgress}</div>
+              </div>
+            </div>
+          </Card>
+          
+          <Card className={cn(
+            "p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300",
+            stats.urgent > 0 && "border-red-500/30 bg-red-500/5"
+          )}>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-red-500/20">
+                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Срочные</div>
+                <div className="text-xl font-bold">{stats.urgent}</div>
+              </div>
+            </div>
+          </Card>
+          
+          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-emerald-500/20">
+                <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Завершено</div>
+                <div className="text-xl font-bold">{stats.completed}</div>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* Calendar Grid */}
+        <Card className="p-0 glass border-border/30 rounded-3xl surface-glow overflow-hidden">
+          {loading ? (
+            <div className="p-6 text-center">
+              <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-2" />
+              <span className="text-muted-foreground">Загрузка календаря...</span>
+            </div>
+          ) : (
+            <div className="p-6">
+              {view === 'month' && <MonthView 
+                currentDate={currentDate}
+                appointments={filteredAppointments}
+                onSlotClick={handleSlotClick}
+                getSlotStatus={getSlotStatus}
+                statusColors={statusColors}
+              />}
+              
+              {view === 'week' && <WeekView 
+                currentDate={currentDate}
+                appointments={filteredAppointments}
+                onSlotClick={handleSlotClick}
+                getSlotStatus={getSlotStatus}
+                statusColors={statusColors}
+                timeSlots={timeSlots}
+                isWorkingHour={isWorkingHour}
+                nonWorkingClass={nonWorkingClass}
+                isTodayCurrent={isTodayCurrent}
+                currentHour={currentHour}
+                nowSlotClass={nowSlotClass}
+              />}
+              
+              {view === 'day' && <DayView 
+                currentDate={currentDate}
+                appointments={filteredAppointments}
+                onSlotClick={handleSlotClick}
+                getSlotStatus={getSlotStatus}
+                statusColors={statusColors}
+                timeSlots={timeSlots}
+                isWorkingHour={isWorkingHour}
+                nonWorkingClass={nonWorkingClass}
+                isTodayCurrent={isTodayCurrent}
+                currentHour={currentHour}
+                nowSlotClass={nowSlotClass}
+              />}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <AppointmentCreateDialog
+        open={openCreate}
+        onOpenChange={setOpenCreate}
+        onCreated={() => {
+          loadAppointments();
+        }}
+      />
+    </AppLayout>
+  );
+}
+
+type MonthDay = {
+  date: Date;
+  appointments: Appointment[];
+  isCurrentMonth: boolean;
+  isToday: boolean;
+};
+
+// Month View Component
+function MonthView({ 
+  currentDate, 
+  appointments, 
+  onSlotClick, 
+  getSlotStatus, 
+  statusColors 
+}: {
+  currentDate: Date;
+  appointments: Appointment[];
+  onSlotClick: () => void;
+  getSlotStatus: (date: Date) => keyof typeof statusColors;
+  statusColors: Record<string, string>;
+}) {
+  const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+  
+  // Start from Monday of the week containing the first day
+  const startDate = new Date(firstDay);
+  const dayOfWeek = startDate.getDay();
+  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  startDate.setDate(startDate.getDate() + diff);
+
+  const weeks: MonthDay[][] = [];
+  const currentWeekDate = new Date(startDate);
+
+  for (let week = 0; week < 6; week++) {
+    const days: MonthDay[] = [];
+    for (let day = 0; day < 7; day++) {
+      const date = new Date(currentWeekDate);
+      const dayAppointments = appointments.filter(apt => {
+        const aptDate = new Date(apt.startTime).toDateString();
+        return aptDate === date.toDateString();
+      });
+      
+      days.push({
+        date: new Date(date),
+        appointments: dayAppointments,
+        isCurrentMonth: date.getMonth() === currentDate.getMonth(),
+        isToday: date.toDateString() === new Date().toDateString(),
+      });
+      
+      currentWeekDate.setDate(currentWeekDate.getDate() + 1);
+    }
+    weeks.push(days);
+    if (currentWeekDate > lastDay && days.length === 6) break;
+  }
+
+  const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-7 gap-2 mb-4">
+        {weekdays.map(day => (
+          <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
+            {day}
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        {weeks.map((week, weekIndex) => (
+          <div key={weekIndex} className="grid grid-cols-7 gap-2">
+            {week.map(({ date, appointments: dayAppointments, isCurrentMonth, isToday }) => {
+              const status = getSlotStatus(date);
+              return (
+                <div
+                  key={date.toISOString()}
+                  className={cn(
+                    "min-h-[80px] p-2 rounded-2xl border transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:shadow-glass",
+                    statusColors[status],
+                    !isCurrentMonth && "opacity-50",
+                    isToday && "ring-2 ring-primary/50"
+                  )}
+                  onClick={onSlotClick}
+                >
+                  <div className={cn(
+                    "text-sm font-medium mb-1",
+                    isToday && "text-primary font-bold"
+                  )}>
+                    {date.getDate()}
+                  </div>
+                  
+                  <div className="space-y-1">
+                    {dayAppointments.slice(0, 2).map((apt: Appointment) => (
+                      <Link
+                        key={apt.id}
+                        href={`/dashboard/appointments/${apt.id}`}
+                        className="block text-xs p-1 rounded bg-white/60 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="font-medium truncate">{apt.customerName}</div>
+                        <div className="text-muted-foreground truncate">
+                          {new Date(apt.startTime).toLocaleTimeString('ru-RU', { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </div>
+                      </Link>
+                    ))}
+                    
+                    {dayAppointments.length > 2 && (
+                      <div className="text-xs text-muted-foreground text-center">
+                        +{dayAppointments.length - 2} еще
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Week View Component
+function WeekView({ 
+  currentDate, 
+  appointments, 
+  onSlotClick, 
+  getSlotStatus, 
+  statusColors, 
+  timeSlots,
+  isWorkingHour,
+  nonWorkingClass,
+  isTodayCurrent,
+  currentHour,
+  nowSlotClass,
+}: {
+  currentDate: Date;
+  appointments: Appointment[];
+  onSlotClick: () => void;
+  getSlotStatus: (date: Date, time: string) => keyof typeof statusColors;
+  statusColors: Record<string, string>;
+  timeSlots: string[];
+  isWorkingHour: (date: Date, hour: number) => boolean;
+  nonWorkingClass: string;
+  isTodayCurrent: boolean;
+  currentHour: number;
+  nowSlotClass: string;
+}) {
+  const startOfWeek = new Date(currentDate);
+  const dayOfWeek = startOfWeek.getDay();
+  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  startOfWeek.setDate(startOfWeek.getDate() + diff);
+
+  const weekDates = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(startOfWeek);
+    date.setDate(date.getDate() + i);
+    return date;
+  });
+
+  const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+  const todayStr = new Date().toDateString();
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-8 gap-2 mb-4">
+        <div className="text-sm font-medium text-muted-foreground py-2">Время</div>
+        {weekDates.map((date, index) => (
+          <div key={date.toISOString()} className="text-center">
+            <div className="text-sm font-medium text-muted-foreground">{weekdays[index]}</div>
+            <div className={cn(
+              "text-lg font-bold",
+              date.toDateString() === todayStr && "text-primary"
+            )}>
+              {date.getDate()}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
+        {timeSlots.map(timeSlot => {
+          const slotHour = parseInt(timeSlot.split(':')[0], 10);
+          return (
+            <div key={timeSlot} className="grid grid-cols-8 gap-2">
+              <div className={cn(
+                "text-sm text-muted-foreground py-2 font-mono rounded-md px-1",
+                isTodayCurrent && slotHour === currentHour && nowSlotClass
+              )}>
+                {timeSlot}
+              </div>
+              {weekDates.map(date => {
+                const status = getSlotStatus(date, timeSlot);
+                const working = isWorkingHour(date, slotHour);
+                const isNow = date.toDateString() === todayStr && slotHour === currentHour;
+
+                const slotAppointments = appointments.filter(apt => {
+                  const aptStart = new Date(apt.startTime);
+                  const aptEnd = new Date(apt.endTime);
+                  const slotStart = new Date(date);
+                  slotStart.setHours(slotHour, 0, 0, 0);
+                  const slotEnd = new Date(date);
+                  slotEnd.setHours(Math.min(23, slotHour + 1), 0, 0, 0);
+                  return aptStart < slotEnd && aptEnd > slotStart;
+                });
+
+                return (
+                  <div
+                    key={`${date.toISOString()}-${timeSlot}`}
+                    className={cn(
+                      "min-h-[40px] p-1 rounded-xl border cursor-pointer transition-all duration-300 hover:scale-[1.02]",
+                      statusColors[status],
+                      !working && nonWorkingClass,
+                      isNow && nowSlotClass
+                    )}
+                    onClick={onSlotClick}
+                    title={!working ? 'Вне рабочего времени (рекомендация). Создание записи не блокируется.' : undefined}
+                  >
+                    {slotAppointments.map(apt => (
+                      <Link
+                        key={apt.id}
+                        href={`/dashboard/appointments/${apt.id}`}
+                        className="block text-xs p-1 rounded bg-white/60 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="font-medium truncate">{apt.customerName}</div>
+                      </Link>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Day View Component
+function DayView({ 
+  currentDate, 
+  appointments, 
+  onSlotClick, 
+  getSlotStatus, 
+  statusColors, 
+  timeSlots,
+  isWorkingHour,
+  nonWorkingClass,
+  isTodayCurrent,
+  currentHour,
+  nowSlotClass,
+}: {
+  currentDate: Date;
+  appointments: Appointment[];
+  onSlotClick: () => void;
+  getSlotStatus: (date: Date, time: string) => keyof typeof statusColors;
+  statusColors: Record<string, string>;
+  timeSlots: string[];
+  isWorkingHour: (date: Date, hour: number) => boolean;
+  nonWorkingClass: string;
+  isTodayCurrent: boolean;
+  currentHour: number;
+  nowSlotClass: string;
+}) {
+  const dayAppointments = useMemo(() => {
+    const dateStr = currentDate.toDateString();
+    return appointments.filter(apt => new Date(apt.startTime).toDateString() === dateStr);
+  }, [appointments, currentDate]);
+
+  return (
+    <div className="space-y-2">
+      <div className="text-center mb-6">
+        <div className="text-2xl font-bold">
+          {currentDate.toLocaleDateString('ru-RU', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
+        {timeSlots.map(timeSlot => {
+          const slotHour = parseInt(timeSlot.split(':')[0], 10);
+          const status = getSlotStatus(currentDate, timeSlot);
+          const working = isWorkingHour(currentDate, slotHour);
+          const isNow = isTodayCurrent && slotHour === currentHour;
+
+          const slotAppointments = dayAppointments.filter(apt => {
+            const aptStart = new Date(apt.startTime);
+            const aptEnd = new Date(apt.endTime);
+            const slotStart = new Date(currentDate);
+            slotStart.setHours(slotHour, 0, 0, 0);
+            const slotEnd = new Date(currentDate);
+            slotEnd.setHours(Math.min(23, slotHour + 1), 0, 0, 0);
+            return aptStart < slotEnd && aptEnd > slotStart;
+          });
+
+          return (
+            <div
+              key={timeSlot}
+              className={cn(
+                "flex items-center gap-4 min-h-[60px] p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:scale-[1.01] hover:shadow-glass",
+                statusColors[status],
+                !working && nonWorkingClass,
+                isNow && nowSlotClass
+              )}
+              onClick={onSlotClick}
+              title={!working ? 'Вне рабочего времени (рекомендация). Создание записи не блокируется.' : undefined}
+            >
+              <div className="text-lg font-mono font-medium w-20">{timeSlot}</div>
+              <div className="flex-1 space-y-2">
+                {slotAppointments.length === 0 ? (
+                  <div className="text-muted-foreground italic">Свободно</div>
+                ) : (
+                  slotAppointments.map(apt => (
+                    <Link
+                      key={apt.id}
+                      href={`/dashboard/appointments/${apt.id}`}
+                      className="block p-3 rounded-xl bg-white/60 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">{apt.customerName}</div>
+                          <div className="text-sm text-muted-foreground">{apt.vehicleInfo}</div>
+                          <div className="text-sm text-muted-foreground">{apt.mechanicName}</div>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant="outline" className="text-xs">
+                            {APPOINTMENT_STATUS_LABELS[apt.status]}
+                          </Badge>
+                          {apt.priority === 'URGENT' && (
+                            <Badge variant="destructive" className="text-xs ml-1">
+                              СРОЧНО
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+(ТОП по информативности)
+// path: apps/frontend/app/dashboard/vehicles/page.tsx
+"use client";
+
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { AppLayout } from '@/components/app/AppLayout';
+import { 
+  Car, 
+  Search, 
+  RefreshCw, 
+  Plus, 
+  Filter,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Gauge,
+  Hash,
+  User,
+  Calendar,
+  Sparkles,
+  TrendingUp,
+  Zap
+} from 'lucide-react';
+import { useAuth } from '@/lib/hooks/use-auth';
+import { vehiclesAPI } from '@/lib/api/vehicles';
+import { vehiclesCatalogueAPI } from '@/lib/api/vehicles-catalogue';
+import { cn } from '@/lib/utils';
+import type { 
+  VehiclesQuery, 
+  PaginatedVehiclesResponse, 
+  VehicleResponse,
+  EngineType
+} from '@/lib/types/vehicles';
+import type { 
+  CatalogueBrand, 
+  CatalogueModel, 
+  CatalogueType 
+} from '@/lib/types/vehicles-catalogue';
+import { VehicleCreateDialog } from '@/components/vehicles/vehicle-create-dialog';
+
+const ENGINE_TYPES: { value: EngineType; label: string }[] = [
+  { value: 'petrol', label: 'Бензин' },
+  { value: 'diesel', label: 'Дизель' },
+  { value: 'hybrid', label: 'Гибрид' },
+  { value: 'electric', label: 'Электро' },
+];
+
+export default function VehiclesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-muted-foreground">Загрузка автомобилей...</span>
+          </div>
+        </div>
+      }
+    >
+      <VehiclesListPage />
+    </Suspense>
+  );
+}
+
+function VehiclesListPage() {
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [isMounted, setIsMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<PaginatedVehiclesResponse | null>(null);
+
+  const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(12); // Grid view - more per page
+  const [serviceFilter, setServiceFilter] = useState<'all' | 'ok' | 'soon' | 'overdue'>('all');
+
+  const [openCreate, setOpenCreate] = useState(false);
+
+  // Catalogue filters
+  const [brands, setBrands] = useState<CatalogueBrand[]>([]);
+  const [models, setModels] = useState<CatalogueModel[]>([]);
+  const [types, setTypes] = useState<CatalogueType[]>([]);
+  const [brandId, setBrandId] = useState<string>('');
+  const [modelId, setModelId] = useState<string>('');
+  const [vehicleTypeId, setVehicleTypeId] = useState<string>('');
+
+  // Extended filters
+  const [engineType, setEngineType] = useState<EngineType | ''>('');
+  const [yearFrom, setYearFrom] = useState<string>('');
+  const [yearTo, setYearTo] = useState<string>('');
+  const [hasServiceHistory, setHasServiceHistory] = useState<boolean | ''>('');
+
+  useEffect(() => setIsMounted(true), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [b, m, t] = await Promise.all([
+          vehiclesCatalogueAPI.brands(),
+          vehiclesCatalogueAPI.models(),
+          vehiclesCatalogueAPI.types(),
+        ]);
+        if (!cancelled) {
+          setBrands(b);
+          setModels(m);
+          setTypes(t);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const filteredModels = useMemo(() => {
+    if (!brandId) return models;
+    return models.filter(m => (m.brandId === brandId) || (m.brand?.id === brandId));
+  }, [models, brandId]);
+
+  const query: VehiclesQuery = useMemo(() => ({
+    search: search || undefined,
+    page,
+    limit,
+    modelId: modelId || undefined,
+    vehicleTypeId: vehicleTypeId || undefined,
+    engineType: engineType || undefined,
+    yearFrom: yearFrom ? parseInt(yearFrom, 10) : undefined,
+    yearTo: yearTo ? parseInt(yearTo, 10) : undefined,
+    hasServiceHistory: hasServiceHistory === '' ? undefined : !!hasServiceHistory,
+  }), [search, page, limit, modelId, vehicleTypeId, engineType, yearFrom, yearTo, hasServiceHistory]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    if (authLoading) return;
+    if (!isAuthenticated || !user) {
+      router.push('/login');
+      return;
+    }
+
+    let cancelled = false;
+    const DEBOUNCE_MS = 300;
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await vehiclesAPI.getVehicles(query);
+        if (!cancelled) setData(res);
+      } catch (e) {
+        try {
+          const parsed = JSON.parse((e as Error).message) as { message?: string; correlationId?: string };
+          const msg = parsed.correlationId
+            ? `${parsed.message || 'Ошибка загрузки автомобилей'} (corrId: ${parsed.correlationId})`
+            : (parsed.message || 'Ошибка загрузки автомобилей');
+          if (!cancelled) setError(msg);
+        } catch {
+          if (!cancelled) setError('Ошибка загрузки автомобилей');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isMounted, authLoading, isAuthenticated, user, router, query]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setOpenCreate(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const onCreated = async () => {
+    setPage(1);
+    const res = await vehiclesAPI.getVehicles({ ...query, page: 1 });
+    setData(res);
+  };
+
+  const handleRefresh = async () => {
+    setPage(1);
+    const res = await vehiclesAPI.getVehicles({ ...query, page: 1 });
+    setData(res);
+  };
+
+  if (!isMounted) return null;
+  if (authLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-muted-foreground">Загрузка автомобилей...</span>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+  if (!isAuthenticated || !user) return null;
+
+  const items = data?.items || [];
+  
+  // Filter by service status client-side for better UX
+  const filteredItems = items.filter(vehicle => {
+    if (serviceFilter === 'all') return true;
+    const serviceStatus = getVehicleServiceStatus(vehicle);
+    return serviceFilter === serviceStatus;
+  });
+
+  // Service status stats
+  const serviceStats = items.reduce((acc, vehicle) => {
+    const status = getVehicleServiceStatus(vehicle);
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        className="rounded-2xl btn-outline-fixed"
+        onClick={handleRefresh}
+      >
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Обновить
+      </Button>
+      
+      <Button 
+        className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]"
+        onClick={() => setOpenCreate(true)}
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        Добавить ТС
+      </Button>
+    </div>
+  );
+
+  return (
+    <AppLayout 
+      title="Автомобили" 
+      description="Учет ТС с контролем ТО и техническими характеристиками"
+      icon={Car}
+      actions={headerActions}
+    >
+      <div className="container mx-auto px-6 py-6 space-y-6">
+        {/* Vehicle Cards Feature Badge */}
+        <Card className="p-4 glass border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 to-green-500/5 rounded-3xl">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-emerald-600 dark:text-emerald-400">Интерактивные карточки ТС</h3>
+              <p className="text-sm text-muted-foreground">
+                Цветовые индикаторы ТО: зеленый (актуально), желтый (скоро), красный (просрочено). Клик для детального просмотра.
+              </p>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/30">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                ТО OK
+              </Badge>
+              <Badge variant="outline" className="bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/30">
+                <Clock className="w-3 h-3 mr-1" />
+                Скоро
+              </Badge>
+              <Badge variant="outline" className="bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/30">
+                <AlertTriangle className="w-3 h-3 mr-1" />
+                Просрочено
+              </Badge>
+            </div>
+          </div>
+        </Card>
+
+        {/* Search & Filters */}
+        <Card className="p-4 glass border-border/30 rounded-3xl surface-glow">
+          <div className="space-y-4">
+            {/* Top row - Search and Service Filter */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="relative">
+                <Input
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  placeholder="Поиск по номеру, VIN, модели или владельцу"
+                  className="pl-9 h-10 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+                />
+                <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
+                <ServiceFilterButton
+                  active={serviceFilter === 'all'}
+                  onClick={() => setServiceFilter('all')}
+                  count={items.length}
+                >
+                  Все
+                </ServiceFilterButton>
+                <ServiceFilterButton
+                  active={serviceFilter === 'ok'}
+                  onClick={() => setServiceFilter('ok')}
+                  count={serviceStats.ok || 0}
+                  variant="ok"
+                >
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                  ТО OK
+                </ServiceFilterButton>
+                <ServiceFilterButton
+                  active={serviceFilter === 'soon'}
+                  onClick={() => setServiceFilter('soon')}
+                  count={serviceStats.soon || 0}
+                  variant="soon"
+                >
+                  <Clock className="w-3 h-3 mr-1" />
+                  Скоро
+                </ServiceFilterButton>
+                <ServiceFilterButton
+                  active={serviceFilter === 'overdue'}
+                  onClick={() => setServiceFilter('overdue')}
+                  count={serviceStats.overdue || 0}
+                  variant="overdue"
+                >
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  Просрочено
+                </ServiceFilterButton>
+              </div>
+            </div>
+
+            {/* Bottom row - Catalogue + Extended Filters */}
+            <div className="grid grid-cols-1 lg:grid-cols-6 gap-3">
+              <select
+                value={brandId}
+                onChange={(e) => { setBrandId(e.target.value); setModelId(''); setPage(1); }}
+                className="h-10 rounded-2xl border border-border/50 bg-background text-sm px-3 focus:border-primary/50 transition-all duration-300"
+              >
+                <option value="">Все бренды</option>
+                {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              
+              <select
+                value={modelId}
+                onChange={(e) => { setModelId(e.target.value); setPage(1); }}
+                className="h-10 rounded-2xl border border-border/50 bg-background text-sm px-3 focus:border-primary/50 transition-all duration-300"
+              >
+                <option value="">Все модели</option>
+                {filteredModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+              
+              <select
+                value={vehicleTypeId}
+                onChange={(e) => { setVehicleTypeId(e.target.value); setPage(1); }}
+                className="h-10 rounded-2xl border border-border/50 bg-background text-sm px-3 focus:border-primary/50 transition-all duration-300"
+              >
+                <option value="">Все типы</option>
+                {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+
+              <select
+                value={engineType}
+                onChange={(e) => { setEngineType((e.target.value as EngineType) || ''); setPage(1); }}
+                className="h-10 rounded-2xl border border-border/50 bg-background text-sm px-3 focus:border-primary/50 transition-all duration-300"
+              >
+                <option value="">Двигатель</option>
+                {ENGINE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="Год от"
+                  value={yearFrom}
+                  onChange={(e) => { setYearFrom(e.target.value.replace(/[^\d]/g, '')); setPage(1); }}
+                  className="h-10 rounded-2xl"
+                />
+                <Input
+                  type="number"
+                  placeholder="Год до"
+                  value={yearTo}
+                  onChange={(e) => { setYearTo(e.target.value.replace(/[^\d]/g, '')); setPage(1); }}
+                  className="h-10 rounded-2xl"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={!!hasServiceHistory}
+                    onChange={(e) => { setHasServiceHistory(e.target.checked); setPage(1); }}
+                  />
+                  Есть история ТО
+                </label>
+
+                <select
+                  value={limit}
+                  onChange={(e) => { setLimit(parseInt(e.target.value, 10)); setPage(1); }}
+                  className="h-10 rounded-2xl border border-border/50 bg-background text-sm px-3 focus:border-primary/50 transition-all duration-300"
+                >
+                  {[12, 24, 48].map((n) => (
+                    <option key={n} value={n}>{n} шт</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          <StatsCard
+            title="Всего ТС"
+            value={data?.total ?? 0}
+            icon={Car}
+            color="blue"
+          />
+          <StatsCard
+            title="ТО актуально"
+            value={serviceStats.ok || 0}
+            icon={CheckCircle}
+            color="emerald"
+          />
+          <StatsCard
+            title="ТО скоро"
+            value={serviceStats.soon || 0}
+            icon={Clock}
+            color="amber"
+          />
+          <StatsCard
+            title="ТО просрочено"
+            value={serviceStats.overdue || 0}
+            icon={AlertTriangle}
+            color="red"
+            highlight={(serviceStats.overdue || 0) > 0}
+          />
+          <StatsCard
+            title="Средний пробег"
+            value={Math.round(data?.meta?.averageMileage ?? 0)}
+            icon={Gauge}
+            color="default"
+          />
+          <StatsCard
+            title="Средний возраст, лет"
+            value={Number((data?.meta?.averageAge ?? 0).toFixed(1))}
+            icon={Calendar}
+            color="default"
+          />
+        </div>
+
+        {/* Vehicle Cards Grid */}
+        <Card className="p-0 glass border-border/30 rounded-3xl surface-glow overflow-hidden">
+          {loading ? (
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {[...Array(12)].map((_, i) => (
+                <div key={i} className="h-48 bg-surface-1/40 rounded-3xl animate-pulse" />
+              ))}
+            </div>
+          ) : error ? (
+            <div className="p-6 text-center text-destructive">
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <Zap className="w-5 h-5" />
+                <span className="font-medium">Ошибка загрузки</span>
+              </div>
+              <p>{error}</p>
+              <Button onClick={handleRefresh} className="mt-4 rounded-2xl">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Повторить
+              </Button>
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="p-10 text-center text-muted-foreground">
+              <Car className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <h3 className="font-semibold mb-2">Автомобили не найдены</h3>
+              <p className="text-sm mb-4">
+                {serviceFilter !== 'all' 
+                  ? `Нет автомобилей с выбранным статусом ТО`
+                  : 'Попробуйте изменить параметры поиска или добавьте первое ТС'
+                }
+              </p>
+              <Button 
+                className="rounded-2xl bg-gradient-primary hover:opacity-90"
+                onClick={() => setOpenCreate(true)}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Добавить ТС
+              </Button>
+            </div>
+          ) : (
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredItems.map((vehicle) => (
+                <VehicleCard key={vehicle.id} vehicle={vehicle} />
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* Pagination */}
+        {data && data.totalPages > 1 && (
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Показано: {filteredItems.length} из {data.total} автомобилей
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                className="rounded-2xl btn-outline-fixed"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Назад
+              </Button>
+              <span className="text-sm px-3 py-1 rounded-xl bg-surface-1/60">
+                {page} / {data.totalPages}
+              </span>
+              <Button
+                variant="outline"
+                className="rounded-2xl btn-outline-fixed"
+                disabled={page >= data.totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Далее
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <VehicleCreateDialog
+        open={openCreate}
+        onOpenChange={setOpenCreate}
+        onCreated={onCreated}
+      />
+    </AppLayout>
+  );
+}
+
+// Helper function to get vehicle service status
+function getVehicleServiceStatus(vehicle: VehicleResponse): 'ok' | 'soon' | 'overdue' {
+  if (vehicle.needsService) return 'overdue';
+  if (vehicle.daysUntilService !== undefined && vehicle.daysUntilService <= 30) return 'soon';
+  return 'ok';
+}
+
+// Service Filter Button Component
+function ServiceFilterButton({
+  active,
+  onClick,
+  count,
+  variant = 'default',
+  children
+}: {
+  active: boolean;
+  onClick: () => void;
+  count: number;
+  variant?: 'default' | 'ok' | 'soon' | 'overdue';
+  children: React.ReactNode;
+}) {
+  const { cn } = require('@/lib/utils');
+  const variantStyles = {
+    default: 'border-border/50',
+    ok: 'border-emerald-200 dark:border-emerald-800/30 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300',
+    soon: 'border-amber-200 dark:border-amber-800/30 bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300',
+    overdue: 'border-red-200 dark:border-red-800/30 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300',
+  };
+
+  return (
+    <Button
+      variant={active ? 'default' : 'outline'}
+      className={cn(
+        "rounded-xl flex-1 text-xs transition-all duration-300 relative",
+        active && variant !== 'default' && variantStyles[variant],
+        !active && variant !== 'default' && variantStyles[variant]
+      )}
+      onClick={onClick}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        <Badge variant="secondary" className="ml-1 text-xs px-1 py-0 h-4 min-w-4">
+          {count}
+        </Badge>
+      </div>
+    </Button>
+  );
+}
+
+// Stats Card Component
+function StatsCard({
+  title,
+  value,
+  icon: Icon,
+  color = 'default',
+  highlight = false
+}: {
+  title: string;
+  value: number;
+  icon: React.ComponentType<{ className?: string }>;
+  color?: 'default' | 'blue' | 'emerald' | 'amber' | 'red';
+  highlight?: boolean;
+}) {
+  const { cn } = require('@/lib/utils');
+  const colorStyles = {
+    default: 'from-surface-1/40 to-surface-2/40 border-border/30 text-muted-foreground',
+    blue: 'from-blue-500/10 to-blue-600/5 border-blue-500/20 text-blue-600 dark:text-blue-400',
+    emerald: 'from-emerald-500/10 to-emerald-600/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400',
+    amber: 'from-amber-500/10 to-amber-600/5 border-amber-500/20 text-amber-600 dark:text-amber-400',
+    red: 'from-red-500/10 to-red-600/5 border-red-500/20 text-red-600 dark:text-red-400',
+  };
+
+  return (
+    <Card className={cn(
+      'p-4 glass border rounded-2xl bg-gradient-to-br transition-all duration-300 hover:scale-[1.02]',
+      colorStyles[color],
+      highlight && 'animate-pulse'
+    )}>
+      <div className="flex items-center gap-3">
+        <div className={cn(
+          'p-2 rounded-xl',
+          color === 'blue' && 'bg-blue-500/20',
+          color === 'emerald' && 'bg-emerald-500/20',
+          color === 'amber' && 'bg-amber-500/20',
+          color === 'red' && 'bg-red-500/20',
+          color === 'default' && 'bg-surface-1/40'
+        )}>
+          <Icon className="w-4 h-4" />
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">{title}</div>
+          <div className="text-lg font-bold">{value}</div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// Enhanced Vehicle Card Component
+function VehicleCard({ vehicle }: { vehicle: VehicleResponse }) {
+  const { cn } = require('@/lib/utils');
+  const model = `${vehicle.model?.brand?.name || ''} ${vehicle.model?.name || ''}`.trim() || 'Автомобиль';
+  const owner = vehicle.customer 
+    ? [vehicle.customer.firstName, vehicle.customer.lastName].filter(Boolean).join(' ') 
+      || vehicle.customer.companyName 
+      || 'Клиент'
+    : 'Не указан';
+
+  // Service status logic
+  const serviceStatus = getVehicleServiceStatus(vehicle);
+
+  const serviceStatusConfig = {
+    ok: {
+      color: 'text-emerald-600 dark:text-emerald-400',
+      bg: 'bg-emerald-500/10',
+      border: 'border-emerald-500/20',
+      icon: CheckCircle,
+      text: 'ТО актуально',
+      glow: false,
+    },
+    soon: {
+      color: 'text-amber-600 dark:text-amber-400',
+      bg: 'bg-amber-500/10',
+      border: 'border-amber-500/20',
+      icon: Clock,
+      text: `ТО через ${vehicle.daysUntilService || '?'} дн.`,
+      glow: false,
+    },
+    overdue: {
+      color: 'text-red-600 dark:text-red-400',
+      bg: 'bg-red-500/10',
+      border: 'border-red-500/20',
+      icon: AlertTriangle,
+      text: 'ТО просрочено!',
+      glow: true,
+    },
+  };
+
+  const config = serviceStatusConfig[serviceStatus];
+  const StatusIcon = config.icon;
+
+  return (
+    <Link 
+      href={`/dashboard/vehicles/${vehicle.id}`}
+      className={cn(
+        "block group transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1",
+        config.glow && "animate-pulse"
+      )}
+    >
+      <Card className={cn(
+        "p-4 h-52 glass border-border/30 rounded-3xl surface-glow group-hover:border-primary/30 transition-all duration-500 group-hover:shadow-glass-lg",
+        config.glow && "border-red-500/30 shadow-lg shadow-red-500/10"
+      )}>
+        <div className="flex flex-col h-full">
+          {/* Header with status */}
+          <div className="flex items-start justify-between mb-3">
+            <div className="p-2.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-primary/20 group-hover:scale-105 transition-transform duration-300">
+              <Car className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <Badge 
+              variant="outline" 
+              className={cn(
+                "text-xs px-2 py-1 rounded-xl border transition-all duration-300",
+                config.color,
+                config.bg,
+                config.border,
+                config.glow && "animate-pulse"
+              )}
+            >
+              <StatusIcon className="w-3 h-3 mr-1" />
+              <span className="hidden sm:inline">{config.text}</span>
+              <span className="sm:hidden">{serviceStatus.toUpperCase()}</span>
+            </Badge>
+          </div>
+
+          {/* Vehicle info */}
+          <div className="flex-1 space-y-3">
+            <h3 className="font-semibold text-base line-clamp-1 group-hover:text-primary transition-colors duration-300">
+              {model}
+            </h3>
+            
+            <div className="space-y-2 text-xs text-muted-foreground">
+              {(vehicle.licensePlate || vehicle.vin) && (
+                <div className="flex items-center gap-2">
+                  <Hash className="w-3.5 h-3.5 text-muted-foreground/70" />
+                  <span className="line-clamp-1 font-mono">
+                    {vehicle.licensePlate || vehicle.vin}
+                  </span>
+                </div>
+              )}
+              
+              {vehicle.mileage && (
+                <div className="flex items-center gap-2">
+                  <Gauge className="w-3.5 h-3.5 text-muted-foreground/70" />
+                  <span>{vehicle.mileage.toLocaleString('ru-RU')} км</span>
+                </div>
+              )}
+              
+              <div className="flex items-center gap-2">
+                <User className="w-3.5 h-3.5 text-muted-foreground/70" />
+                <span className="line-clamp-1">{owner}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="pt-3 mt-auto border-t border-border/20">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">
+                {new Date(vehicle.createdAt).toLocaleDateString('ru-RU')}
+              </span>
+              <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center gap-1 text-primary">
+                <span className="font-medium">Подробнее</span>
+                <TrendingUp className="w-3 h-3" />
+              </div>
+            </div>
+          </div>
+
+          {/* Hover Effect Border */}
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10" />
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+// path: apps/frontend/app/dashboard/users/page.tsx
+'use client';
+
+import { Suspense } from 'react';
+import { Users } from 'lucide-react';
+import { AppLayout } from '@/components/app/AppLayout';
+import UsersList from '@/components/users/UsersList.client';
+
+export default function UsersPage() {
+  return (
+    <AppLayout
+      title="Команда"
+      description="Управление сотрудниками и приглашениями"
+      icon={Users}
+    >
+      <div className="container mx-auto px-6 py-8">
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center p-12">
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+                <p className="text-sm text-muted-foreground">Загрузка команды...</p>
+              </div>
+            </div>
+          }
+        >
+          <UsersList />
+        </Suspense>
+      </div>
+    </AppLayout>
+  );
+}
+
+(вообще нет такой страницы?)
+// path: apps/frontend/app/dashboard/services/page.tsx
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { 
+  Building2, 
+  Plus, 
+  Search, 
+  RefreshCw, 
+  Pencil, 
+  Trash2,
+  Clock,
+  DollarSign,
+  Settings,
+  Sparkles,
+  TrendingUp,
+  Filter,
+  Tag
+} from 'lucide-react'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { AppLayout } from '@/components/app/AppLayout'
+import { useAuth } from '@/lib/hooks/use-auth'
+import { servicesAPI } from '@/lib/api/services'
+import type { PaginatedServicesResponse, ServiceCatalogueItem } from '@/lib/types/services'
+import { ServiceEditDialog } from '@/components/services/service-edit-dialog'
+import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+
+export default function ServicesCataloguePage() {
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth()
+  const router = useRouter()
+  const [isMounted, setIsMounted] = useState(false)
+
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<PaginatedServicesResponse | null>(null)
+
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
+
+  const [openEdit, setOpenEdit] = useState(false)
+  const [current, setCurrent] = useState<ServiceCatalogueItem | null>(null)
+
+  useEffect(() => setIsMounted(true), [])
+
+  const query = useMemo(() => ({ search: search || undefined, page, limit }), [search, page, limit])
+
+  useEffect(() => {
+    if (!isMounted) return
+    if (authLoading) return
+    if (!isAuthenticated || !user) {
+      router.push('/login')
+      return
+    }
+
+    let cancelled = false
+    const t = setTimeout(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await servicesAPI.search(query)
+        if (!cancelled) setData(res)
+      } catch (e) {
+        try {
+          const parsed = JSON.parse((e as Error).message) as { message?: string }
+          if (!cancelled) setError(parsed.message || 'Ошибка загрузки услуг')
+        } catch {
+          if (!cancelled) setError('Ошибка загрузки услуг')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [isMounted, authLoading, isAuthenticated, user, router, query])
+
+  const handleCreate = () => {
+    setCurrent(null)
+    setOpenEdit(true)
+  }
+
+  const handleEdit = (svc: ServiceCatalogueItem) => {
+    setCurrent(svc)
+    setOpenEdit(true)
+  }
+
+  const handleSaved = async () => {
+    const res = await servicesAPI.search({ ...query, page: 1 })
+    setData(res)
+    setPage(1)
+  }
+
+  const handleDelete = async (svc: ServiceCatalogueItem) => {
+    if (!confirm(`Удалить услугу "${svc.name}"?`)) return
+    try {
+      await servicesAPI.remove(svc.id)
+      toast.success('Услуга удалена')
+      const res = await servicesAPI.search({ ...query, page: 1 })
+      setData(res)
+      setPage(1)
+    } catch (e) {
+      try {
+        const parsed = JSON.parse((e as Error).message) as { message?: string }
+        toast.error(parsed.message || 'Ошибка удаления услуги')
+      } catch {
+        toast.error('Ошибка удаления услуги')
+      }
+    }
+  }
+
+  const handleRefresh = async () => {
+    setPage(1);
+    const res = await servicesAPI.search({ ...query, page: 1 });
+    setData(res);
+    toast.success('Каталог обновлен');
+  };
+
+  if (!isMounted) return null
+  if (authLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-muted-foreground">Загрузка каталога...</span>
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
+  if (!isAuthenticated || !user) return null
+
+  const items = data?.items || []
+
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <Button 
+        variant="outline" 
+        onClick={handleRefresh}
+        className="rounded-2xl btn-outline-fixed"
+      >
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Обновить
+      </Button>
+      <Button 
+        onClick={handleCreate}
+        className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]"
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        Новая услуга
+      </Button>
+    </div>
+  );
+
+  return (
+    <AppLayout
+      title="Каталог услуг"
+      description="Справочник услуг автосервиса с редактированием и ценами"
+      icon={Building2}
+      actions={headerActions}
+    >
+      <div className="container mx-auto px-6 py-6 space-y-6">
+        {/* Services Feature Badge */}
+        <Card className="p-4 glass border-blue-500/20 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-3xl">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-blue-600 dark:text-blue-400">Каталог услуг с редактированием</h3>
+              <p className="text-sm text-muted-foreground">
+                Управление справочником услуг: цены, длительность, налогообложение. Inline редактирование и быстрый поиск.
+              </p>
+            </div>
+            <div className="ml-auto">
+              <TrendingUp className="w-6 h-6 text-secondary" />
+            </div>
+          </div>
+        </Card>
+
+        {/* Search & Filters */}
+        <Card className="p-4 glass border-border/30 rounded-3xl surface-glow">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="relative md:col-span-2">
+              <Input
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+                placeholder="Поиск услуг по названию или описанию"
+                className="pl-9 h-10 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+              />
+              <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+            </div>
+            
+            <div className="flex gap-2">
+              <select
+                value={limit}
+                onChange={(e) => { setLimit(parseInt(e.target.value, 10)); setPage(1) }}
+                className="h-10 rounded-2xl border border-border/50 bg-background text-sm px-3 focus:border-primary/50 transition-all duration-300"
+              >
+                {[10, 20, 50].map(n => (
+                  <option key={n} value={n}>{n} / стр</option>
+                ))}
+              </select>
+              <div className="flex items-center text-sm text-muted-foreground">
+                <Filter className="w-4 h-4 mr-2" />
+                Всего: {data?.total || 0}
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Services List */}
+        <Card className="p-0 glass border-border/30 rounded-3xl surface-glow overflow-hidden">
+          {loading ? (
+            <div className="p-6 space-y-3">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-16 bg-surface-1/40 rounded-2xl animate-pulse" />
+              ))}
+            </div>
+          ) : error ? (
+            <div className="p-6 text-center text-destructive">
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <Settings className="w-5 h-5" />
+                <span className="font-medium">Ошибка загрузки</span>
+              </div>
+              <p>{error}</p>
+              <Button onClick={handleRefresh} className="mt-4 rounded-2xl">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Повторить
+              </Button>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="p-10 text-center text-muted-foreground">
+              <Building2 className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <h3 className="font-semibold mb-2">Услуги не найдены</h3>
+              <p className="text-sm mb-4">
+                {search ? 'Попробуйте изменить параметры поиска' : 'Добавьте первую услугу в каталог'}
+              </p>
+              <Button 
+                onClick={handleCreate}
+                className="rounded-2xl bg-gradient-primary hover:opacity-90"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Добавить услугу
+              </Button>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/30">
+              {items.map(svc => (
+                <ServiceRow 
+                  key={svc.id} 
+                  service={svc} 
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* Pagination */}
+        {data && data.totalPages > 1 && (
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Показано: {items.length} из {data.total} услуг
+            </div>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                disabled={(data.page || 1) <= 1} 
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded-2xl btn-outline-fixed"
+              >
+                Назад
+              </Button>
+              <span className="text-sm px-3 py-1 rounded-xl bg-surface-1/60">
+                {data.page || 1} / {data.totalPages || 1}
+              </span>
+              <Button 
+                variant="outline" 
+                disabled={(data.page || 1) >= (data.totalPages || 1)} 
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded-2xl btn-outline-fixed"
+              >
+                Далее
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Service Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-blue-500/20">
+                <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Всего услуг</div>
+                <div className="text-xl font-bold">{data?.total || 0}</div>
+              </div>
+            </div>
+          </Card>
+          
+          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-emerald-500/20">
+                <DollarSign className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Средняя цена</div>
+                <div className="text-xl font-bold">
+                  {items.length > 0 
+                    ? Math.round(items.reduce((sum, s) => sum + (s.price || 0), 0) / items.length).toLocaleString('ru-RU')
+                    : 0
+                  } ₽
+                </div>
+              </div>
+            </div>
+          </Card>
+          
+          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/20">
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Ср. длительность</div>
+                <div className="text-xl font-bold">
+                  {items.length > 0
+                    ? Math.round(items.reduce((sum, s) => sum + (s.durationMinutes || 0), 0) / items.length)
+                    : 0
+                  } мин
+                </div>
+              </div>
+            </div>
+          </Card>
+          
+          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-purple-500/20">
+                <Tag className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">С НДС</div>
+                <div className="text-xl font-bold">
+                  {items.filter(s => s.taxable !== false).length}
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      <ServiceEditDialog 
+        open={openEdit} 
+        onOpenChange={setOpenEdit} 
+        service={current} 
+        onSaved={handleSaved} 
+      />
+    </AppLayout>
+  )
+}
+
+// Service Row Component
+function ServiceRow({ 
+  service, 
+  onEdit, 
+  onDelete 
+}: { 
+  service: ServiceCatalogueItem; 
+  onEdit: (service: ServiceCatalogueItem) => void;
+  onDelete: (service: ServiceCatalogueItem) => void;
+}) {
+  return (
+    <div className="p-4 hover:bg-surface-1/30 transition-all duration-300 group">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className="p-2 rounded-xl bg-gradient-to-r from-blue-500/20 to-indigo-500/20 group-hover:scale-105 transition-transform">
+            <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          </div>
+          
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm mb-1 truncate group-hover:text-primary transition-colors">
+              {service.name}
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <DollarSign className="w-3 h-3" />
+                <span>{(service.price || 0).toLocaleString('ru-RU')} ₽</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                <span>{service.durationMinutes || 0} мин</span>
+              </div>
+              {service.taxable === false && (
+                <Badge variant="outline" className="text-xs px-1 py-0 h-5">
+                  Без НДС
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => onEdit(service)}
+            className="rounded-xl btn-outline-fixed opacity-0 group-hover:opacity-100 transition-all duration-300"
+          >
+            <Pencil className="w-3.5 h-3.5 mr-1" /> 
+            Изменить
+          </Button>
+          <Button 
+            variant="destructive" 
+            size="sm" 
+            onClick={() => void onDelete(service)}
+            className="rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300"
+          >
+            <Trash2 className="w-3.5 h-3.5 mr-1" /> 
+            Удалить
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+и др. что тебе ещё накинуть, может и из других страниц что-то подтянем!
+
+# 🎨 План стандартизации UI
+
+Отличная идея! Да, реально и **очень нужно**. Я вижу, что у вас уже есть хорошие паттерны на страницах appointments и vehicles. Давайте создадим **единую дизайн-систему** для всех страниц.
+
+## 📋 Что стандартизируем:
+
+1. ✅ **Feature Badge** - карточка с описанием фичи страницы
+2. ✅ **Фильтры и поиск** - единая структура и стили
+3. ✅ **Header Actions** - расположение кнопок (Обновить, Создать)
+4. ✅ **Stats Cards** - метрики (опционально)
+5. ✅ **Состояния**: Loading, Error, Empty
+6. ✅ **Pagination** - единый компонент
+7. ⚡ **Тело страницы** - уникально (таблицы, календари, грид)
+
+## 🎨 Цветовая схема по типам страниц:
+
+| Страница | Градиент | Икона |
+|----------|----------|-------|
+| Appointments | indigo→purple | CalendarDays |
+| Vehicles | emerald→green | Car |
+| Services | blue→indigo | Building2 |
+| Customers | pink→rose | Users |
+| Orders | orange→amber | ClipboardList |
+| Parts | cyan→blue | Package |
+| Invoices | violet→purple | FileText |
+| Payments | emerald→teal | CreditCard |
+| Users | slate→gray | Users |
+| Platform | purple→fuchsia | Settings |
+
+---
+
+## 🧩 Создаём переиспользуемые компоненты:
+
+### 1️⃣ PageFeatureBadge
+
+```tsx
+// components/app/PageFeatureBadge.tsx
+import { LucideIcon } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+
+export type FeatureBadgeVariant = 
+  | 'indigo-purple'   // Appointments
+  | 'emerald-green'   // Vehicles  
+  | 'blue-indigo'     // Services
+  | 'pink-rose'       // Customers
+  | 'orange-amber'    // Orders
+  | 'cyan-blue'       // Parts
+  | 'violet-purple'   // Invoices
+  | 'emerald-teal'    // Payments
+  | 'slate-gray'      // Users
+  | 'purple-fuchsia'; // Platform
+
+const VARIANT_STYLES: Record<FeatureBadgeVariant, {
+  border: string;
+  bg: string;
+  icon: string;
+  text: string;
+}> = {
+  'indigo-purple': {
+    border: 'border-indigo-500/20',
+    bg: 'bg-gradient-to-r from-indigo-500/5 to-purple-500/5',
+    icon: 'bg-gradient-to-r from-indigo-500 to-purple-500',
+    text: 'text-indigo-600 dark:text-indigo-400',
+  },
+  'emerald-green': {
+    border: 'border-emerald-500/20',
+    bg: 'bg-gradient-to-r from-emerald-500/5 to-green-500/5',
+    icon: 'bg-gradient-to-r from-emerald-500 to-green-500',
+    text: 'text-emerald-600 dark:text-emerald-400',
+  },
+  'blue-indigo': {
+    border: 'border-blue-500/20',
+    bg: 'bg-gradient-to-r from-blue-500/5 to-indigo-500/5',
+    icon: 'bg-gradient-to-r from-blue-500 to-indigo-500',
+    text: 'text-blue-600 dark:text-blue-400',
+  },
+  'pink-rose': {
+    border: 'border-pink-500/20',
+    bg: 'bg-gradient-to-r from-pink-500/5 to-rose-500/5',
+    icon: 'bg-gradient-to-r from-pink-500 to-rose-500',
+    text: 'text-pink-600 dark:text-pink-400',
+  },
+  'orange-amber': {
+    border: 'border-orange-500/20',
+    bg: 'bg-gradient-to-r from-orange-500/5 to-amber-500/5',
+    icon: 'bg-gradient-to-r from-orange-500 to-amber-500',
+    text: 'text-orange-600 dark:text-orange-400',
+  },
+  'cyan-blue': {
+    border: 'border-cyan-500/20',
+    bg: 'bg-gradient-to-r from-cyan-500/5 to-blue-500/5',
+    icon: 'bg-gradient-to-r from-cyan-500 to-blue-500',
+    text: 'text-cyan-600 dark:text-cyan-400',
+  },
+  'violet-purple': {
+    border: 'border-violet-500/20',
+    bg: 'bg-gradient-to-r from-violet-500/5 to-purple-500/5',
+    icon: 'bg-gradient-to-r from-violet-500 to-purple-500',
+    text: 'text-violet-600 dark:text-violet-400',
+  },
+  'emerald-teal': {
+    border: 'border-emerald-500/20',
+    bg: 'bg-gradient-to-r from-emerald-500/5 to-teal-500/5',
+    icon: 'bg-gradient-to-r from-emerald-500 to-teal-500',
+    text: 'text-emerald-600 dark:text-emerald-400',
+  },
+  'slate-gray': {
+    border: 'border-slate-500/20',
+    bg: 'bg-gradient-to-r from-slate-500/5 to-gray-500/5',
+    icon: 'bg-gradient-to-r from-slate-500 to-gray-500',
+    text: 'text-slate-600 dark:text-slate-400',
+  },
+  'purple-fuchsia': {
+    border: 'border-purple-500/20',
+    bg: 'bg-gradient-to-r from-purple-500/5 to-fuchsia-500/5',
+    icon: 'bg-gradient-to-r from-purple-500 to-fuchsia-500',
+    text: 'text-purple-600 dark:text-purple-400',
   },
 };
 
-// path: apps/frontend/lib/types/tariffs.ts
-
-export type TariffID = string;
-
-export interface Tariff {
-  id: TariffID;
-  name: string;
-  description?: string;
-
-  priceMonthly: number;
-  priceYearly: number;
-  yearlyDiscount?: number;
-
-  maxUsers?: number | null;
-  maxCustomers?: number | null;
-  maxVehicles?: number | null;
-  maxOrders?: number | null;
-
-  features?: Record<string, unknown>;
-
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-
-  // Совместимость
-  subscriptionsCount?: number; // = activeSubscribers
-  isRecommended?: boolean;
-
-  // Новые метрики для бэкофиса
-  activeSubscribers?: number;
-  totalSubscribers?: number;
+interface PageFeatureBadgeProps {
+  variant: FeatureBadgeVariant;
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  aside?: React.ReactNode; // Доп. контент справа
 }
 
-export interface TariffsPaginated {
-  items: Tariff[];
-  total: number;
+export function PageFeatureBadge({
+  variant,
+  icon: Icon,
+  title,
+  description,
+  aside,
+}: PageFeatureBadgeProps) {
+  const styles = VARIANT_STYLES[variant];
+
+  return (
+    <Card className={cn('p-4 glass rounded-3xl', styles.border, styles.bg)}>
+      <div className="flex items-center gap-3">
+        <div className={cn('p-2 rounded-xl', styles.icon)}>
+          <Icon className="w-5 h-5 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className={cn('font-semibold', styles.text)}>{title}</h3>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+        {aside && <div className="ml-auto">{aside}</div>}
+      </div>
+    </Card>
+  );
+}
+```
+
+---
+
+### 2️⃣ PageFiltersCard
+
+```tsx
+// components/app/PageFiltersCard.tsx
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+
+interface PageFiltersCardProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function PageFiltersCard({ children, className }: PageFiltersCardProps) {
+  return (
+    <Card className={cn(
+      'p-4 glass border-border/30 rounded-3xl surface-glow',
+      className
+    )}>
+      {children}
+    </Card>
+  );
+}
+
+// Обёртка для строк фильтров
+export function PageFiltersRow({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn('grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3', className)}>
+      {children}
+    </div>
+  );
+}
+
+// Обёртка для дополнительных фильтров
+export function PageFiltersAdvanced({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-6 gap-3">
+      {children}
+    </div>
+  );
+}
+```
+
+---
+
+### 3️⃣ PageContentCard + States
+
+```tsx
+// components/app/PageContentCard.tsx
+import { RefreshCw, LucideIcon } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+
+interface PageContentCardProps {
+  children: React.ReactNode;
+  loading?: boolean;
+  error?: string | null;
+  empty?: boolean;
+  emptyState?: {
+    icon: LucideIcon;
+    title: string;
+    description: string;
+    action?: {
+      label: string;
+      onClick: () => void;
+    };
+  };
+  onRetry?: () => void;
+  loadingRows?: number;
+  className?: string;
+}
+
+export function PageContentCard({
+  children,
+  loading,
+  error,
+  empty,
+  emptyState,
+  onRetry,
+  loadingRows = 6,
+  className,
+}: PageContentCardProps) {
+  return (
+    <Card className={cn(
+      'p-0 glass border-border/30 rounded-3xl surface-glow overflow-hidden',
+      className
+    )}>
+      {loading ? (
+        <div className="p-6 space-y-3">
+          {[...Array(loadingRows)].map((_, i) => (
+            <div key={i} className="h-16 bg-surface-1/40 rounded-2xl animate-pulse" />
+          ))}
+        </div>
+      ) : error ? (
+        <div className="p-10 text-center text-destructive">
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <RefreshCw className="w-5 h-5" />
+            <span className="font-medium">Ошибка загрузки</span>
+          </div>
+          <p className="text-sm mb-4">{error}</p>
+          {onRetry && (
+            <Button onClick={onRetry} className="rounded-2xl">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Повторить
+            </Button>
+          )}
+        </div>
+      ) : empty && emptyState ? (
+        <div className="p-10 text-center text-muted-foreground">
+          <emptyState.icon className="w-12 h-12 mx-auto mb-4 opacity-50" />
+          <h3 className="font-semibold mb-2">{emptyState.title}</h3>
+          <p className="text-sm mb-4">{emptyState.description}</p>
+          {emptyState.action && (
+            <Button 
+              onClick={emptyState.action.onClick}
+              className="rounded-2xl bg-gradient-primary hover:opacity-90"
+            >
+              {emptyState.action.label}
+            </Button>
+          )}
+        </div>
+      ) : (
+        children
+      )}
+    </Card>
+  );
+}
+```
+
+---
+
+### 4️⃣ StatsCard (улучшенный)
+
+```tsx
+// components/app/StatsCard.tsx
+import { LucideIcon } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+
+export type StatsCardColor = 'default' | 'blue' | 'emerald' | 'amber' | 'red' | 'purple' | 'cyan';
+
+const COLOR_STYLES: Record<StatsCardColor, {
+  bg: string;
+  border: string;
+  text: string;
+  iconBg: string;
+}> = {
+  default: {
+    bg: 'from-surface-1/40 to-surface-2/40',
+    border: 'border-border/30',
+    text: 'text-muted-foreground',
+    iconBg: 'bg-surface-1/40',
+  },
+  blue: {
+    bg: 'from-blue-500/10 to-blue-600/5',
+    border: 'border-blue-500/20',
+    text: 'text-blue-600 dark:text-blue-400',
+    iconBg: 'bg-blue-500/20',
+  },
+  emerald: {
+    bg: 'from-emerald-500/10 to-emerald-600/5',
+    border: 'border-emerald-500/20',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    iconBg: 'bg-emerald-500/20',
+  },
+  amber: {
+    bg: 'from-amber-500/10 to-amber-600/5',
+    border: 'border-amber-500/20',
+    text: 'text-amber-600 dark:text-amber-400',
+    iconBg: 'bg-amber-500/20',
+  },
+  red: {
+    bg: 'from-red-500/10 to-red-600/5',
+    border: 'border-red-500/20',
+    text: 'text-red-600 dark:text-red-400',
+    iconBg: 'bg-red-500/20',
+  },
+  purple: {
+    bg: 'from-purple-500/10 to-purple-600/5',
+    border: 'border-purple-500/20',
+    text: 'text-purple-600 dark:text-purple-400',
+    iconBg: 'bg-purple-500/20',
+  },
+  cyan: {
+    bg: 'from-cyan-500/10 to-cyan-600/5',
+    border: 'border-cyan-500/20',
+    text: 'text-cyan-600 dark:text-cyan-400',
+    iconBg: 'bg-cyan-500/20',
+  },
+};
+
+interface StatsCardProps {
+  title: string;
+  value: number | string;
+  icon: LucideIcon;
+  color?: StatsCardColor;
+  highlight?: boolean;
+  suffix?: string;
+}
+
+export function StatsCard({
+  title,
+  value,
+  icon: Icon,
+  color = 'default',
+  highlight = false,
+  suffix,
+}: StatsCardProps) {
+  const styles = COLOR_STYLES[color];
+
+  return (
+    <Card className={cn(
+      'p-4 glass border rounded-2xl bg-gradient-to-br transition-all duration-300 hover:scale-[1.02]',
+      styles.bg,
+      styles.border,
+      highlight && 'animate-pulse'
+    )}>
+      <div className="flex items-center gap-3">
+        <div className={cn('p-2 rounded-xl', styles.iconBg)}>
+          <Icon className={cn('w-4 h-4', styles.text)} />
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">{title}</div>
+          <div className="text-lg font-bold">
+            {value}
+            {suffix && <span className="text-sm ml-1">{suffix}</span>}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// Обёртка для grid stats
+export function StatsGrid({ children, cols = 4 }: { children: React.ReactNode; cols?: 2 | 4 | 6 }) {
+  return (
+    <div className={cn(
+      'grid gap-4',
+      cols === 2 && 'grid-cols-1 md:grid-cols-2',
+      cols === 4 && 'grid-cols-2 md:grid-cols-4',
+      cols === 6 && 'grid-cols-2 md:grid-cols-6'
+    )}>
+      {children}
+    </div>
+  );
+}
+```
+
+---
+
+### 5️⃣ PaginationControls
+
+```tsx
+// components/app/PaginationControls.tsx
+import { Button } from '@/components/ui/button';
+
+interface PaginationControlsProps {
   page: number;
-  limit: number;
   totalPages: number;
+  total: number;
+  showing: number;
+  onPageChange: (page: number) => void;
+  itemLabel?: string; // 'автомобилей', 'записей' и тд
 }
 
-export type TariffSortField =
-  | 'name'
-  | 'priceMonthly'
-  | 'priceYearly'
-  | 'createdAt'
-  | 'activeSubscribers'
-  | 'totalSubscribers';
-export type SortOrder = 'asc' | 'desc';
+export function PaginationControls({
+  page,
+  totalPages,
+  total,
+  showing,
+  onPageChange,
+  itemLabel = 'элементов',
+}: PaginationControlsProps) {
+  if (totalPages <= 1) return null;
 
-export interface TariffListParams {
-  search?: string;
-  isActive?: boolean;
-  minPrice?: number;
-  maxPrice?: number;
-  // Расширенные фильтры
-  minActiveSubscribers?: number;
-  minTotalSubscribers?: number;
-
-  page?: number;
-  limit?: number;
-  sortField?: TariffSortField;
-  sortOrder?: SortOrder;
+  return (
+    <div className="flex items-center justify-between">
+      <div className="text-sm text-muted-foreground">
+        Показано: {showing} из {total} {itemLabel}
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          className="rounded-2xl btn-outline-fixed"
+          disabled={page <= 1}
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+        >
+          Назад
+        </Button>
+        <span className="text-sm px-3 py-1 rounded-xl bg-surface-1/60">
+          {page} / {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          className="rounded-2xl btn-outline-fixed"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+        >
+          Далее
+        </Button>
+      </div>
+    </div>
+  );
 }
+```
+
+---
+
+## 📝 Пример использования - Customers Page
+
+```tsx
+// app/dashboard/customers/page.tsx
+'use client';
+
+import { useState } from 'react';
+import { Users, Plus, RefreshCw, Search } from 'lucide-react';
+import { AppLayout } from '@/components/app/AppLayout';
+import { PageFeatureBadge } from '@/components/app/PageFeatureBadge';
+import { PageFiltersCard, PageFiltersRow } from '@/components/app/PageFiltersCard';
+import { PageContentCard } from '@/components/app/PageContentCard';
+import { StatsCard, StatsGrid } from '@/components/app/StatsCard';
+import { PaginationControls } from '@/components/app/PaginationControls';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+
+export default function CustomersPage() {
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <Button variant="outline" className="rounded-2xl btn-outline-fixed">
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Обновить
+      </Button>
+      <Button className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]">
+        <Plus className="w-4 h-4 mr-2" />
+        Новый клиент
+      </Button>
+    </div>
+  );
+
+  return (
+    <AppLayout
+      title="Клиенты"
+      description="База клиентов с историей обслуживания"
+      icon={Users}
+      actions={headerActions}
+    >
+      <div className="container mx-auto px-6 py-6 space-y-6">
+        
+        {/* Feature Badge */}
+        <PageFeatureBadge
+          variant="pink-rose"
+          icon={Users}
+          title="CRM клиентов"
+          description="Управление базой клиентов, история визитов, лояльность и персонализация обслуживания"
+        />
+
+        {/* Filters */}
+        <PageFiltersCard>
+          <PageFiltersRow>
+            <div className="relative">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Поиск по имени, телефону или email"
+                className="pl-9 h-10 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+              />
+              <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {/* Дополнительные фильтры */}
+            </div>
+          </PageFiltersRow>
+        </PageFiltersCard>
+
+        {/* Stats */}
+        <StatsGrid cols={4}>
+          <StatsCard title="Всего клиентов" value={150} icon={Users} color="blue" />
+          <StatsCard title="Активных" value={120} icon={Users} color="emerald" />
+          <StatsCard title="VIP" value={15} icon={Users} color="purple" />
+          <StatsCard title="Новых за месяц" value={8} icon={Users} color="cyan" />
+        </StatsGrid>
+
+        {/* Content */}
+        <PageContentCard
+          loading={loading}
+          empty={false}
+          emptyState={{
+            icon: Users,
+            title: 'Клиенты не найдены',
+            description: 'Добавьте первого клиента в базу',
+            action: {
+              label: 'Добавить клиента',
+              onClick: () => {},
+            },
+          }}
+        >
+          <div className="p-6">
+            {/* УНИКАЛЬНЫЙ КОНТЕНТ: таблица, грид клиентов */}
+            <p className="text-muted-foreground">Здесь будет таблица или грид клиентов</p>
+          </div>
+        </PageContentCard>
+
+        {/* Pagination */}
+        <PaginationControls
+          page={page}
+          totalPages={10}
+          total={150}
+          showing={15}
+          onPageChange={setPage}
+          itemLabel="клиентов"
+        />
+      </div>
+    </AppLayout>
+  );
+}
+```
+
+---
+
+## ✅ Чеклист стандартизации
+
+Пройдёмся по всем страницам и приведём к единому виду:
+
+- [ ] **Appointments** - уже ОК, добавить компоненты
+- [ ] **Vehicles** - уже ОК, добавить компоненты
+- [ ] **Services** - уже ОК, добавить компоненты
+- [ ] **Customers** - создать с нуля
+- [ ] **Orders** - привести к стандарту
+- [ ] **Parts** - привести к стандарту
+- [ ] **Invoices** - привести к стандарту
+- [ ] **Payments** - привести к стандарту
+- [ ] **Users** - дополнить компонентами
+- [ ] **Platform/Catalogue** - привести к стандарту
+
+---
+
+**Хочешь, я:**
+1. Создам все компоненты (PageFeatureBadge, PageFiltersCard и тд)?
+2. Обновлю существующие страницы (appointments, vehicles, services)?
+3. Создам/обновлю остальные страницы по этому паттерну?
+
+**Или сначала обсудим детали?** Может, есть что-то, что хочешь изменить в подходе? 🎨
+
+и я сейчас остановился на странице "Клиенты" поможешь с продожением обновлением?

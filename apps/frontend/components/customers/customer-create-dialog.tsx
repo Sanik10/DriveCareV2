@@ -157,7 +157,8 @@ export function CustomerCreateDialog({ open, onOpenChange, onCreated }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) setTypeManuallySet(false); }}>
-      <DialogContent glow className="max-w-xl" onPaste={handlePasteSmart}>
+      {/* 🔥 ИЗМЕНЕНО: max-w-xl → max-w-2xl (640px → 768px) */}
+      <DialogContent glow className="max-w-2xl" onPaste={handlePasteSmart}>
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-gradient-primary flex items-center justify-center text-white">
@@ -172,73 +173,98 @@ export function CustomerCreateDialog({ open, onOpenChange, onCreated }: Props) {
           </div>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-          <div className="col-span-1 sm:col-span-2">
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground">Тип клиента</div>
-              <div className="inline-flex rounded-md border border-border/60 bg-background p-1">
-                <button
-                  type="button"
-                  onClick={() => { setType('individual'); setTypeManuallySet(true); }}
-                  className={`px-3 py-1.5 text-xs rounded-md ${type === 'individual' ? 'bg-gradient-primary text-white shadow' : 'text-muted-foreground hover:bg-accent/40'}`}
-                >
-                  Физлицо
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setType('company'); setTypeManuallySet(true); }}
-                  className={`px-3 py-1.5 text-xs rounded-md ${type === 'company' ? 'bg-gradient-primary text-white shadow' : 'text-muted-foreground hover:bg-accent/40'}`}
-                >
-                  Юрлицо
-                </button>
-              </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+          {/* Тип клиента */}
+          <div className="col-span-1 md:col-span-2">
+            <div className="text-xs text-muted-foreground mb-1">Тип клиента</div>
+            <div className="inline-flex rounded-md border border-border/60 bg-background p-1">
+              <button
+                type="button"
+                onClick={() => { setType('individual'); setTypeManuallySet(true); }}
+                className={`px-3 py-1.5 text-xs rounded-md transition-all ${type === 'individual' ? 'bg-gradient-primary text-white shadow' : 'text-muted-foreground hover:bg-accent/40'}`}
+              >
+                Физлицо
+              </button>
+              <button
+                type="button"
+                onClick={() => { setType('company'); setTypeManuallySet(true); }}
+                className={`px-3 py-1.5 text-xs rounded-md transition-all ${type === 'company' ? 'bg-gradient-primary text-white shadow' : 'text-muted-foreground hover:bg-accent/40'}`}
+              >
+                Юрлицо
+              </button>
             </div>
           </div>
 
+          {/* Поля в зависимости от типа */}
           {type === "company" ? (
-            <div className="col-span-1 sm:col-span-2 relative">
-              <Input
-                placeholder="Компания"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                className="pl-9"
-              />
-              <Building2 className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <div className="col-span-1 md:col-span-2">
+              <div className="text-xs text-muted-foreground mb-1">
+                Название компании <span className="text-rose-500">*</span>
+              </div>
+              <div className="relative">
+                <Input
+                  placeholder="ООО «Рога и Копыта»"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  className="pl-9"
+                />
+                <Building2 className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              </div>
             </div>
           ) : (
             <>
-              <Input placeholder="Имя" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-              <Input placeholder="Фамилия" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Имя</div>
+                <Input placeholder="Иван" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Фамилия</div>
+                <Input placeholder="Иванов" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+              </div>
             </>
           )}
 
-          <div className="relative">
-            <Input
-              placeholder="Телефон (+79001234567)"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="pl-9"
-            />
-            <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          {/* Телефон */}
+          <div>
+            <div className="text-xs text-muted-foreground mb-1">
+              Телефон <span className="text-rose-500">*</span>
+            </div>
+            <div className="relative">
+              <Input
+                placeholder="+79001234567"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="pl-9"
+              />
+              <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            </div>
             {!!normalizedPhone && (
               <div className="mt-1 text-[10px] text-muted-foreground">
-                Будет сохранено как: {normalizedPhone}
+                Будет сохранено: {normalizedPhone}
               </div>
             )}
           </div>
-          <div className="relative">
-            <Input
-              placeholder="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="pl-9"
-            />
-            <Mail className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+
+          {/* Email */}
+          <div>
+            <div className="text-xs text-muted-foreground mb-1">
+              Email <span className="text-rose-500">*</span>
+            </div>
+            <div className="relative">
+              <Input
+                placeholder="email@example.com"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="pl-9"
+              />
+              <Mail className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            </div>
           </div>
 
-          <div className="col-span-1 sm:col-span-2 text-xs text-muted-foreground">
-            Подсказки: вставьте строку вида “Иван Иванов, +7 900 123-45-67, ivan@example.com” — поля заполнятся автоматически.
+          {/* Подсказка */}
+          <div className="col-span-1 md:col-span-2 text-xs text-muted-foreground">
+            💡 Подсказка: вставьте строку вида "Иван Иванов, +7 900 123-45-67, ivan@example.com" — поля заполнятся автоматически
           </div>
         </div>
 
@@ -246,7 +272,7 @@ export function CustomerCreateDialog({ open, onOpenChange, onCreated }: Props) {
           <div className="mt-2 text-sm text-destructive">{error}</div>
         )}
 
-        <DialogFooter className="mt-2">
+        <DialogFooter className="mt-4">
           <div className="hidden sm:flex items-center text-xs text-muted-foreground mr-auto">
             <span className="mr-2">Горячие клавиши:</span>
             <Kbd>Esc</Kbd>

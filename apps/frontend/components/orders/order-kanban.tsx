@@ -6,7 +6,7 @@ import { ordersAPI } from '@/lib/api/orders';
 import type { OrderResponse, OrdersQuery, OrderStatus } from '@/lib/types/orders';
 import { Button } from '@/components/ui/button';
 import { StatusBadge, orderStatusLabel } from '@/components/ui/status-badge';
-import { RefreshCw, Clock, User, ArrowRight, Sparkles, AlertTriangle, GripVertical } from 'lucide-react';
+import { Clock, User, ArrowRight, Sparkles, AlertTriangle, GripVertical } from 'lucide-react';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { cn } from '@/lib/utils';
 
@@ -69,32 +69,45 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
     [search],
   );
 
-  const loadAll = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const results = await Promise.all(COLUMNS.map((col) => fetchColumn(col.key, 1)));
-      const nextCols: Record<BoardStatus, OrderResponse[]> = {
-        new: [],
-        in_progress: [],
-        awaiting_parts: [],
-        completed: [],
-        canceled: [],
-      };
-      const nextPages: Record<BoardStatus, { page: number; totalPages: number }> = { ...pages };
-      COLUMNS.forEach((c, i) => {
-        nextCols[c.key] = results[i].items;
-        nextPages[c.key] = { page: results[i].page, totalPages: results[i].totalPages };
-      });
-      setColumns(nextCols);
-      setPages(nextPages);
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchColumn, pages]);
-
+  // Загружаем все колонки при монтировании/смене поиска/ручном refresh (через refreshKey)
   React.useEffect(() => {
-    void loadAll();
-  }, [loadAll, refreshKey]);
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const results = await Promise.all(COLUMNS.map((col) => fetchColumn(col.key, 1)));
+        if (cancelled) return;
+        const nextCols: Record<BoardStatus, OrderResponse[]> = {
+          new: [],
+          in_progress: [],
+          awaiting_parts: [],
+          completed: [],
+          canceled: [],
+        };
+        const nextPages: Record<BoardStatus, { page: number; totalPages: number }> = {
+          new: { page: 1, totalPages: 1 },
+          in_progress: { page: 1, totalPages: 1 },
+          awaiting_parts: { page: 1, totalPages: 1 },
+          completed: { page: 1, totalPages: 1 },
+          canceled: { page: 1, totalPages: 1 },
+        };
+        COLUMNS.forEach((c, i) => {
+          nextCols[c.key] = results[i].items;
+          nextPages[c.key] = { page: results[i].page, totalPages: results[i].totalPages };
+        });
+        setColumns(nextCols);
+        setPages(nextPages);
+        setErrorMsg(null);
+      } catch {
+        if (!cancelled) setErrorMsg('Не удалось загрузить канбан');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchColumn, refreshKey]);
 
   React.useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
@@ -202,10 +215,6 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Sparkles className="w-3.5 h-3.5" />
         Подсказка: перетаскивайте карточку за «ручку» слева. Удерживайте пробел — режим фокуса.
-        <Button variant="outline" size="sm" className="ml-auto" onClick={() => loadAll()} disabled={loading}>
-          <RefreshCw className={cn('w-4 h-4 mr-2', loading && 'animate-spin')} />
-          Обновить
-        </Button>
       </div>
 
       {errorMsg && (
@@ -237,7 +246,7 @@ export function OrderKanban({ search, onOrderOpen, refreshKey }: Props) {
                 )}
                 style={{ minWidth: COL_MIN_WIDTH }}
                 onDragOver={onDragOver}
-                onDrop={(e) => onDrop(e, col.key)}
+                onDrop={(e) => void onDrop(e, col.key)}
               >
                 <div className="mb-2">
                   <div className="flex items-center justify-between">

@@ -27,10 +27,6 @@ export class SeedsService {
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
-  /**
-   * В dev/staging гарантируем схему перед сидом:
-   * - если базовые таблицы отсутствуют — вызываем synchronize()
-   */
   private async ensureSchema(): Promise<void> {
     const env = this.configService.get<string>('NODE_ENV', 'development');
 
@@ -43,10 +39,8 @@ export class SeedsService {
       const exists = async (table: string) => {
         const res = await runner.query(`SELECT to_regclass($1) AS name`, [`public.${table}`]);
         return !!res?.[0]?.name;
-        // to_regclass returns table name or null
       };
 
-      // Минимальный набор для сидов
       const requiredTables = ['roles', 'users', 'companies', 'audit_logs'];
       let needSync = false;
       for (const t of requiredTables) {
@@ -64,20 +58,14 @@ export class SeedsService {
       }
     } catch (e: any) {
       this.logger.error(`Failed to check/synchronize schema: ${e?.message || e}`);
-      // не падаем — дадим сидерам попытаться (но, скорее всего, упадут с понятной ошибкой)
     } finally {
       await runner.release();
     }
   }
 
-  /**
-   * 🛡️ SECURITY: Environment-specific seeding с полной защитой
-   * Запускается ТОЛЬКО в development/staging environments
-   */
   async runAllSeeds(): Promise<void> {
     const environment = this.configService.get('NODE_ENV', 'development');
 
-    // 🚨 CRITICAL SECURITY: Блокируем выполнение в production
     if (environment === 'production') {
       this.logger.warn('🚫 Seeds are disabled in production environment for security');
       await this.auditService.log(AuditAction.SEEDS_BLOCKED_IN_PRODUCTION, {
@@ -87,7 +75,6 @@ export class SeedsService {
       return;
     }
 
-    // 🔒 SECURITY: Дополнительная проверка для staging
     if (environment === 'staging') {
       const allowStagingSeeds = this.configService.get('ALLOW_STAGING_SEEDS', 'false');
       if (allowStagingSeeds !== 'true') {
@@ -96,7 +83,6 @@ export class SeedsService {
       }
     }
 
-    // ⛑️ Гарантируем схему до любых операций/логирования
     await this.ensureSchema();
 
     this.logger.log(`🌱 Starting database seeding in ${environment} environment...`);
@@ -104,8 +90,14 @@ export class SeedsService {
     try {
       const startTime = Date.now();
 
-      await this.createSuperadminRole();
+      // 1) Системные роли (включая superadmin)
+      await this.ensureSystemRoles();
+
+      // 2) Создаём супер-админа (если ещё нет)
       await this.createSuperadmin();
+
+      // 3) Базовые роли для всех существующих компаний (идемпотентно)
+      await this.ensureCompanyRolesForAllCompanies();
 
       const duration = Date.now() - startTime;
       this.logger.log(`✅ Database seeding completed successfully in ${duration}ms`);
@@ -128,41 +120,53 @@ export class SeedsService {
     }
   }
 
-  /**
-   * 🛡️ SECURITY: Создание роли superadmin с enhanced validation
-   */
-  private async createSuperadminRole(): Promise<Role> {
-    const existingRole = await this.rolesRepository.findOne({
-      where: { name: 'superadmin' },
-    });
+  private async ensureSystemRoles(): Promise<void> {
+    const systemRoles = ['superadmin', 'platform_admin', 'support_engineer', 'system_operator', 'auditor'];
 
-    if (existingRole) {
-      this.logger.log('👑 Superadmin role already exists, skipping creation...');
-      return existingRole;
-    }
+    await this.rolesRepository
+      .createQueryBuilder()
+      .insert()
+      .into(Role)
+      .values(systemRoles.map((name) => ({ name, description: name, isSystem: true, companyId: null })))
+      .orIgnore()
+      .execute();
 
-    const superadminRole = this.rolesRepository.create({
-      name: 'superadmin',
-      description: 'Системный администратор - полный доступ ко всем функциям системы',
-      isSystem: true,
-      companyId: null,
-    });
-
-    const savedRole = await this.rolesRepository.save(superadminRole);
-    this.logger.log('✅ Superadmin role created successfully');
-
-    await this.auditService.log(AuditAction.SUPERADMIN_ROLE_CREATED, {
-      roleId: savedRole.id,
-      roleName: savedRole.name,
-      timestamp: new Date().toISOString(),
-    });
-
-    return savedRole;
+    this.logger.log('✅ System roles ensured');
   }
 
-  /**
-   * 🛡️ SECURITY: Создание superadmin с enterprise-grade security
-   */
+  private async ensureCompanyRolesForAllCompanies(): Promise<void> {
+    const roles = [
+      'company_owner',
+      'company_admin',
+      'manager',
+      'lead_mechanic',
+      'service_advisor',
+      'diagnostic',
+      'inventory_manager',
+      'cashier',
+      'mechanic',
+      'viewer',
+    ];
+
+    const companies = await this.companiesRepository.find();
+    if (companies.length === 0) {
+      this.logger.log('ℹ No companies found. Company-level roles will be created on-demand per company.');
+      return;
+    }
+
+    for (const c of companies) {
+      await this.rolesRepository
+        .createQueryBuilder()
+        .insert()
+        .into(Role)
+        .values(roles.map((name) => ({ name, description: name, isSystem: false, companyId: c.id })))
+        .orIgnore()
+        .execute();
+    }
+
+    this.logger.log('✅ Company roles ensured for all companies');
+  }
+
   private async createSuperadmin(): Promise<void> {
     const superadminEmail = 'superadmin@drivecare.com';
 
@@ -175,25 +179,15 @@ export class SeedsService {
       return;
     }
 
-    // 🔍 Получаем роль superadmin
     const superadminRole = await this.rolesRepository.findOne({
       where: { name: 'superadmin' },
     });
 
     if (!superadminRole) {
-      const error = new Error('Superadmin role not found - cannot create superadmin user');
-      await this.auditService.log(AuditAction.SUPERADMIN_CREATION_FAILED, {
-        reason: 'role_not_found',
-        email: superadminEmail,
-        timestamp: new Date().toISOString(),
-      });
-      throw error;
+      throw new Error('Superadmin role not found - cannot create superadmin user');
     }
 
-    // 🔐 ENTERPRISE SECURITY: Secure password generation
     const password = this.generateSecurePassword();
-
-    // Хешируем так же, как и рантайм (argon2id + pepper)
     const pepper = this.configService.get<string>('PWD_PEPPER', '');
     const hashedPassword = await argon2.hash(`${password}${pepper}`, {
       type: argon2.argon2id,
@@ -202,7 +196,6 @@ export class SeedsService {
       parallelism: 1,
     });
 
-    // 👤 Создаём superadmin с enhanced security
     const superadmin = this.usersRepository.create({
       email: superadminEmail,
       password_hash: hashedPassword,
@@ -225,8 +218,6 @@ export class SeedsService {
       this.logger.warn(`🔑 ${password}`);
       this.logger.warn('⚠️  IMPORTANT: This password is auto-generated and should be changed immediately!');
       this.logger.warn('⚠️  Password is only shown in development environment');
-    } else {
-      this.logger.warn('🔐 Secure password generated - check secure storage for credentials');
     }
 
     await this.auditService.log(AuditAction.SUPERADMIN_USER_CREATED, {

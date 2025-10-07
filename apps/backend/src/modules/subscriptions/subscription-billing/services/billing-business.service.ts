@@ -3,7 +3,7 @@ import { Injectable, Logger, BadRequestException, NotFoundException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { Subscription } from '../../../../database/entities/subscription.entity';
+import { Subscription, SubscriptionStatus } from '../../../../database/entities/subscription.entity';
 import { Company } from '../../../../database/entities/company.entity';
 import { Tariff } from '../../../../database/entities/tariff.entity';
 import { SubscriptionPaymentLog } from '../../../../database/entities/subscription-payment-log.entity';
@@ -12,8 +12,6 @@ import { CreateBillingSubscriptionDto } from '../dto/request/create-billing-subs
 import { AuditService } from '../../../../common/audit/audit.service';
 import { AuditContext } from '../types/billing.types';
 import { BillingSubscriptionResponseDto } from '../dto/response/billing-subscription-response.dto';
-
-import { SubscriptionStatus } from '../../../../database/entities/subscription.entity';
 
 @Injectable()
 export class BillingBusinessService {
@@ -27,7 +25,26 @@ export class BillingBusinessService {
     private readonly audit: AuditService,
   ) {}
 
-  async createPendingSubscription(companyId: string, dto: CreateBillingSubscriptionDto, ctx: AuditContext): Promise<Subscription> {
+  private computeEndDate(start: Date, period: 'monthly' | 'yearly'): Date {
+    const end = new Date(start);
+    if (period === 'yearly') {
+      end.setFullYear(end.getFullYear() + 1);
+    } else {
+      // monthly (корректно обрабатываем переход конца месяца)
+      const day = end.getDate();
+      end.setMonth(end.getMonth() + 1);
+      if (end.getDate() < day) {
+        end.setDate(0); // последний день предыдущего месяца
+      }
+    }
+    return end;
+  }
+
+  async createPendingSubscription(
+    companyId: string,
+    dto: CreateBillingSubscriptionDto,
+    ctx: AuditContext,
+  ): Promise<Subscription> {
     const [company, tariff] = await Promise.all([
       this.companyRepo.findOne({ where: { id: companyId } }),
       this.tariffRepo.findOne({ where: { id: dto.tariffId } }),
@@ -35,18 +52,16 @@ export class BillingBusinessService {
 
     if (!company) throw new NotFoundException('Компания не найдена');
     if (!tariff || (tariff as any).isActive === false) throw new BadRequestException('Тариф недоступен');
+    if (dto.autoRenew === true) throw new BadRequestException('Автопродление отключено по политике сервиса');
 
-    if (dto.autoRenew === true) {
-      throw new BadRequestException('Автопродление отключено по политике сервиса');
-    }
-
-    const startDate = new Date();
-    const endDate = new Date(startDate);
-    endDate.setMonth(endDate.getMonth() + 1);
+    const startDate = dto.startDate ? new Date(dto.startDate) : new Date();
+    const billingPeriod: 'monthly' | 'yearly' = dto.billingPeriod || 'monthly';
+    const endDate = this.computeEndDate(startDate, billingPeriod);
 
     const sub = await this.subRepo.save({
       companyId,
       tariffId: dto.tariffId,
+      billingPeriod,
       startDate,
       endDate,
       status: SubscriptionStatus.PENDING,
@@ -62,7 +77,9 @@ export class BillingBusinessService {
       metadata: {
         pdnConsentGiven: dto.pdnConsentGiven,
         consumerRightsAcknowledged: dto.consumerRightsAcknowledged,
+        billingPeriod,
         userIp: dto.userIpAddress,
+        userAgent: dto.userAgent,
       },
     });
 
@@ -155,6 +172,7 @@ export class BillingBusinessService {
         : undefined,
       startDate: sub.startDate,
       endDate: sub.endDate,
+      billingPeriod: sub.billingPeriod,
       status: sub.status,
       paymentMethod: sub.paymentMethod,
       autoRenew: false,
@@ -165,7 +183,19 @@ export class BillingBusinessService {
   }
 
   private auditSanitize(sub: Subscription) {
-    const { id, companyId, tariffId, startDate, endDate, status, paymentMethod, autoRenew, createdAt, updatedAt } = sub;
-    return { id, companyId, tariffId, startDate, endDate, status, paymentMethod, autoRenew, createdAt, updatedAt };
+    const {
+      id,
+      companyId,
+      tariffId,
+      billingPeriod,
+      startDate,
+      endDate,
+      status,
+      paymentMethod,
+      autoRenew,
+      createdAt,
+      updatedAt,
+    } = sub;
+    return { id, companyId, tariffId, billingPeriod, startDate, endDate, status, paymentMethod, autoRenew, createdAt, updatedAt };
   }
 }

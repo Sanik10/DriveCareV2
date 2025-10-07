@@ -3,6 +3,9 @@
 // Providers
 export type BillingProvider = 'yookassa' | 'tinkoff';
 
+// Billing period
+export type BillingPeriod = 'monthly' | 'yearly';
+
 // Audit / user context
 export interface AuditContext {
   userId?: string;

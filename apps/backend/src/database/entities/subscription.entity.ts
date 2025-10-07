@@ -38,6 +38,16 @@ export class Subscription {
   @Column({ name: 'tariff_id', type: 'uuid' })
   tariffId: string;
 
+  @Column({
+    name: 'billing_period',
+    type: 'enum',
+    enum: ['monthly', 'yearly'],
+    enumName: 'billing_period_enum',
+    default: 'monthly',
+  })
+  @Index()
+  billingPeriod: 'monthly' | 'yearly';
+
   @Column({ name: 'start_date', type: 'timestamptz' })
   startDate: Date;
 

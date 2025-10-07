@@ -41,6 +41,9 @@ export interface VehicleResponse {
   lastServiceDate?: string | Date | null;
   nextServiceDate?: string | Date | null;
 
+  // notes from backend (nullable in DB)
+  notes?: string | null;
+
   model?: VehicleModel | null;
   customer?: VehicleOwner | null;
 

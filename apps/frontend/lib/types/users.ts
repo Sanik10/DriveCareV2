@@ -3,7 +3,7 @@ export type UserStatus = 'active' | 'inactive' | 'blocked' | string;
 
 export interface RoleInfo {
   id: string;
-  name: string;
+  name: string; // slug роли (с бэка приходит name)
 }
 
 export interface UserResponse {
@@ -13,7 +13,7 @@ export interface UserResponse {
   lastName?: string | null;
   phone?: string | null;
   role?: RoleInfo | null;
-  status?: UserStatus;
+  status?: UserStatus; // нормализуем из isActive
 }
 
 export interface UsersQuery {
@@ -21,6 +21,7 @@ export interface UsersQuery {
   role?: string;
   page?: number;
   limit?: number;
+  status?: 'active' | 'inactive' | 'suspended' | 'blocked'; // для удобства, маппим в isActive
 }
 
 export interface PaginatedUsersResponse {
@@ -29,4 +30,10 @@ export interface PaginatedUsersResponse {
   page: number;
   limit: number;
   totalPages: number;
+  hasNext?: boolean;
+  hasPrev?: boolean;
 }
+
+/* Совместимость с существующими импортами */
+export type Role = RoleInfo;
+export type User = UserResponse;

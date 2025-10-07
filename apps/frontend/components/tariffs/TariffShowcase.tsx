@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Zap, Calendar, TrendingUp, Grid3X3, List } from 'lucide-react'
 import Link from 'next/link'
+import { useAuth } from '@/lib/hooks/use-auth'
+import { TariffPurchaseDialog } from './TariffPurchaseDialog'
 
 export function TariffShowcase({
   tariffs,
@@ -18,6 +20,9 @@ export function TariffShowcase({
 }) {
   const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [viewMode, setViewMode] = useState<'featured' | 'all'>('featured')
+  const { isAuthenticated } = useAuth()
+  const [purchaseOpen, setPurchaseOpen] = useState(false)
+  const [selectedTariff, setSelectedTariff] = useState<Tariff | null>(null)
 
   const maxDiscount = useMemo(() => {
     return tariffs.reduce((acc, t) => (t.yearlyDiscount && t.yearlyDiscount > acc ? t.yearlyDiscount : acc), 0)
@@ -77,7 +82,12 @@ export function TariffShowcase({
   }
 
   const handleTariffSelect = (tariff: Tariff) => {
-    window.location.href = `/auth/register?tariffId=${tariff.id}`
+    if (isAuthenticated) {
+      setSelectedTariff(tariff)
+      setPurchaseOpen(true)
+    } else {
+      window.location.href = `/auth/register?tariffId=${tariff.id}`
+    }
   }
 
   if (tariffs.length === 0) {
@@ -277,7 +287,7 @@ export function TariffShowcase({
           <h3 className="text-lg sm:text-xl font-semibold">
             Не можете выбрать подходящий план?
           </h3>
-          <p className="text-sm sm:text-base text-muted-foreground max-w-md mx-auto">
+        <p className="text-sm sm:text-base text-muted-foreground max-w-md mx-auto">
             Наши эксперты помогут подобрать оптимальный тариф для вашего автосервиса
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -292,6 +302,16 @@ export function TariffShowcase({
           </div>
         </div>
       </Card>
+
+      {/* Покупка тарифа (модалка) */}
+      {selectedTariff && (
+        <TariffPurchaseDialog
+          open={purchaseOpen}
+          onOpenChange={setPurchaseOpen}
+          tariff={selectedTariff}
+          initialPeriod={period}
+        />
+      )}
     </div>
   )
 }

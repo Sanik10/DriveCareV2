@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
+// path: apps/backend/src/modules/users/services/users-validation.service.ts
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -9,11 +10,14 @@ import { UpdateUserProfileDto } from '../dto/request/update-user-profile.dto';
 import { AuthRole } from '../../auth/types/auth.types';
 import { USERS_CONSTANTS } from '../constants/users.constants';
 
+// 🔐 NEW: RoleHierarchyService для валидации иерархии
+import { RoleHierarchyService } from './role-hierarchy.service';
+
 /**
  * 🔐 USERS VALIDATION SERVICE
  * 
  * Критически важный сервис безопасности:
- * ✅ Role hierarchy validation
+ * ✅ Role hierarchy validation (через RoleHierarchyService)
  * ✅ Multi-tenant isolation
  * ✅ XSS protection
  * ✅ Input sanitization
@@ -21,15 +25,19 @@ import { USERS_CONSTANTS } from '../constants/users.constants';
  */
 @Injectable()
 export class UsersValidationService {
+  private readonly logger = new Logger(UsersValidationService.name);
+
   constructor(
     @InjectRepository(Role)
     private rolesRepository: Repository<Role>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    // 🔐 NEW: RoleHierarchyService
+    private roleHierarchyService: RoleHierarchyService,
   ) {}
 
   /**
-   * 🔐 CRITICAL: Валидация назначения роли с проверкой иерархии
+   * 🔐 КРИТИЧЕСКОЕ ОБНОВЛЕНИЕ: Валидация назначения роли с использованием RoleHierarchyService
    * Предотвращает privilege escalation attacks
    */
   async validateRoleAssignment(
@@ -37,81 +45,56 @@ export class UsersValidationService {
     targetRoleId: string, 
     companyId: string
   ): Promise<void> {
-    // Получаем данные о назначающем пользователе
-    const assigner = await this.usersRepository.findOne({
-      where: { id: assignerId },
-      relations: ['role']
+    this.logger.debug(`Validating role assignment: assignerId=${assignerId}, targetRoleId=${targetRoleId}, companyId=${companyId}`);
+
+    // Используем RoleHierarchyService для полной валидации
+    const validation = await this.roleHierarchyService.validateRoleAssignment({
+      assignerId,
+      targetRoleId,
+      companyId,
     });
-    
-    if (!assigner) {
-      throw new NotFoundException(`Пользователь с ID ${assignerId} не найден`);
-    }
-    
-    // Получаем целевую роль
-    const targetRole = await this.rolesRepository.findOne({ 
-      where: { id: targetRoleId } 
-    });
-    
-    if (!targetRole) {
-      throw new NotFoundException(`Роль с ID ${targetRoleId} не найдена`);
-    }
-    
-    // 🔐 CRITICAL: Проверка принадлежности роли к компании
-    if (targetRole.companyId !== companyId && targetRole.companyId !== null) {
-      throw new ForbiddenException(
-        `Роль "${targetRole.name}" не принадлежит вашей компании. ` +
-        `Попытка назначения роли из другой компании заблокирована.`
+
+    if (!validation.canAssign) {
+      this.logger.error(
+        `SECURITY: Role assignment validation failed: ${validation.reason}, ` +
+        `assignerId=${assignerId}, targetRoleId=${targetRoleId}`
       );
-    }
-    
-    // 🔐 CRITICAL: Проверка иерархии ролей
-    if (!this.canAssignRole(assigner.role.name as AuthRole, targetRole.name as AuthRole)) {
-      throw new ForbiddenException(
-        `Нельзя назначить роль "${targetRole.name}" - она равна или выше вашей роли "${assigner.role.name}". ` +
-        `Иерархия ролей нарушена.`
-      );
+
+      // Формируем понятное сообщение об ошибке
+      const errorMessage = this.formatRoleAssignmentError(validation.reason);
+      throw new ForbiddenException(errorMessage);
     }
 
-    // 🔐 ADDITIONAL: Проверка специальных ограничений
-    await this.validateSpecialRoleRestrictions(assigner.role.name as AuthRole, targetRole.name as AuthRole);
+    this.logger.log(`✅ Role assignment validated successfully`);
   }
 
   /**
-   * 🔐 Проверка иерархии ролей с детальной валидацией
+   * 🔐 Форматирование сообщения об ошибке назначения роли
    */
-  private canAssignRole(assignerRole: AuthRole, targetRole: AuthRole): boolean {
-    const hierarchy = USERS_CONSTANTS.ROLES.HIERARCHY;
-    
-    const assignerLevel = hierarchy[assignerRole] || 0;
-    const targetLevel = hierarchy[targetRole] || 0;
-    
-    // Superadmin может назначать любые роли
-    if (assignerRole === 'superadmin') {
-      return true;
-    }
-    
-    // Остальные роли: можно назначить только роли ниже своей
-    return assignerLevel > targetLevel;
-  }
-
-  /**
-   * 🔐 Специальные ограничения для некоторых ролей
-   */
-  private async validateSpecialRoleRestrictions(assignerRole: AuthRole, targetRole: AuthRole): Promise<void> {
-    // Только company_owner может назначать company_admin
-    if (targetRole === 'company_admin' && assignerRole !== 'company_owner' && assignerRole !== 'superadmin') {
-      throw new ForbiddenException(
-        'Только владелец компании может назначать администраторов компании'
-      );
+  private formatRoleAssignmentError(reason?: string): string {
+    if (!reason) {
+      return 'Невозможно назначить эту роль';
     }
 
-    // Platform-level роли может назначать только superadmin
-    const platformRoles: AuthRole[] = ['platform_admin', 'auditor', 'support_engineer', 'system_operator'];
-    if (platformRoles.includes(targetRole) && assignerRole !== 'superadmin') {
-      throw new ForbiddenException(
-        'Платформенные роли может назначать только суперадминистратор'
-      );
-    }
+    const errorMap: Record<string, string> = {
+      'Assigner not found': 'Назначающий пользователь не найден',
+      'Target role not found': 'Целевая роль не найдена',
+      'System roles can only be assigned by superadmin': 
+        'Системные роли может назначать только суперадминистратор. ' +
+        'Для назначения этой роли обратитесь к администратору платформы.',
+      'Role belongs to different company': 
+        'Роль принадлежит другой компании. ' +
+        'Вы можете назначать только роли своей компании.',
+      'Cannot assign role equal or higher than own role': 
+        'Нельзя назначить роль равную или выше вашей. ' +
+        'Вы можете назначать только роли ниже по иерархии.',
+      'Only company_owner or superadmin can assign company_admin role':
+        'Роль "Администратор компании" может назначать только владелец компании или суперадминистратор.',
+      'Platform roles can only be assigned by superadmin':
+        'Платформенные роли может назначать только суперадминистратор.',
+    };
+
+    return errorMap[reason] || reason;
   }
 
   /**
@@ -129,6 +112,10 @@ export class UsersValidationService {
     }
     
     if (user.company_id !== companyId) {
+      this.logger.error(
+        `SECURITY: Multi-tenant violation: userId=${userId}, user.companyId=${user.company_id}, expected=${companyId}`
+      );
+      
       throw new ForbiddenException(
         `Пользователь ${user.firstName} ${user.lastName} (${user.email}) ` +
         `принадлежит другой компании. Multi-tenant нарушение заблокировано.`
@@ -208,6 +195,10 @@ export class UsersValidationService {
     
     // Системные роли (platform-level) имеют companyId = null
     if (role.companyId !== companyId && role.companyId !== null) {
+      this.logger.error(
+        `SECURITY: Role company mismatch: roleId=${roleId}, role.companyId=${role.companyId}, expected=${companyId}`
+      );
+      
       throw new ForbiddenException(
         `Роль "${role.name}" не принадлежит вашей компании. ` +
         `Нельзя назначить роль из другой компании.`

@@ -12,17 +12,19 @@ import {
   Trash2,
   Clock,
   DollarSign,
-  Settings,
-  Sparkles,
   TrendingUp,
   Filter,
   Tag
 } from 'lucide-react'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { AppLayout } from '@/components/app/AppLayout'
+import { PageFeatureBadge } from '@/components/app/PageFeatureBadge'
+import { PageFiltersCard, PageFiltersRow } from '@/components/app/PageFiltersCard'
+import { PageContentCard } from '@/components/app/PageContentCard'
+import { StatsCard, StatsGrid } from '@/components/app/StatsCard'
+import { PaginationControls } from '@/components/app/PaginationControls'
 import { useAuth } from '@/lib/hooks/use-auth'
 import { servicesAPI } from '@/lib/api/services'
 import type { PaginatedServicesResponse, ServiceCatalogueItem } from '@/lib/types/services'
@@ -118,13 +120,21 @@ export default function ServicesCataloguePage() {
   }
 
   const handleRefresh = async () => {
-    setPage(1);
-    const res = await servicesAPI.search({ ...query, page: 1 });
-    setData(res);
-    toast.success('Каталог обновлен');
-  };
+    setPage(1)
+    setLoading(true)
+    try {
+      const res = await servicesAPI.search({ ...query, page: 1 })
+      setData(res)
+      toast.success('Каталог обновлен')
+    } catch (e) {
+      toast.error('Ошибка обновления')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   if (!isMounted) return null
+  
   if (authLoading) {
     return (
       <AppLayout>
@@ -137,6 +147,7 @@ export default function ServicesCataloguePage() {
       </AppLayout>
     )
   }
+  
   if (!isAuthenticated || !user) return null
 
   const items = data?.items || []
@@ -159,7 +170,7 @@ export default function ServicesCataloguePage() {
         Новая услуга
       </Button>
     </div>
-  );
+  )
 
   return (
     <AppLayout
@@ -169,28 +180,20 @@ export default function ServicesCataloguePage() {
       actions={headerActions}
     >
       <div className="container mx-auto px-6 py-6 space-y-6">
-        {/* Services Feature Badge */}
-        <Card className="p-4 glass border-blue-500/20 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 rounded-3xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-blue-600 dark:text-blue-400">Каталог услуг с редактированием</h3>
-              <p className="text-sm text-muted-foreground">
-                Управление справочником услуг: цены, длительность, налогообложение. Inline редактирование и быстрый поиск.
-              </p>
-            </div>
-            <div className="ml-auto">
-              <TrendingUp className="w-6 h-6 text-secondary" />
-            </div>
-          </div>
-        </Card>
+        
+        {/* Feature Badge - теперь через компонент */}
+        <PageFeatureBadge
+          variant="blue-indigo"
+          icon={Building2}
+          title="Каталог услуг с редактированием"
+          description="Управление справочником услуг: цены, длительность, налогообложение. Inline редактирование и быстрый поиск."
+          aside={<TrendingUp className="w-6 h-6 text-secondary" />}
+        />
 
-        {/* Search & Filters */}
-        <Card className="p-4 glass border-border/30 rounded-3xl surface-glow">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="relative md:col-span-2">
+        {/* Filters - через PageFiltersCard */}
+        <PageFiltersCard>
+          <PageFiltersRow>
+            <div className="relative">
               <Input
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1) }}
@@ -215,150 +218,82 @@ export default function ServicesCataloguePage() {
                 Всего: {data?.total || 0}
               </div>
             </div>
+          </PageFiltersRow>
+        </PageFiltersCard>
+
+        {/* Stats - через StatsGrid + StatsCard */}
+        <StatsGrid cols={4}>
+          <StatsCard 
+            title="Всего услуг" 
+            value={data?.total || 0} 
+            icon={Building2} 
+            color="blue" 
+          />
+          <StatsCard 
+            title="Средняя цена" 
+            value={items.length > 0 
+              ? Math.round(items.reduce((sum, s) => sum + (s.price || 0), 0) / items.length).toLocaleString('ru-RU')
+              : 0
+            }
+            suffix="₽"
+            icon={DollarSign} 
+            color="emerald" 
+          />
+          <StatsCard 
+            title="Ср. длительность" 
+            value={items.length > 0
+              ? Math.round(items.reduce((sum, s) => sum + (s.durationMinutes || 0), 0) / items.length)
+              : 0
+            }
+            suffix="мин"
+            icon={Clock} 
+            color="amber" 
+          />
+          <StatsCard 
+            title="С НДС" 
+            value={items.filter(s => s.taxable !== false).length} 
+            icon={Tag} 
+            color="purple" 
+          />
+        </StatsGrid>
+
+        {/* Content - через PageContentCard */}
+        <PageContentCard
+          loading={loading}
+          error={error}
+          empty={items.length === 0}
+          emptyState={{
+            icon: Building2,
+            title: 'Услуги не найдены',
+            description: search ? 'Попробуйте изменить параметры поиска' : 'Добавьте первую услугу в каталог',
+            action: {
+              label: 'Добавить услугу',
+              onClick: handleCreate,
+            },
+          }}
+          onRetry={handleRefresh}
+        >
+          <div className="divide-y divide-border/30">
+            {items.map(svc => (
+              <ServiceRow 
+                key={svc.id} 
+                service={svc} 
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+            ))}
           </div>
-        </Card>
+        </PageContentCard>
 
-        {/* Services List */}
-        <Card className="p-0 glass border-border/30 rounded-3xl surface-glow overflow-hidden">
-          {loading ? (
-            <div className="p-6 space-y-3">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-16 bg-surface-1/40 rounded-2xl animate-pulse" />
-              ))}
-            </div>
-          ) : error ? (
-            <div className="p-6 text-center text-destructive">
-              <div className="flex items-center justify-center gap-2 mb-3">
-                <Settings className="w-5 h-5" />
-                <span className="font-medium">Ошибка загрузки</span>
-              </div>
-              <p>{error}</p>
-              <Button onClick={handleRefresh} className="mt-4 rounded-2xl">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Повторить
-              </Button>
-            </div>
-          ) : items.length === 0 ? (
-            <div className="p-10 text-center text-muted-foreground">
-              <Building2 className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <h3 className="font-semibold mb-2">Услуги не найдены</h3>
-              <p className="text-sm mb-4">
-                {search ? 'Попробуйте изменить параметры поиска' : 'Добавьте первую услугу в каталог'}
-              </p>
-              <Button 
-                onClick={handleCreate}
-                className="rounded-2xl bg-gradient-primary hover:opacity-90"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Добавить услугу
-              </Button>
-            </div>
-          ) : (
-            <div className="divide-y divide-border/30">
-              {items.map(svc => (
-                <ServiceRow 
-                  key={svc.id} 
-                  service={svc} 
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))}
-            </div>
-          )}
-        </Card>
-
-        {/* Pagination */}
-        {data && data.totalPages > 1 && (
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              Показано: {items.length} из {data.total} услуг
-            </div>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                disabled={(data.page || 1) <= 1} 
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="rounded-2xl btn-outline-fixed"
-              >
-                Назад
-              </Button>
-              <span className="text-sm px-3 py-1 rounded-xl bg-surface-1/60">
-                {data.page || 1} / {data.totalPages || 1}
-              </span>
-              <Button 
-                variant="outline" 
-                disabled={(data.page || 1) >= (data.totalPages || 1)} 
-                onClick={() => setPage((p) => p + 1)}
-                className="rounded-2xl btn-outline-fixed"
-              >
-                Далее
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Service Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-blue-500/20">
-                <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Всего услуг</div>
-                <div className="text-xl font-bold">{data?.total || 0}</div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-emerald-500/20">
-                <DollarSign className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Средняя цена</div>
-                <div className="text-xl font-bold">
-                  {items.length > 0 
-                    ? Math.round(items.reduce((sum, s) => sum + (s.price || 0), 0) / items.length).toLocaleString('ru-RU')
-                    : 0
-                  } ₽
-                </div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-amber-500/20">
-                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Ср. длительность</div>
-                <div className="text-xl font-bold">
-                  {items.length > 0
-                    ? Math.round(items.reduce((sum, s) => sum + (s.durationMinutes || 0), 0) / items.length)
-                    : 0
-                  } мин
-                </div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-purple-500/20">
-                <Tag className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">С НДС</div>
-                <div className="text-xl font-bold">
-                  {items.filter(s => s.taxable !== false).length}
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
+        {/* Pagination - через PaginationControls */}
+        <PaginationControls
+          page={page}
+          totalPages={data?.totalPages || 1}
+          total={data?.total || 0}
+          showing={items.length}
+          onPageChange={setPage}
+          itemLabel="услуг"
+        />
       </div>
 
       <ServiceEditDialog 
@@ -371,7 +306,7 @@ export default function ServicesCataloguePage() {
   )
 }
 
-// Service Row Component
+// Service Row Component (оставляем как есть - уникальный контент)
 function ServiceRow({ 
   service, 
   onEdit, 
@@ -433,5 +368,5 @@ function ServiceRow({
         </div>
       </div>
     </div>
-  );
+  )
 }

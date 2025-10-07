@@ -1,3 +1,5 @@
+// path: apps/backend/src/modules/subscriptions/subscription-billing/dto/response/payment-status-response.dto.ts
+
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class PaymentStatusResponseDto {

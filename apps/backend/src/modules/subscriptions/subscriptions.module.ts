@@ -12,12 +12,15 @@ import { Subscription, Tariff, Company } from '../../database/entities';
 import { AuditService } from '../../common/audit/audit.service';
 import { ConfigModule } from '@nestjs/config';
 import { RedisModule } from '../../common/redis/redis.module';
+import { SubscriptionBillingModule } from './subscription-billing/subscription-billing.module';
 
 @Module({
   imports: [
     ConfigModule,
     RedisModule,
     TypeOrmModule.forFeature([Subscription, Tariff, Company]),
+    // Включаем маршруты /subscription-billing
+    SubscriptionBillingModule,
   ],
   controllers: [SubscriptionsController],
   providers: [
@@ -28,7 +31,6 @@ import { RedisModule } from '../../common/redis/redis.module';
     SubscriptionLimitsService,
     SubscriptionsMapperService,
     AuditService,
-    // убрано: AuditLoggingInterceptor, SecurityHeadersInterceptor
   ],
   exports: [
     SubscriptionsService,

@@ -44,3 +44,11 @@ export { PartReservation } from './part-reservation.entity';
 export { Payment } from './payment.entity';
 export { PaymentMethod } from './payment-method.entity';
 export { Invoice } from './invoice.entity';
+
+// Subscription extras
+export { SubscriptionPaymentLog } from './subscription-payment-log.entity';
+export { SubscriptionConsent } from './subscription-consent.entity';
+export { SubscriptionComplianceLog } from './subscription-compliance-log.entity';
+
+// Invites
+export { UserInvite } from './user-invite.entity';

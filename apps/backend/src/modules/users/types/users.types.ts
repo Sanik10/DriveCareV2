@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/users/types/users.types.ts
 import { AuthRole, UserStatus, UserSortField, SortOrder } from '../../auth/types/auth.types';
 
 /**

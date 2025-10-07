@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -11,7 +11,7 @@ import {
   ArrowRight,
   Building2,
   AlertCircle,
-  User,
+  User as UserIcon,
   Mail,
   Phone,
   Lock,
@@ -25,17 +25,27 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { authAPI } from '@/lib/api/auth';
-import { RegisterInviteRequest, EMAIL_REGEX, PASSWORD_REGEX, PHONE_REGEX } from '@/lib/types/auth';
+import { PASSWORD_REGEX, PHONE_REGEX } from '@/lib/types/auth';
 import styles from './invite.module.css';
+import { buildApiUrl } from '@/lib/api/core';
+
+// Допускаем два формата токена: 64 hex (наш backend) или UUID v4 (на будущее)
+const TOKEN_HEX64 = /^[0-9a-f]{64}$/i;
+const TOKEN_UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const inviteSchema = z
   .object({
     inviteCode: z
       .string()
       .min(1, 'Код приглашения обязателен')
-      .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i, 'Некорректный код приглашения'),
-    email: z.string().min(1, 'Email обязателен').regex(EMAIL_REGEX, 'Некорректный email'),
+      .refine((v) => TOKEN_HEX64.test(v) || TOKEN_UUID_V4.test(v), 'Некорректный токен приглашения'),
+    // email теперь на бэке не обязателен для /auth/register-invite — оставим поле как справочное, но не шлём в запрос
+    email: z
+      .string()
+      .email('Некорректный email')
+      .optional()
+      .or(z.literal(''))
+      .default(''),
     password: z.string().min(8, 'Минимум 8 символов').regex(PASSWORD_REGEX, 'Пароль должен содержать строчные и заглавные буквы, цифры и спецсимволы'),
     confirmPassword: z.string(),
     firstName: z.string().min(1, 'Имя обязательно').max(100),
@@ -59,6 +69,7 @@ const inviteSchema = z
 type InviteForm = z.infer<typeof inviteSchema>;
 
 function RegisterInviteForm() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -74,12 +85,12 @@ function RegisterInviteForm() {
     resolver: zodResolver(inviteSchema),
   });
 
-  // Заполнить код приглашения из URL
+  // Префилл из URL: сперва ?token=..., fallback на ?code=...
   useEffect(() => {
-    const inviteCode = searchParams.get('code');
-    if (inviteCode) {
-      setValue('inviteCode', inviteCode);
-    }
+    const token = searchParams.get('token') || searchParams.get('code');
+    if (token) setValue('inviteCode', token);
+    const email = searchParams.get('email');
+    if (email) setValue('email', email);
   }, [searchParams, setValue]);
 
   const onSubmit = async (data: InviteForm) => {
@@ -87,28 +98,33 @@ function RegisterInviteForm() {
     setApiError(null);
 
     try {
-      const requestData: RegisterInviteRequest = {
-        inviteCode: data.inviteCode,
-        email: data.email,
+      // Формируем контракт бэка: { token, password, firstName, lastName, phone? }
+      const payload = {
+        token: data.inviteCode,
         password: data.password,
         firstName: data.firstName,
         lastName: data.lastName,
         phone: data.phone || undefined,
-        specialization: data.specialization || undefined,
       };
 
-      await authAPI.registerInvite(requestData);
+      const res = await fetch(buildApiUrl('/auth/register-invite'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // важно для RT-cookie
+        body: JSON.stringify(payload),
+      });
 
-      // Текущий бэкенд возвращает 404 (Endpoint not available). Если когда‑то включится,
-      // можно будет добавить авто‑логин и redirect на /dashboard.
-      setApiError('Регистрация по приглашению временно недоступна. Обратитесь к администратору компании.');
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(text || `Ошибка регистрации (${res.status})`);
+      }
+
+      // Успех: бэкенд ставит RT-cookie и возвращает токены/пользователя.
+      // Можно редиректить в дэшборд.
+      router.replace('/dashboard');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
-      if (/endpoint not available/i.test(message) || /404/.test(message)) {
-        setApiError('Регистрация по приглашению недоступна.');
-      } else {
-        setApiError(message);
-      }
+      setApiError(message);
     } finally {
       setIsLoading(false);
     }
@@ -417,7 +433,7 @@ function RegisterInviteForm() {
                   <Network className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
                   <Input
                     {...register('inviteCode')}
-                    placeholder="Код приглашения"
+                    placeholder="Токен приглашения"
                     disabled={isLoading}
                     error={errors.inviteCode?.message}
                     className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
@@ -429,7 +445,7 @@ function RegisterInviteForm() {
                   <Input
                     {...register('email')}
                     type="email"
-                    placeholder="Email"
+                    placeholder="Email (необязательно)"
                     autoComplete="email"
                     disabled={isLoading}
                     error={errors.email?.message}
@@ -439,7 +455,7 @@ function RegisterInviteForm() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="relative group">
-                    <User className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+                    <UserIcon className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
                     <Input
                       {...register('firstName')}
                       placeholder="Имя"
@@ -450,7 +466,7 @@ function RegisterInviteForm() {
                   </div>
 
                   <div className="relative group">
-                    <User className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+                    <UserIcon className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
                     <Input
                       {...register('lastName')}
                       placeholder="Фамилия"

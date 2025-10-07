@@ -22,7 +22,7 @@ export class CompanyOnboardingService {
     private roleRepository: Repository<Role>,
     private usersService: UsersService,
     private dataSource: DataSource,
-    private config: ConfigService, // ✅ ДОБАВЛЕНО: для хеширования паролей
+    private config: ConfigService, // ✅ для хеширования паролей
   ) {}
 
   async createCompanyWithOwner(registerDto: RegisterCompanyDto): Promise<RegisterCompanyResponseDto> {
@@ -37,11 +37,11 @@ export class CompanyOnboardingService {
 
       // Создаём компанию
       const company = await this.createCompany(registerDto, manager);
-      
-      // Создаём системные роли для компании
+
+      // Создаём базовые роли для компании
       const ownerRole = await this.createCompanyRoles(company.id, manager);
-      
-      // ✅ ИСПРАВЛЕНО: Создаём владельца ВНУТРИ транзакции
+
+      // Создаём владельца ВНУТРИ транзакции
       const owner = await this.createCompanyOwnerInTransaction(registerDto, company.id, ownerRole.id, manager);
 
       return {
@@ -79,7 +79,7 @@ export class CompanyOnboardingService {
     const ownerRole = manager.getRepository(Role).create({
       name: AUTH_CONSTANTS.SYSTEM_ROLES.COMPANY_OWNER,
       description: 'Владелец компании - полный доступ',
-      isSystem: true,
+      isSystem: false, // <= роли компании НЕ системные
       companyId,
     });
 
@@ -90,54 +90,59 @@ export class CompanyOnboardingService {
       {
         name: AUTH_CONSTANTS.SYSTEM_ROLES.COMPANY_ADMIN,
         description: 'Администратор - управление персоналом и настройками',
-        isSystem: true,
+        isSystem: false,
         companyId,
       },
       {
         name: AUTH_CONSTANTS.SYSTEM_ROLES.MANAGER,
         description: 'Менеджер - управление заказами и клиентами',
-        isSystem: true,
+        isSystem: false,
         companyId,
       },
       {
         name: AUTH_CONSTANTS.SYSTEM_ROLES.SERVICE_ADVISOR,
         description: 'Приемщик - ведёт записи на обслуживание',
-        isSystem: true,
+        isSystem: false,
         companyId,
       },
       {
         name: AUTH_CONSTANTS.SYSTEM_ROLES.CASHIER,
         description: 'Кассир - работа со счетами и платежами',
-        isSystem: true,
+        isSystem: false,
         companyId,
       },
       {
         name: AUTH_CONSTANTS.SYSTEM_ROLES.INVENTORY_MANAGER,
         description: 'Складской специалист - управление запасами',
-        isSystem: true,
+        isSystem: false,
         companyId,
       },
       {
         name: AUTH_CONSTANTS.SYSTEM_ROLES.LEAD_MECHANIC,
         description: 'Старший мастер - контролирует других механиков',
-        isSystem: true,
+        isSystem: false,
         companyId,
       },
       {
         name: AUTH_CONSTANTS.SYSTEM_ROLES.MECHANIC,
         description: 'Механик - выполнение работ и учёт времени',
-        isSystem: true,
+        isSystem: false,
         companyId,
       },
       {
         name: AUTH_CONSTANTS.SYSTEM_ROLES.DIAGNOSTIC,
         description: 'Диагност - диагностика и специализированные работы',
-        isSystem: true,
+        isSystem: false,
+        companyId,
+      },
+      {
+        name: 'viewer',
+        description: 'Просмотр данных без права изменения',
+        isSystem: false,
         companyId,
       },
     ];
 
-    // Сохраняем роли используя manager
     for (const roleData of roles) {
       const role = manager.getRepository(Role).create(roleData);
       await manager.getRepository(Role).save(role);
@@ -146,10 +151,10 @@ export class CompanyOnboardingService {
     return savedOwnerRole;
   }
 
-  // ✅ НОВЫЙ МЕТОД: Создание пользователя внутри транзакции
+  // Создание пользователя внутри транзакции
   private async createCompanyOwnerInTransaction(
-    registerDto: RegisterCompanyDto, 
-    companyId: string, 
+    registerDto: RegisterCompanyDto,
+    companyId: string,
     ownerRoleId: string,
     manager: EntityManager
   ): Promise<User> {
@@ -170,7 +175,6 @@ export class CompanyOnboardingService {
     return manager.getRepository(User).save(owner);
   }
 
-  // ✅ НОВЫЙ МЕТОД: Копия логики хеширования из UsersService
   private async hashPassword(password: string): Promise<string> {
     const pepper = this.config.get<string>('PWD_PEPPER', '');
     return argon2.hash(`${password}${pepper}`, {
@@ -181,7 +185,6 @@ export class CompanyOnboardingService {
     });
   }
 
-  // ✅ НОВЫЙ МЕТОД: Нормализация email
   private normalizeEmail(email: string): string {
     return (email || '').trim().toLowerCase();
   }
@@ -190,15 +193,15 @@ export class CompanyOnboardingService {
     if (!companyId) {
       throw new Error('Company ID is required');
     }
-    
+
     return this.roleRepository.find({
-      where: { 
+      where: {
         companyId,
-        isSystem: true 
+        isSystem: false, // <= роли компании
       },
       order: {
-        name: 'ASC'
-      }
+        name: 'ASC',
+      },
     });
   }
 
@@ -206,12 +209,12 @@ export class CompanyOnboardingService {
     if (!roleName || !companyId) {
       throw new Error('Role name and Company ID are required');
     }
-    
+
     return this.roleRepository.findOne({
-      where: { 
+      where: {
         name: roleName,
-        companyId 
-      }
+        companyId,
+      },
     });
   }
 
@@ -223,29 +226,23 @@ export class CompanyOnboardingService {
     const [roles, users, company] = await Promise.all([
       this.findCompanyRoles(companyId),
       this.usersService.findByCompanyId(companyId),
-      this.companyRepository.findOne({ where: { id: companyId } })
+      this.companyRepository.findOne({ where: { id: companyId } }),
     ]);
 
     return {
       totalRoles: roles.length,
       totalUsers: users.length,
-      companyInfo: company,
+      companyInfo: company!,
     };
   }
 
   async deactivateCompany(companyId: string): Promise<void> {
     await this.dataSource.transaction(async (manager: EntityManager) => {
       // Деактивируем компанию
-      await manager.getRepository(Company).update(
-        { id: companyId },
-        { isActive: false }
-      );
+      await manager.getRepository(Company).update({ id: companyId }, { isActive: false });
 
       // Деактивируем всех пользователей компании
-      await manager.getRepository(User).update(
-        { company_id: companyId },
-        { isActive: false }
-      );
+      await manager.getRepository(User).update({ company_id: companyId }, { isActive: false });
     });
   }
 }

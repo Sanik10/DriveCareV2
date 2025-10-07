@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/users/dto/request/update-user-role.dto.ts
 import { IsUUID, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 

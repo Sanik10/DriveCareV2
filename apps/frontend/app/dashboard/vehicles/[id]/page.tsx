@@ -470,7 +470,13 @@ export default function VehicleDetailsPage() {
                           label="Телефон"
                           value={vehicle.customer.phone}
                           clickable
-                          onClick={() => copyText(vehicle.customer.phone)}
+                          onClick={() => {
+                            if (!vehicle.customer?.phone) {
+                              toast.warning('У клиента не указан телефон');
+                              return;
+                            }
+                            copyText(vehicle.customer.phone);
+                          }}
                         />
                       )}
                       
@@ -480,7 +486,13 @@ export default function VehicleDetailsPage() {
                           label="Email"
                           value={vehicle.customer.email}
                           clickable
-                          onClick={() => copyText(vehicle.customer.email)}
+                          onClick={() => {
+                            if (!vehicle.customer?.email) {
+                              toast.warning('У клиента не указана почта');
+                              return;
+                            }
+                            copyText(vehicle.customer.email);
+                          }}
                         />
                       )}
                     </div>

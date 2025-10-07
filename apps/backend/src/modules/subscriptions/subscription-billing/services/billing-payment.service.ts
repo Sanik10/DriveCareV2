@@ -78,22 +78,45 @@ export class BillingPaymentService {
     status: 'pending' | 'succeeded' | 'failed';
     provider: BillingProvider;
     redirectUrl?: string;
+    chargedAmount: number;
+    currency: 'RUB';
   }> {
-    const sub = await this.subRepo.findOne({ where: { id: dto.subscriptionId, companyId } });
+    const sub = await this.subRepo.findOne({
+      where: { id: dto.subscriptionId, companyId },
+      relations: ['tariff'],
+    });
     if (!sub) throw new NotFoundException('Подписка не найдена');
 
-    if (dto.currency !== 'RUB') {
-      throw new BadRequestException('Поддерживается только валюта RUB');
+    // Валюта фиксирована
+    const currency: 'RUB' = 'RUB';
+
+    // Определяем период и сумму на сервере
+    const ms = sub.endDate.getTime() - sub.startDate.getTime();
+    const approxDays = ms / 86400000;
+    const period: 'monthly' | 'yearly' = (sub as any).billingPeriod || (approxDays >= 330 ? 'yearly' : 'monthly');
+
+    const price = period === 'yearly' ? sub.tariff?.priceYearly : sub.tariff?.priceMonthly;
+    if (typeof price !== 'number' || isNaN(price)) {
+      throw new BadRequestException('Невозможно определить стоимость тарифа');
     }
+
+    // Минимальные/максимальные пороги безопасности
+    if (price < 1) throw new BadRequestException('Сумма платежа слишком мала');
+    if (price > 1_000_000) throw new BadRequestException('Сумма платежа превышает допустимый предел');
 
     const gateway = this.getGateway(dto.gatewayProvider);
     const result = await gateway.createPayment(
       {
-        amount: dto.amount,
-        currency: 'RUB',
-        paymentMethod: (dto.paymentMethod || 'bank_transfer') as any,
+        amount: price,
+        currency,
+        paymentMethod: (dto.paymentMethod || 'card') as any, // по умолчанию редиректный сценарий
         gatewayProvider: (dto.gatewayProvider || 'yookassa') as any,
-        metadata: dto.metadata,
+        metadata: {
+          subscriptionId: sub.id,
+          companyId,
+          context: 'subscription',
+          billingPeriod: period,
+        },
       },
       { idempotencyKey: ctx.idempotencyKey },
     );
@@ -101,8 +124,8 @@ export class BillingPaymentService {
     const log = await this.payRepo.save({
       subscriptionId: sub.id,
       companyId,
-      amount: dto.amount.toFixed(2),
-      currency: 'RUB',
+      amount: Number(price).toFixed(2),
+      currency,
       status:
         result.status === 'succeeded'
           ? SubscriptionPaymentStatus.COMPLETED
@@ -112,8 +135,10 @@ export class BillingPaymentService {
       gatewayType: result.provider,
       gatewayTransactionId: result.id,
       gatewayResponse: this.truncateJson(result.raw),
-      mirCardUsed: dto.paymentMethod === 'mir',
-      paymentMethodType: (dto.paymentMethod?.toLowerCase() as PaymentMethodType) || PaymentMethodType.BANK_TRANSFER,
+      mirCardUsed: (dto.paymentMethod?.toLowerCase() || '') === 'mir',
+      paymentMethodType:
+        ((dto.paymentMethod?.toLowerCase() as PaymentMethodType) ||
+          PaymentMethodType.CARD) ?? PaymentMethodType.CARD,
       amlCheckStatus: 'passed',
       amlRiskScore: 0,
       suspiciousActivityReported: false,
@@ -123,13 +148,15 @@ export class BillingPaymentService {
       description: 'Subscription payment',
     });
 
-    this.logger.log(`Платёж создан: ${log.id}, provider=${result.provider}, status=${result.status}`);
+    this.logger.log(`Платёж создан: ${log.id}, provider=${result.provider}, status=${result.status}, amount=${price.toFixed(2)} ${currency}`);
 
     return {
       paymentId: log.id,
       status: result.status,
       provider: result.provider as BillingProvider,
       redirectUrl: result.redirectUrl,
+      chargedAmount: price,
+      currency,
     };
   }
 
@@ -196,9 +223,7 @@ export class BillingPaymentService {
         this.logger.log(`Auto-cancelled subscription ${existing.subscriptionId} due to ${newStatus}`);
       }
     } catch (e) {
-      this.logger.error(
-        `Auto action failed for subscription ${existing.subscriptionId}: ${e?.message || e}`,
-      );
+      this.logger.error(`Auto action failed for subscription ${existing.subscriptionId}: ${e?.message || e}`);
     }
   }
 }

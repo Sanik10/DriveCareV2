@@ -6,7 +6,9 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { paymentsAPI } from '@/lib/api/payments';
+import { subscriptionBillingAPI } from '@/lib/api/subscription-billing';
 import type { Payment } from '@/lib/types/payments';
+import type { BillingSubscriptionResponse } from '@/lib/types/subscriptions';
 import { CheckCircle2, XCircle, Loader2, ArrowLeft, ArrowRight } from 'lucide-react';
 
 function fmt(date?: string | Date) {
@@ -26,8 +28,25 @@ function safeClearLastPaymentId(expectedId: string) {
   }
 }
 
+function getQueryParam(name: string): string | null {
+  try {
+    const url = new URL(window.location.href);
+    return url.searchParams.get(name);
+  } catch {
+    return null;
+  }
+}
+
 export default function PaymentResultPage() {
+  const [context, setContext] = useState<'invoice' | 'subscription'>('invoice');
+
+  // Invoice (legacy) state
   const [payment, setPayment] = useState<Payment | null>(null);
+
+  // Subscription state
+  const [subscription, setSubscription] = useState<BillingSubscriptionResponse | null>(null);
+
+  // Common UI state
   const [status, setStatus] = useState<'pending' | 'ok' | 'fail'>('pending');
   const [error, setError] = useState<string | null>(null);
   const [polling, setPolling] = useState(true);
@@ -35,8 +54,7 @@ export default function PaymentResultPage() {
 
   const paymentId = useMemo(() => {
     try {
-      const url = new URL(window.location.href);
-      const q = url.searchParams.get('paymentId');
+      const q = getQueryParam('paymentId');
       if (q) return q;
     } catch {
       // noop
@@ -49,19 +67,57 @@ export default function PaymentResultPage() {
   }, []);
 
   useEffect(() => {
-    if (!paymentId) {
-      setStatus('fail');
-      setError('Не найден идентификатор платежа');
-      return;
-    }
+    const ctx = (getQueryParam('context') || '').toLowerCase();
+    setContext(ctx === 'subscription' ? 'subscription' : 'invoice');
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
-    const poll = async () => {
-      if (cancelled) return;
+    // Subscription flow polling: check active subscription
+    const pollSubscription = async () => {
+      try {
+        const sub = await subscriptionBillingAPI.getActive();
+        if (cancelled) return;
+
+        if (sub && sub.status === 'active') {
+          setSubscription(sub);
+          setStatus('ok');
+          setPolling(false);
+          if (paymentId) safeClearLastPaymentId(paymentId);
+          return;
+        }
+
+        tries.current += 1;
+        if (tries.current >= 30) {
+          // 30 * 2s = ~60s ожидания — дальше считаем, что обработка продолжается
+          setPolling(false);
+          setStatus('pending');
+          return;
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError((e as Error)?.message || 'Ошибка проверки статуса подписки');
+          setStatus('fail');
+          setPolling(false);
+          if (paymentId) safeClearLastPaymentId(paymentId);
+        }
+      }
+    };
+
+    // Invoice flow polling: check payment status by id
+    const pollInvoicePayment = async () => {
+      if (!paymentId) {
+        setStatus('fail');
+        setError('Не найден идентификатор платежа');
+        setPolling(false);
+        return;
+      }
       try {
         const p = await paymentsAPI.get(paymentId);
         if (cancelled) return;
         setPayment(p);
+
         if (p.status === 'processed' || p.status === 'refunded' || p.status === 'partially_refunded') {
           setStatus('ok');
           setPolling(false);
@@ -86,14 +142,23 @@ export default function PaymentResultPage() {
       }
     };
 
-    void poll();
-    const t = setInterval(() => void poll(), 3000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(t);
-    };
-  }, [paymentId]);
+    // Initial fire and interval
+    if (context === 'subscription') {
+      void pollSubscription();
+      const t = setInterval(() => void pollSubscription(), 2000);
+      return () => {
+        cancelled = true;
+        clearInterval(t);
+      };
+    } else {
+      void pollInvoicePayment();
+      const t = setInterval(() => void pollInvoicePayment(), 3000);
+      return () => {
+        cancelled = true;
+        clearInterval(t);
+      };
+    }
+  }, [context, paymentId]);
 
   const isOk = status === 'ok';
   const isFail = status === 'fail';
@@ -106,10 +171,10 @@ export default function PaymentResultPage() {
       <div className="fixed bottom-0 left-0 w-64 h-64 bg-secondary/10 rounded-full blur-3xl -z-10" />
       <main className="container mx-auto px-6 py-8 space-y-6">
         <div className="flex items-center justify-between">
-          <Link href="/dashboard/invoices">
+          <Link href={context === 'subscription' ? '/dashboard/billing' : '/dashboard/invoices'}>
             <Button variant="ghost" className="rounded-2xl">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              К счетам
+              {context === 'subscription' ? 'К подписке' : 'К счетам'}
             </Button>
           </Link>
         </div>
@@ -120,13 +185,61 @@ export default function PaymentResultPage() {
             {isOk && <CheckCircle2 className="w-6 h-6 text-emerald-500" />}
             {isFail && <XCircle className="w-6 h-6 text-rose-500" />}
             <h1 className="text-xl font-semibold">
-              {isPending && 'Ожидание подтверждения оплаты'}
-              {isOk && 'Оплата успешно подтверждена'}
-              {isFail && 'Оплата не подтверждена'}
+              {isPending && (context === 'subscription' ? 'Ожидание подтверждения оплаты подписки' : 'Ожидание подтверждения оплаты')}
+              {isOk && (context === 'subscription' ? 'Подписка активирована' : 'Оплата успешно подтверждена')}
+              {isFail && (context === 'subscription' ? 'Оплата подписки не подтверждена' : 'Оплата не подтверждена')}
             </h1>
           </div>
 
-          {payment && (
+          {/* Subscription context view */}
+          {context === 'subscription' && (
+            <div className="space-y-4 text-sm text-center">
+              {subscription && (
+                <div className="grid sm:grid-cols-2 gap-4 text-left">
+                  <div>
+                    <div className="text-muted-foreground text-xs">Тариф</div>
+                    <div className="font-medium">{subscription.tariff?.name || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">Период</div>
+                    <div className="font-medium">{subscription.billingPeriod === 'yearly' ? 'Годовой' : 'Месячный'}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">Начало</div>
+                    <div className="font-medium">{fmt(subscription.startDate)}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">Окончание</div>
+                    <div className="font-medium">{fmt(subscription.endDate)}</div>
+                  </div>
+                </div>
+              )}
+
+              {error && <div className="text-sm text-destructive">{error}</div>}
+
+              <div className="mt-4 flex items-center justify-center gap-3">
+                <Link href="/dashboard/billing">
+                  <Button className="rounded-2xl">
+                    К подписке <ArrowRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </Link>
+                <Link href="/tariffs">
+                  <Button variant="outline" className="rounded-2xl">
+                    Каталог тарифов
+                  </Button>
+                </Link>
+              </div>
+
+              {isPending && !subscription && !error && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Платёж обрабатывается провайдером. Если подписка не отобразилась автоматически, проверьте позже на странице “Подписка”.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Invoice (default) view */}
+          {context === 'invoice' && payment && (
             <div className="grid md:grid-cols-2 gap-4 text-sm">
               <div>
                 <div className="text-muted-foreground text-xs">Платёж</div>
@@ -152,19 +265,21 @@ export default function PaymentResultPage() {
             </div>
           )}
 
-          {error && <div className="mt-4 text-sm text-destructive text-center">{error}</div>}
+          {context === 'invoice' && !payment && error && (
+            <div className="mt-4 text-sm text-destructive text-center">{error}</div>
+          )}
 
           <div className="mt-6 flex items-center justify-center gap-3">
-            {payment?.invoiceId && (
+            {context === 'invoice' && payment?.invoiceId && (
               <Link href={`/dashboard/invoices/${payment.invoiceId}`}>
                 <Button className="rounded-2xl">
                   К счёту <ArrowRight className="w-4 h-4 ml-1" />
                 </Button>
               </Link>
             )}
-            <Link href="/dashboard/payments">
+            <Link href={context === 'subscription' ? '/dashboard/billing' : '/dashboard/payments'}>
               <Button variant="outline" className="rounded-2xl">
-                К платежам
+                {context === 'subscription' ? 'К подписке' : 'К платежам'}
               </Button>
             </Link>
           </div>

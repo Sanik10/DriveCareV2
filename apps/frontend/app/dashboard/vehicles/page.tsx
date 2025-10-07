@@ -1,7 +1,7 @@
 // path: apps/frontend/app/dashboard/vehicles/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
@@ -9,6 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { AppLayout } from '@/components/app/AppLayout';
+import { PageFeatureBadge } from '@/components/app/PageFeatureBadge';
+import { PageFiltersCard, PageFiltersRow, PageFiltersAdvanced } from '@/components/app/PageFiltersCard';
+import { PageContentCard } from '@/components/app/PageContentCard';
+import { StatsCard, StatsGrid } from '@/components/app/StatsCard';
+import { PaginationControls } from '@/components/app/PaginationControls';
 import { 
   Car, 
   Search, 
@@ -22,9 +27,7 @@ import {
   Hash,
   User,
   Calendar,
-  Sparkles,
   TrendingUp,
-  Zap
 } from 'lucide-react';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { vehiclesAPI } from '@/lib/api/vehicles';
@@ -50,21 +53,37 @@ const ENGINE_TYPES: { value: EngineType; label: string }[] = [
   { value: 'electric', label: 'Электро' },
 ];
 
-export default function VehiclesListPage() {
+export default function VehiclesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-muted-foreground">Загрузка автомобилей...</span>
+          </div>
+        </div>
+      }
+    >
+      <VehiclesListPage />
+    </Suspense>
+  );
+}
+
+function VehiclesListPage() {
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // ✅ ВСЕ useState в начале
   const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PaginatedVehiclesResponse | null>(null);
-
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(12); // Grid view - more per page
+  const [limit, setLimit] = useState(12);
   const [serviceFilter, setServiceFilter] = useState<'all' | 'ok' | 'soon' | 'overdue'>('all');
-
   const [openCreate, setOpenCreate] = useState(false);
 
   // Catalogue filters
@@ -81,6 +100,64 @@ export default function VehiclesListPage() {
   const [yearTo, setYearTo] = useState<string>('');
   const [hasServiceHistory, setHasServiceHistory] = useState<boolean | ''>('');
 
+  // ✅ ВСЕ useMemo ДО условных return
+  const filteredModels = useMemo(() => {
+    if (!brandId) return models;
+    return models.filter(m => (m.brandId === brandId) || (m.brand?.id === brandId));
+  }, [models, brandId]);
+
+  const query: VehiclesQuery = useMemo(() => ({
+    search: search || undefined,
+    page,
+    limit,
+    modelId: modelId || undefined,
+    vehicleTypeId: vehicleTypeId || undefined,
+    engineType: engineType || undefined,
+    yearFrom: yearFrom ? parseInt(yearFrom, 10) : undefined,
+    yearTo: yearTo ? parseInt(yearTo, 10) : undefined,
+    hasServiceHistory: hasServiceHistory === '' ? undefined : !!hasServiceHistory,
+  }), [search, page, limit, modelId, vehicleTypeId, engineType, yearFrom, yearTo, hasServiceHistory]);
+
+  const items = useMemo(() => data?.items || [], [data]);
+
+  const filteredItems = useMemo(() => {
+    if (serviceFilter === 'all') return items;
+    return items.filter(vehicle => {
+      const serviceStatus = getVehicleServiceStatus(vehicle);
+      return serviceFilter === serviceStatus;
+    });
+  }, [items, serviceFilter]);
+
+  const serviceStats = useMemo(() => {
+    return items.reduce((acc, vehicle) => {
+      const status = getVehicleServiceStatus(vehicle);
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [items]);
+
+  const headerActions = useMemo(() => (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        className="rounded-2xl btn-outline-fixed"
+        onClick={handleRefresh}
+      >
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Обновить
+      </Button>
+      
+      <Button 
+        className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]"
+        onClick={() => setOpenCreate(true)}
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        Добавить ТС
+      </Button>
+    </div>
+  ), []);
+
+  // ✅ ВСЕ useEffect
   useEffect(() => setIsMounted(true), []);
 
   useEffect(() => {
@@ -103,23 +180,6 @@ export default function VehiclesListPage() {
     })();
     return () => { cancelled = true; };
   }, []);
-
-  const filteredModels = useMemo(() => {
-    if (!brandId) return models;
-    return models.filter(m => (m.brandId === brandId) || (m.brand?.id === brandId));
-  }, [models, brandId]);
-
-  const query: VehiclesQuery = useMemo(() => ({
-    search: search || undefined,
-    page,
-    limit,
-    modelId: modelId || undefined,
-    vehicleTypeId: vehicleTypeId || undefined,
-    engineType: engineType || undefined,
-    yearFrom: yearFrom ? parseInt(yearFrom, 10) : undefined,
-    yearTo: yearTo ? parseInt(yearTo, 10) : undefined,
-    hasServiceHistory: hasServiceHistory === '' ? undefined : !!hasServiceHistory,
-  }), [search, page, limit, modelId, vehicleTypeId, engineType, yearFrom, yearTo, hasServiceHistory]);
 
   useEffect(() => {
     if (!isMounted) return;
@@ -169,19 +229,23 @@ export default function VehiclesListPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // ✅ Функции
   const onCreated = async () => {
     setPage(1);
     const res = await vehiclesAPI.getVehicles({ ...query, page: 1 });
     setData(res);
   };
 
-  const handleRefresh = async () => {
+  function handleRefresh() {
     setPage(1);
-    const res = await vehiclesAPI.getVehicles({ ...query, page: 1 });
-    setData(res);
-  };
+    vehiclesAPI.getVehicles({ ...query, page: 1 })
+      .then(setData)
+      .catch(console.error);
+  }
 
+  // ✅ ТОЛЬКО ТЕПЕРЬ условные return
   if (!isMounted) return null;
+  
   if (authLoading) {
     return (
       <AppLayout>
@@ -194,44 +258,8 @@ export default function VehiclesListPage() {
       </AppLayout>
     );
   }
-  if (!isAuthenticated || !user) return null;
-
-  const items = data?.items || [];
   
-  // Filter by service status client-side for better UX
-  const filteredItems = items.filter(vehicle => {
-    if (serviceFilter === 'all') return true;
-    const serviceStatus = getVehicleServiceStatus(vehicle);
-    return serviceFilter === serviceStatus;
-  });
-
-  // Service status stats
-  const serviceStats = items.reduce((acc, vehicle) => {
-    const status = getVehicleServiceStatus(vehicle);
-    acc[status] = (acc[status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const headerActions = (
-    <div className="flex items-center gap-2">
-      <Button
-        variant="outline"
-        className="rounded-2xl btn-outline-fixed"
-        onClick={handleRefresh}
-      >
-        <RefreshCw className="w-4 h-4 mr-2" />
-        Обновить
-      </Button>
-      
-      <Button 
-        className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]"
-        onClick={() => setOpenCreate(true)}
-      >
-        <Plus className="w-4 h-4 mr-2" />
-        Добавить ТС
-      </Button>
-    </div>
-  );
+  if (!isAuthenticated || !user) return null;
 
   return (
     <AppLayout 
@@ -241,19 +269,15 @@ export default function VehiclesListPage() {
       actions={headerActions}
     >
       <div className="container mx-auto px-6 py-6 space-y-6">
-        {/* Vehicle Cards Feature Badge */}
-        <Card className="p-4 glass border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 to-green-500/5 rounded-3xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-emerald-600 dark:text-emerald-400">Интерактивные карточки ТС</h3>
-              <p className="text-sm text-muted-foreground">
-                Цветовые индикаторы ТО: зеленый (актуально), желтый (скоро), красный (просрочено). Клик для детального просмотра.
-              </p>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
+        
+        {/* Feature Badge */}
+        <PageFeatureBadge
+          variant="emerald-green"
+          icon={Car}
+          title="Интерактивные карточки ТС"
+          description="Цветовые индикаторы ТО: зеленый (актуально), желтый (скоро), красный (просрочено). Клик для детального просмотра."
+          aside={
+            <div className="flex items-center gap-2">
               <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/30">
                 <CheckCircle className="w-3 h-3 mr-1" />
                 ТО OK
@@ -267,19 +291,19 @@ export default function VehiclesListPage() {
                 Просрочено
               </Badge>
             </div>
-          </div>
-        </Card>
+          }
+        />
 
-        {/* Search & Filters */}
-        <Card className="p-4 glass border-border/30 rounded-3xl surface-glow">
+        {/* Filters */}
+        <PageFiltersCard>
           <div className="space-y-4">
             {/* Top row - Search and Service Filter */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <PageFiltersRow>
               <div className="relative">
                 <Input
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                  placeholder="Поиск по номеру, VIN, модели или владельцу"
+                  placeholder="Поиск по номеру, VIN, модели или владельцу (Ctrl+K)"
                   className="pl-9 h-10 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
                 />
                 <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
@@ -321,10 +345,10 @@ export default function VehiclesListPage() {
                   Просрочено
                 </ServiceFilterButton>
               </div>
-            </div>
+            </PageFiltersRow>
 
             {/* Bottom row - Catalogue + Extended Filters */}
-            <div className="grid grid-cols-1 lg:grid-cols-6 gap-3">
+            <PageFiltersAdvanced>
               <select
                 value={brandId}
                 onChange={(e) => { setBrandId(e.target.value); setModelId(''); setPage(1); }}
@@ -398,12 +422,12 @@ export default function VehiclesListPage() {
                   ))}
                 </select>
               </div>
-            </div>
+            </PageFiltersAdvanced>
           </div>
-        </Card>
+        </PageFiltersCard>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        {/* Stats */}
+        <StatsGrid cols={6}>
           <StatsCard
             title="Всего ТС"
             value={data?.total ?? 0}
@@ -436,89 +460,50 @@ export default function VehiclesListPage() {
             color="default"
           />
           <StatsCard
-            title="Средний возраст, лет"
+            title="Средний возраст"
             value={Number((data?.meta?.averageAge ?? 0).toFixed(1))}
             icon={Calendar}
             color="default"
+            suffix="лет"
           />
-        </div>
+        </StatsGrid>
 
         {/* Vehicle Cards Grid */}
-        <Card className="p-0 glass border-border/30 rounded-3xl surface-glow overflow-hidden">
-          {loading ? (
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {[...Array(12)].map((_, i) => (
-                <div key={i} className="h-48 bg-surface-1/40 rounded-3xl animate-pulse" />
-              ))}
-            </div>
-          ) : error ? (
-            <div className="p-6 text-center text-destructive">
-              <div className="flex items-center justify-center gap-2 mb-3">
-                <Zap className="w-5 h-5" />
-                <span className="font-medium">Ошибка загрузки</span>
-              </div>
-              <p>{error}</p>
-              <Button onClick={handleRefresh} className="mt-4 rounded-2xl">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Повторить
-              </Button>
-            </div>
-          ) : filteredItems.length === 0 ? (
-            <div className="p-10 text-center text-muted-foreground">
-              <Car className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <h3 className="font-semibold mb-2">Автомобили не найдены</h3>
-              <p className="text-sm mb-4">
-                {serviceFilter !== 'all' 
-                  ? `Нет автомобилей с выбранным статусом ТО`
-                  : 'Попробуйте изменить параметры поиска или добавьте первое ТС'
-                }
-              </p>
-              <Button 
-                className="rounded-2xl bg-gradient-primary hover:opacity-90"
-                onClick={() => setOpenCreate(true)}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Добавить ТС
-              </Button>
-            </div>
-          ) : (
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredItems.map((vehicle) => (
-                <VehicleCard key={vehicle.id} vehicle={vehicle} />
-              ))}
-            </div>
-          )}
-        </Card>
+        <PageContentCard
+          loading={loading}
+          error={error}
+          empty={filteredItems.length === 0}
+          emptyState={{
+            icon: Car,
+            title: 'Автомобили не найдены',
+            description: serviceFilter !== 'all' 
+              ? `Нет автомобилей с выбранным статусом ТО`
+              : 'Попробуйте изменить параметры поиска или добавьте первое ТС',
+            action: {
+              label: 'Добавить ТС',
+              onClick: () => setOpenCreate(true),
+              icon: Plus,
+            },
+          }}
+          onRetry={handleRefresh}
+          loadingRows={12}
+        >
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredItems.map((vehicle) => (
+              <VehicleCard key={vehicle.id} vehicle={vehicle} />
+            ))}
+          </div>
+        </PageContentCard>
 
         {/* Pagination */}
-        {data && data.totalPages > 1 && (
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              Показано: {filteredItems.length} из {data.total} автомобилей
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                className="rounded-2xl btn-outline-fixed"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Назад
-              </Button>
-              <span className="text-sm px-3 py-1 rounded-xl bg-surface-1/60">
-                {page} / {data.totalPages}
-              </span>
-              <Button
-                variant="outline"
-                className="rounded-2xl btn-outline-fixed"
-                disabled={page >= data.totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Далее
-              </Button>
-            </div>
-          </div>
-        )}
+        <PaginationControls
+          page={page}
+          totalPages={data?.totalPages || 1}
+          total={data?.total || 0}
+          showing={filteredItems.length}
+          onPageChange={setPage}
+          itemLabel="автомобилей"
+        />
       </div>
 
       <VehicleCreateDialog
@@ -537,7 +522,7 @@ function getVehicleServiceStatus(vehicle: VehicleResponse): 'ok' | 'soon' | 'ove
   return 'ok';
 }
 
-// Service Filter Button Component
+// Service Filter Button Component (уникальный для Vehicles)
 function ServiceFilterButton({
   active,
   onClick,
@@ -551,7 +536,6 @@ function ServiceFilterButton({
   variant?: 'default' | 'ok' | 'soon' | 'overdue';
   children: React.ReactNode;
 }) {
-  const { cn } = require('@/lib/utils');
   const variantStyles = {
     default: 'border-border/50',
     ok: 'border-emerald-200 dark:border-emerald-800/30 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300',
@@ -579,58 +563,8 @@ function ServiceFilterButton({
   );
 }
 
-// Stats Card Component
-function StatsCard({
-  title,
-  value,
-  icon: Icon,
-  color = 'default',
-  highlight = false
-}: {
-  title: string;
-  value: number;
-  icon: React.ComponentType<{ className?: string }>;
-  color?: 'default' | 'blue' | 'emerald' | 'amber' | 'red';
-  highlight?: boolean;
-}) {
-  const { cn } = require('@/lib/utils');
-  const colorStyles = {
-    default: 'from-surface-1/40 to-surface-2/40 border-border/30 text-muted-foreground',
-    blue: 'from-blue-500/10 to-blue-600/5 border-blue-500/20 text-blue-600 dark:text-blue-400',
-    emerald: 'from-emerald-500/10 to-emerald-600/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400',
-    amber: 'from-amber-500/10 to-amber-600/5 border-amber-500/20 text-amber-600 dark:text-amber-400',
-    red: 'from-red-500/10 to-red-600/5 border-red-500/20 text-red-600 dark:text-red-400',
-  };
-
-  return (
-    <Card className={cn(
-      'p-4 glass border rounded-2xl bg-gradient-to-br transition-all duration-300 hover:scale-[1.02]',
-      colorStyles[color],
-      highlight && 'animate-pulse'
-    )}>
-      <div className="flex items-center gap-3">
-        <div className={cn(
-          'p-2 rounded-xl',
-          color === 'blue' && 'bg-blue-500/20',
-          color === 'emerald' && 'bg-emerald-500/20',
-          color === 'amber' && 'bg-amber-500/20',
-          color === 'red' && 'bg-red-500/20',
-          color === 'default' && 'bg-surface-1/40'
-        )}>
-          <Icon className="w-4 h-4" />
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground">{title}</div>
-          <div className="text-lg font-bold">{value}</div>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-// Enhanced Vehicle Card Component
+// Enhanced Vehicle Card Component (уникальный для Vehicles)
 function VehicleCard({ vehicle }: { vehicle: VehicleResponse }) {
-  const { cn } = require('@/lib/utils');
   const model = `${vehicle.model?.brand?.name || ''} ${vehicle.model?.name || ''}`.trim() || 'Автомобиль';
   const owner = vehicle.customer 
     ? [vehicle.customer.firstName, vehicle.customer.lastName].filter(Boolean).join(' ') 
@@ -638,7 +572,6 @@ function VehicleCard({ vehicle }: { vehicle: VehicleResponse }) {
       || 'Клиент'
     : 'Не указан';
 
-  // Service status logic
   const serviceStatus = getVehicleServiceStatus(vehicle);
 
   const serviceStatusConfig = {

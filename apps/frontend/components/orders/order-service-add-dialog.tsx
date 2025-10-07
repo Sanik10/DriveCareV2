@@ -18,6 +18,7 @@ import type { ServiceCatalogueItem } from '@/lib/types/services';
 import type { AddServiceToOrderRequest, OrderServiceResponse } from '@/lib/types/orders';
 import { Search, Wrench, UserPlus, Save } from 'lucide-react';
 import { useAuth } from '@/lib/hooks/use-auth';
+import { Kbd } from '@/components/ui/kbd';
 
 type Props = {
   orderId: string;
@@ -126,39 +127,47 @@ export function OrderServiceAddDialog({ orderId, open, onOpenChange, onAdded }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent glow className="max-w-xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Wrench className="w-4 h-4" /> Добавить услугу
-          </DialogTitle>
-          <DialogDescription>Найдите услугу в каталоге, укажите количество и скидку</DialogDescription>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-secondary/20 flex items-center justify-center text-secondary">
+              <Wrench className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle>Добавить услугу</DialogTitle>
+              <DialogDescription>Найдите услугу в каталоге, укажите количество и скидку</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <div className="relative">
-            <Input
-              placeholder="Поиск услуги по названию"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="pl-8"
-            />
-            <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-            {results.length > 0 && (
-              <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 bg-popover shadow-lg overflow-hidden max-h-64 overflow-y-auto">
-                {results.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setSelected(s)}
-                    className="w-full text-left px-3 py-2 hover:bg-accent/40 text-sm"
-                  >
-                    <div className="font-medium">{s.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {(s.price || 0).toLocaleString('ru-RU')} ₽ · {s.durationMinutes} мин
-                      {s.category?.name ? ` · ${s.category.name}` : ''}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+        <div className="space-y-3 mt-2">
+          <div>
+            <div className="text-xs text-muted-foreground mb-1">Поиск услуги</div>
+            <div className="relative">
+              <Input
+                placeholder="Название услуги"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="pl-8"
+              />
+              <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+              {results.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 glass shadow-lg overflow-hidden max-h-64 overflow-y-auto">
+                  {results.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setSelected(s)}
+                      className="w-full text-left px-3 py-2 hover:bg-accent/40 text-sm"
+                    >
+                      <div className="font-medium">{s.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {(s.price || 0).toLocaleString('ru-RU')} ₽ · {s.durationMinutes} мин
+                        {s.category?.name ? ` · ${s.category.name}` : ''}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {selected && (
@@ -171,40 +180,62 @@ export function OrderServiceAddDialog({ orderId, open, onOpenChange, onAdded }: 
           )}
 
           <div className="grid grid-cols-3 gap-3">
-            <Input
-              placeholder="Кол-во"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value.replace(/[^\d]/g, ''))}
-            />
-            <Input
-              placeholder="Своя цена (₽)"
-              value={customPrice}
-              onChange={(e) => setCustomPrice(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
-            />
-            <Input
-              placeholder="Скидка (%)"
-              value={discountPercent}
-              onChange={(e) => setDiscountPercent(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
-            />
+            <div>
+              <div className="text-xs text-muted-foreground mb-1">Кол-во</div>
+              <Input
+                placeholder="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value.replace(/[^\d]/g, ''))}
+              />
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground mb-1">Своя цена (₽)</div>
+              <Input
+                placeholder="Опционально"
+                value={customPrice}
+                onChange={(e) => setCustomPrice(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
+              />
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground mb-1">Скидка (%)</div>
+              <Input
+                placeholder="0"
+                value={discountPercent}
+                onChange={(e) => setDiscountPercent(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Input
-              placeholder="ID механика (необязательно)"
-              value={mechanicId}
-              onChange={(e) => setMechanicId(e.target.value)}
-            />
-            <Button variant="outline" onClick={onAssignMe} className="justify-center">
-              <UserPlus className="w-4 h-4 mr-2" /> Назначить меня
-            </Button>
+            <div>
+              <div className="text-xs text-muted-foreground mb-1">ID механика</div>
+              <Input
+                placeholder="Опционально"
+                value={mechanicId}
+                onChange={(e) => setMechanicId(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end">
+              <Button variant="outline" onClick={onAssignMe} className="w-full">
+                <UserPlus className="w-4 h-4 mr-2" /> Назначить меня
+              </Button>
+            </div>
           </div>
 
-          <Input placeholder="Заметки (необязательно)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <div>
+            <div className="text-xs text-muted-foreground mb-1">Заметки</div>
+            <Input placeholder="Опционально" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
 
           {error && <div className="text-sm text-destructive">{error}</div>}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="mt-4">
+          <div className="hidden sm:flex items-center text-xs text-muted-foreground mr-auto">
+            <span className="mr-2">Горячие клавиши:</span>
+            <Kbd>Esc</Kbd>
+            <span className="ml-1">— Закрыть</span>
+          </div>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Отмена
           </Button>

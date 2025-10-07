@@ -1,3 +1,4 @@
+//path: apps/backend/src/modules/users/services/users-data.service.ts
 import { Injectable, NotFoundException, ConflictException, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';

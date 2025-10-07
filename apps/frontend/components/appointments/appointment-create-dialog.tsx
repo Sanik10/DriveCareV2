@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { Calendar } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ import { VehicleSelect, type VehicleOption } from '@/components/appointments/sel
 import { MechanicSelect, type MechanicOption } from '@/components/appointments/selects/MechanicSelect';
 import { ServicesMultiSelect, type ServiceOption } from '@/components/appointments/selects/ServicesMultiSelect';
 import { AppointmentSmartScheduleDialog } from '@/components/appointments/appointment-smart-schedule-dialog';
+import { Kbd } from '@/components/ui/kbd';
 
 type Props = {
   open: boolean;
@@ -68,18 +70,15 @@ type AvailStatus = 'idle' | 'checking' | 'ok' | 'empty' | 'error';
 export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props) {
   const [submitting, setSubmitting] = useState(false);
 
-  // entity selects
   const [customer, setCustomer] = useState<CustomerOption | null>(null);
   const [vehicle, setVehicle] = useState<VehicleOption | null>(null);
   const [mechanic, setMechanic] = useState<MechanicOption | null>(null);
   const [services, setServices] = useState<ServiceOption[]>([]);
 
-  // time fields
-  const [startLocal, setStartLocal] = useState<string>(''); // datetime-local
-  const [endLocal, setEndLocal] = useState<string>(''); // datetime-local
+  const [startLocal, setStartLocal] = useState<string>('');
+  const [endLocal, setEndLocal] = useState<string>('');
   const [estimatedDuration, setEstimatedDuration] = useState<string>('60');
 
-  // optional
   const [priority, setPriority] = useState<AppointmentPriority>('NORMAL');
   const [description, setDescription] = useState('');
   const [customerNotes, setCustomerNotes] = useState('');
@@ -87,23 +86,20 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
   const [contactEmail, setContactEmail] = useState('');
   const [estimatedCost, setEstimatedCost] = useState<string>('');
 
-  // Availability (check-availability)
   const todayISODate = useMemo(() => {
     const d = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }, []);
   const [availDate, setAvailDate] = useState<string>('');
-  const [availStart, setAvailStart] = useState<string>(''); // HH:mm
-  const [availEnd, setAvailEnd] = useState<string>(''); // HH:mm
+  const [availStart, setAvailStart] = useState<string>('');
+  const [availEnd, setAvailEnd] = useState<string>('');
   const [availStatus, setAvailStatus] = useState<AvailStatus>('idle');
   const [availError, setAvailError] = useState<string | null>(null);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
 
-  // Smart-schedule dialog
   const [openSmart, setOpenSmart] = useState(false);
 
-  // Автокалькуляция endLocal при изменении startLocal/estimatedDuration (если end пустой)
   useEffect(() => {
     if (!startLocal) return;
     const dur = Number(estimatedDuration);
@@ -115,7 +111,6 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
     setEndLocal((prev) => prev || nextEnd);
   }, [startLocal, estimatedDuration]);
 
-  // Инициализация значений для блока доступности из полей времени
   useEffect(() => {
     if (!startLocal) return;
     try {
@@ -171,7 +166,6 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
     setContactPhone('');
     setContactEmail('');
     setEstimatedCost('');
-    // Availability
     setAvailDate('');
     setAvailStart('');
     setAvailEnd('');
@@ -218,7 +212,6 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
   };
 
   const onCheckAvailability = async () => {
-    // Локальная валидация
     if (services.length < 1) {
       setAvailStatus('error');
       setAvailError('Укажите хотя бы одну услугу для проверки доступности');
@@ -272,40 +265,59 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
 
   return (
     <Dialog open={open} onOpenChange={(v) => !submitting && onOpenChange(v)}>
-      {/* Full-width on mobile, max-h with scrollable body; sticky footer */}
-      <DialogContent className="sm:max-w-3xl w-[95vw] max-h-[85vh] p-0 overflow-hidden">
+      {/* 🔥 ИСПРАВЛЕНО: увеличена высота и добавлен padding-bottom */}
+      <DialogContent className="sm:max-w-3xl w-[95vw] max-h-[90vh] p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-5 pb-2">
-          <DialogTitle>Создать запись</DialogTitle>
-          <DialogDescription>Заполните основные данные. Обязательные поля помечены *</DialogDescription>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
+              <Calendar className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle>Создать запись</DialogTitle>
+              <DialogDescription>Заполните основные данные. Обязательные поля помечены *</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        {/* Scrollable body */}
-        <div className="px-6 pb-4 overflow-y-auto max-h-[calc(85vh-112px)]">
+        {/* 🔥 ИСПРАВЛЕНО: увеличен max-height и добавлен pb-20 для отступа от footer */}
+        <div className="px-6 pb-20 overflow-y-auto max-h-[calc(90vh-180px)]">
           <div className="grid md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <div className="text-sm text-muted-foreground mb-1">Клиент *</div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Клиент <span className="text-rose-500">*</span>
+              </div>
               <CustomerSelect value={customer} onChange={(opt) => { setCustomer(opt); setVehicle(null); }} />
             </div>
             <div className="md:col-span-2">
-              <div className="text-sm text-muted-foreground mb-1">Автомобиль *</div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Автомобиль <span className="text-rose-500">*</span>
+              </div>
               <VehicleSelect customerId={customer?.id} value={vehicle} onChange={setVehicle} />
             </div>
             <div className="md:col-span-2">
-              <div className="text-sm text-muted-foreground mb-1">Мастер *</div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Мастер <span className="text-rose-500">*</span>
+              </div>
               <MechanicSelect value={mechanic} onChange={setMechanic} />
             </div>
 
             <div>
-              <div className="text-sm text-muted-foreground mb-1">Начало *</div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Начало <span className="text-rose-500">*</span>
+              </div>
               <Input type="datetime-local" value={startLocal} onChange={(e) => setStartLocal(e.target.value)} />
             </div>
             <div>
-              <div className="text-sm text-muted-foreground mb-1">Окончание *</div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Окончание <span className="text-rose-500">*</span>
+              </div>
               <Input type="datetime-local" value={endLocal} onChange={(e) => setEndLocal(e.target.value)} />
             </div>
 
             <div>
-              <div className="text-sm text-muted-foreground mb-1">Длительность (мин) *</div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Длительность (мин) <span className="text-rose-500">*</span>
+              </div>
               <Input
                 type="number"
                 min={1}
@@ -318,7 +330,7 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
             <div>
               <div className="text-sm text-muted-foreground mb-1">Приоритет</div>
               <select
-                className="w-full h-9 rounded-md border border-border bg-background text-sm px-3"
+                className="w-full h-10 rounded-md border border-border bg-background text-sm px-3"
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as AppointmentPriority)}
               >
@@ -331,7 +343,9 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
             </div>
 
             <div className="md:col-span-2">
-              <div className="text-sm text-muted-foreground mb-1">Услуги *</div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Услуги <span className="text-rose-500">*</span>
+              </div>
               <ServicesMultiSelect values={services} onChange={setServices} />
             </div>
 
@@ -365,7 +379,7 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
             </div>
           </div>
 
-          {/* Collapsible advanced sections to reduce height */}
+          {/* Collapsible sections */}
           <details className="mt-4 rounded-xl border border-border/30">
             <summary className="cursor-pointer select-none px-4 py-2 text-sm font-medium">Проверка доступности</summary>
             <div className="p-4 grid md:grid-cols-5 gap-3">
@@ -403,7 +417,6 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
                 </Button>
               </div>
 
-              {/* Status/Errors */}
               {availStatus === 'checking' && (
                 <div className="col-span-full flex items-center gap-2 text-sm text-muted-foreground">
                   <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -421,7 +434,7 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
             </div>
 
             {slots.length > 0 && (
-              <div className="mt-3 rounded-xl border border-border/30 overflow-hidden">
+              <div className="mt-3 mx-4 mb-4 rounded-xl border border-border/30 overflow-hidden">
                 <div className="px-4 py-2 text-xs text-muted-foreground bg-muted/20">Найденные слоты</div>
                 <div className="max-h-56 overflow-auto divide-y divide-border/30">
                   {slots.map((s, idx) => (
@@ -457,8 +470,14 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
         </div>
 
         {/* Sticky footer */}
-        <DialogFooter className="gap-2 px-6 py-3 border-t bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/50 sticky bottom-0">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>
+        <DialogFooter className="gap-2 px-6 py-3 border-t bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 sticky bottom-0 z-50">
+          <div className="hidden sm:flex items-center text-xs text-muted-foreground mr-auto">
+            <span className="mr-2">Горячие клавиши:</span>
+            <Kbd>Esc</Kbd>
+            <span className="mx-1">—</span>
+            <span className="mr-2">Закрыть</span>
+          </div>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Отмена
           </Button>
           <Button onClick={onCreate} disabled={submitting || !canSubmit}>
@@ -467,7 +486,6 @@ export function AppointmentCreateDialog({ open, onOpenChange, onCreated }: Props
         </DialogFooter>
       </DialogContent>
 
-      {/* Smart-Schedule Dialog */}
       <AppointmentSmartScheduleDialog
         open={openSmart}
         onOpenChange={setOpenSmart}

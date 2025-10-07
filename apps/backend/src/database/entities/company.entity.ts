@@ -3,7 +3,6 @@ import {
   Column, 
   CreateDateColumn, 
   Entity, 
-  OneToMany, 
   PrimaryGeneratedColumn, 
   UpdateDateColumn,
   Index
@@ -59,8 +58,7 @@ export class Company {
 
   @Column({ 
     type: 'varchar', 
-    length: 255, 
-    unique: true,
+    length: 255,
     comment: 'Email компании'
   })
   email: string;
@@ -99,7 +97,7 @@ export class Company {
   })
   isActive: boolean;
 
-  // ✅ ДОБАВЛЕНО: Поля для 152-ФЗ compliance
+  // Поля для 152-ФЗ compliance
   @Column({
     name: 'data_retention_until',
     type: 'timestamptz',
@@ -137,7 +135,5 @@ export class Company {
   })
   updatedAt: Date;
 
-  // ✅ ИСПРАВЛЕНО: Убраны связи которые вызывают ошибки компиляции
-  // OneToMany связи будут добавлены позже когда будут нужны и протестированы
-  // Пока сосредоточимся на основной функциональности без circular dependencies
+  // Убраны связи, чтобы избежать циклов и сосредоточиться на основной функциональности
 }

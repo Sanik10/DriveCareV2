@@ -44,7 +44,6 @@ export function OrderCreateDialog({ open, onOpenChange, onCreated, initialCustom
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Prefill by props on open
   React.useEffect(() => {
     if (!open) return;
     (async () => {
@@ -194,7 +193,7 @@ export function OrderCreateDialog({ open, onOpenChange, onCreated, initialCustom
         <DialogContent glow className="max-w-2xl" onPaste={onPasteSmart}>
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary/20 to-emerald-400/20 text-primary flex items-center justify-center">
+              <div className="h-10 w-10 rounded-lg bg-gradient-primary flex items-center justify-center text-white">
                 <ClipboardPaste className="h-5 w-5" />
               </div>
               <div>
@@ -206,10 +205,12 @@ export function OrderCreateDialog({ open, onOpenChange, onCreated, initialCustom
             </div>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
             {/* Клиент */}
             <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground mb-1">Клиент</div>
+              <div className="text-xs text-muted-foreground mb-1">
+                Клиент <span className="text-rose-500">*</span>
+              </div>
               {customerId ? (
                 <div className="flex items-center justify-between rounded-md border border-border/60 p-2">
                   <div className="inline-flex items-center gap-2 text-sm">
@@ -235,7 +236,7 @@ export function OrderCreateDialog({ open, onOpenChange, onCreated, initialCustom
                   />
                   <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   {customerResults.length > 0 && (
-                    <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 bg-popover shadow-lg overflow-hidden">
+                    <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 glass shadow-lg overflow-hidden">
                       {customerResults.map((c) => {
                         const label = [c.firstName, c.lastName].filter(Boolean).join(" ") || c.companyName || c.email || c.id;
                         return (
@@ -266,7 +267,9 @@ export function OrderCreateDialog({ open, onOpenChange, onCreated, initialCustom
 
             {/* Автомобиль */}
             <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground mb-1">Автомобиль</div>
+              <div className="text-xs text-muted-foreground mb-1">
+                Автомобиль <span className="text-rose-500">*</span>
+              </div>
               {customerId ? (
                 vehicleId ? (
                   <div className="flex items-center justify-between rounded-md border border-border/60 p-2">
@@ -323,7 +326,7 @@ export function OrderCreateDialog({ open, onOpenChange, onCreated, initialCustom
             <div>
               <div className="text-xs text-muted-foreground mb-1">Пробег (км)</div>
               <Input
-                placeholder="Пробег"
+                placeholder="Например, 50000"
                 value={mileage}
                 onChange={(e) => setMileage(e.target.value.replace(/[^\d]/g, ""))}
               />
@@ -348,7 +351,7 @@ export function OrderCreateDialog({ open, onOpenChange, onCreated, initialCustom
 
           {error && <div className="mt-2 text-sm text-destructive">{error}</div>}
 
-          <DialogFooter className="mt-2">
+          <DialogFooter className="mt-4">
             <div className="hidden sm:flex items-center text-xs text-muted-foreground mr-auto">
               <span className="mr-2">Горячие клавиши:</span>
               <Kbd className="ml-2">⌘</Kbd>+<Kbd>Enter</Kbd>

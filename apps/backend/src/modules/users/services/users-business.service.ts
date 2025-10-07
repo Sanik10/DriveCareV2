@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/users/services/users-business.service.ts
 import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
 import { AuditService, AuditAction } from '../../../common/audit/audit.service';
 import { UsersDataService } from './users-data.service';
@@ -315,5 +316,24 @@ export class UsersBusinessService {
       details: { consentType: type },
     });
     return { success: true };
+  }
+
+  // Self-service смена пароля с аудитом
+  async changeMyPassword(userId: string, newPassword: string) {
+    const t0 = Date.now();
+    const user = await this.usersData.findByIdWithRole(userId);
+    const hashed = await this.usersData.hashPassword(newPassword);
+    await this.usersData.updateUserPassword(userId, hashed);
+
+    await this.audit.log(AuditAction.USER_PROFILE_UPDATED, {
+      userId,
+      entityId: userId,
+      entityType: 'User',
+      companyId: user.company_id,
+      details: { action: 'self_password_changed', securityLevel: 'CRITICAL' },
+      metadata: { executionTime: Date.now() - t0 },
+    });
+
+    return { success: true, message: 'Пароль успешно изменён' };
   }
 }

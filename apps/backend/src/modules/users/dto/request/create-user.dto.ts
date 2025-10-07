@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/users/dto/request/create-user.dto.ts
 import { 
   IsEmail, 
   IsNotEmpty, 
@@ -12,7 +13,6 @@ import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateUserDto {
-  // 🔐 CRITICAL SECURITY FIX: УДАЛЕН company_id!
   // Компания определяется из JWT токена в контроллере
   
   @ApiProperty({
@@ -25,7 +25,7 @@ export class CreateUserDto {
   @Length(1, 255, { message: 'Email не может превышать 255 символов' })
   email: string;
 
-   @ApiProperty({
+  @ApiProperty({
     example: 'SecurePass123!',
     description: 'Надежный пароль пользователя',
     minLength: 8,
@@ -85,7 +85,6 @@ export class CreateUserDto {
   @IsPhoneNumber('RU', { message: 'Некорректный российский номер телефона' })
   @Transform(({ value }) => {
     if (!value) return value;
-    // Нормализация: убираем все кроме цифр и добавляем +7
     const digits = value.replace(/\D/g, '');
     if (digits.startsWith('8')) {
       return '+7' + digits.substring(1);

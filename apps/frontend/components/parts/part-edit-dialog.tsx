@@ -2,13 +2,14 @@
 'use client'
 
 import * as React from 'react'
+import { Package, Save } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { partsAPI } from '@/lib/api/parts'
 import type { PartCatalogueItem, CreatePartRequest, UpdatePartRequest } from '@/lib/types/parts'
-import { Save } from 'lucide-react'
 import { toast } from 'sonner'
+import { Kbd } from '@/components/ui/kbd'
 
 type Props = {
   open: boolean
@@ -76,29 +77,63 @@ export function PartEditDialog({ open, onOpenChange, part, onSaved }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent glow className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Изменить запчасть' : 'Новая запчасть'}</DialogTitle>
-          <DialogDescription>Заполните параметры запчасти. Категория опциональна.</DialogDescription>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-600 dark:text-orange-400">
+              <Package className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle>{isEdit ? 'Изменить запчасть' : 'Новая запчасть'}</DialogTitle>
+              <DialogDescription>Заполните параметры запчасти. Категория опциональна.</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <Input placeholder="Название" value={name} onChange={(e) => setName(e.target.value)} />
-          <div className="grid grid-cols-2 gap-3">
-            <Input placeholder="Артикул (опц.)" value={partNumber} onChange={(e) => setPartNumber(e.target.value)} />
-            <Input placeholder="Бренд (опц.)" value={brand} onChange={(e) => setBrand(e.target.value)} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+          <div className="md:col-span-2">
+            <div className="text-xs text-muted-foreground mb-1">
+              Название <span className="text-rose-500">*</span>
+            </div>
+            <Input placeholder="Например: Масляный фильтр" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          <div>
+            <div className="text-xs text-muted-foreground mb-1">Артикул</div>
+            <Input placeholder="Опционально" value={partNumber} onChange={(e) => setPartNumber(e.target.value)} />
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground mb-1">Бренд</div>
+            <Input placeholder="Опционально" value={brand} onChange={(e) => setBrand(e.target.value)} />
+          </div>
+
+          <div>
+            <div className="text-xs text-muted-foreground mb-1">
+              Цена продажи (₽) <span className="text-rose-500">*</span>
+            </div>
             <Input
-              placeholder="Цена продажи (₽)"
+              placeholder="Например: 500"
               value={price}
               onChange={(e) => setPrice(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.'))}
             />
-            <Input placeholder="ID категории (опц.)" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} />
           </div>
-          <Input placeholder="Описание (опц.)" value={description} onChange={(e) => setDescription(e.target.value)} />
-          {error && <div className="text-sm text-destructive">{error}</div>}
+          <div>
+            <div className="text-xs text-muted-foreground mb-1">ID категории</div>
+            <Input placeholder="Опционально" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} />
+          </div>
+
+          <div className="md:col-span-2">
+            <div className="text-xs text-muted-foreground mb-1">Описание</div>
+            <Input placeholder="Опционально" value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
         </div>
 
-        <DialogFooter>
+        {error && <div className="mt-2 text-sm text-destructive">{error}</div>}
+
+        <DialogFooter className="mt-4">
+          <div className="hidden sm:flex items-center text-xs text-muted-foreground mr-auto">
+            <span className="mr-2">Горячие клавиши:</span>
+            <Kbd>Esc</Kbd>
+            <span className="ml-1">— Закрыть</span>
+          </div>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Отмена
           </Button>

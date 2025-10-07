@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/users/dto/request/update-user-profile.dto.ts
 import { 
   IsEmail, 
   IsOptional, 

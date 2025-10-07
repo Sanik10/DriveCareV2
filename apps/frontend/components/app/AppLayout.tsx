@@ -23,11 +23,14 @@ import {
   Menu,
   X,
   LogOut,
-  User
+  User,
+  UserCog
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/hooks/use-auth'
 import { cn } from '@/lib/utils'
+import { TariffBadge } from './TariffBadge'
+import { getRoleLabel } from '@/lib/utils/role-labels'
 
 interface SidebarItem {
   key: string
@@ -56,6 +59,13 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
     icon: Users, 
     href: '/dashboard/customers',
     feature: 'Timeline история'
+  },
+  { 
+    key: 'users', 
+    label: 'Сотрудники', 
+    icon: UserCog, 
+    href: '/dashboard/users',
+    feature: 'Роли и инвайты'
   },
   { 
     key: 'vehicles', 
@@ -256,7 +266,7 @@ export function AppLayout({ children, title, description, icon: IconComponent, a
                   {user?.firstName} {user?.lastName}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {user?.role?.name || 'Пользователь'}
+                  {getRoleLabel(user?.role?.name || 'viewer')}
                 </p>
               </div>
             )}
@@ -327,6 +337,9 @@ export function AppLayout({ children, title, description, icon: IconComponent, a
                   Тарифы
                 </Button>
               </Link>
+
+              {/* Current plan badge */}
+              <TariffBadge />
 
               {/* Actions */}
               {actions}

@@ -8,6 +8,11 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AppLayout } from '@/components/app/AppLayout';
+import { PageFeatureBadge } from '@/components/app/PageFeatureBadge';
+import { PageFiltersCard, PageFiltersRow } from '@/components/app/PageFiltersCard';
+import { PageContentCard } from '@/components/app/PageContentCard';
+import { StatsCard, StatsGrid } from '@/components/app/StatsCard';
+import { PaginationControls } from '@/components/app/PaginationControls';
 import { 
   Wrench, 
   Plus, 
@@ -16,12 +21,17 @@ import {
   ChevronRight, 
   LayoutGrid, 
   List,
-  Sparkles,
+  CheckCircle,
+  Clock,
+  AlertTriangle,
+  XCircle,
+  DollarSign,
   TrendingUp,
-  Filter
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { ordersAPI } from '@/lib/api/orders';
+import { cn } from '@/lib/utils';
 import type { OrdersQuery, PaginatedOrdersResponse, OrderStatus, OrderResponse } from '@/lib/types/orders';
 import { OrderCreateDialog } from '@/components/orders/order-create-dialog';
 import { OrderKanban } from '@/components/orders/order-kanban';
@@ -30,23 +40,21 @@ import { StatusBadge } from '@/components/ui/status-badge';
 export default function OrdersListPage() {
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   const router = useRouter();
-  const [isMounted, setIsMounted] = useState(false);
 
+  // ✅ ВСЕ useState в начале
+  const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PaginatedOrdersResponse | null>(null);
-
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<OrderStatus | ''>('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-
   const [openCreate, setOpenCreate] = useState(false);
-  const [view, setView] = useState<'list' | 'board'>('board'); // по дефолту — Канбан
+  const [view, setView] = useState<'list' | 'board'>('board');
   const [kanbanRefreshKey, setKanbanRefreshKey] = useState(0);
 
-  useEffect(() => setIsMounted(true), []);
-
+  // ✅ ВСЕ useMemo ДО условных return
   const query: OrdersQuery = useMemo(
     () => ({
       search: search || undefined,
@@ -57,6 +65,77 @@ export default function OrdersListPage() {
     [search, status, page, limit],
   );
 
+  const items = useMemo(() => data?.items || [], [data]);
+
+  const stats = useMemo(() => {
+    const total = data?.total || 0;
+    const newCount = items.filter(o => o.status === 'new').length;
+    const inProgress = items.filter(o => o.status === 'in_progress').length;
+    const awaitingParts = items.filter(o => o.status === 'awaiting_parts').length;
+    const completed = items.filter(o => o.status === 'completed').length;
+    const totalRevenue = items.reduce((sum, o) => sum + (o.finalAmount || 0), 0);
+
+    return { total, newCount, inProgress, awaitingParts, completed, totalRevenue };
+  }, [data, items]);
+
+  const headerActions = useMemo(() => (
+    <div className="flex items-center gap-2">
+      {/* View Toggle */}
+      <Card className="p-1 glass-subtle border-border/30 rounded-xl">
+        <div className="flex items-center">
+          <Button
+            variant={view === 'board' ? 'default' : 'ghost'}
+            size="sm"
+            className={cn(
+              "rounded-xl transition-all duration-300 text-xs px-3",
+              view === 'board' 
+                ? 'bg-gradient-primary text-white shadow-glass' 
+                : 'hover:bg-muted/50'
+            )}
+            onClick={() => setView('board')}
+          >
+            <LayoutGrid className="w-4 h-4 mr-1" />
+            Канбан
+          </Button>
+          <Button
+            variant={view === 'list' ? 'default' : 'ghost'}
+            size="sm"
+            className={cn(
+              "rounded-xl transition-all duration-300 text-xs px-3",
+              view === 'list' 
+                ? 'bg-gradient-primary text-white shadow-glass' 
+                : 'hover:bg-muted/50'
+            )}
+            onClick={() => setView('list')}
+          >
+            <List className="w-4 h-4 mr-1" />
+            Список
+          </Button>
+        </div>
+      </Card>
+
+      <Button
+        variant="outline"
+        className="rounded-2xl btn-outline-fixed"
+        onClick={handleRefresh}
+      >
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Обновить
+      </Button>
+      
+      <Button 
+        className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]"
+        onClick={() => setOpenCreate(true)}
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        Новый заказ
+      </Button>
+    </div>
+  ), [view]);
+
+  // ✅ ВСЕ useEffect
+  useEffect(() => setIsMounted(true), []);
+
   useEffect(() => {
     if (!isMounted) return;
     if (authLoading) return;
@@ -64,7 +143,7 @@ export default function OrdersListPage() {
       router.push('/login');
       return;
     }
-    if (view !== 'list') return; // для списка — загрузка, канбан грузится сам внутри
+    if (view !== 'list') return;
 
     let cancelled = false;
     const DEBOUNCE_MS = 300;
@@ -92,6 +171,7 @@ export default function OrdersListPage() {
     };
   }, [isMounted, authLoading, isAuthenticated, user, router, query, view]);
 
+  // ✅ Функции
   const onCreated = async () => {
     if (view === 'list') {
       setPage(1);
@@ -102,130 +182,117 @@ export default function OrdersListPage() {
     }
   };
 
+  function handleRefresh() {
+    if (view === 'list') {
+      setPage(1);
+      ordersAPI.getOrders({ ...query, page: 1 })
+        .then(setData)
+        .catch(console.error);
+    } else {
+      setKanbanRefreshKey((k) => k + 1);
+    }
+  }
+
+  // ✅ ТОЛЬКО ТЕПЕРЬ условные return
   if (!isMounted) return null;
+  
   if (authLoading) {
     return (
       <AppLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="flex items-center gap-3">
             <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-            <span className="text-muted-foreground">Загрузка...</span>
+            <span className="text-muted-foreground">Загрузка заказов...</span>
           </div>
         </div>
       </AppLayout>
     );
   }
+  
   if (!isAuthenticated || !user) return null;
-
-  const items = data?.items || [];
-
-  const headerActions = (
-    <div className="flex items-center gap-2">
-      {/* View Toggle */}
-      <Card className="p-1 glass-subtle border-border/30">
-        <div className="flex items-center">
-          <Button
-            variant={view === 'board' ? 'default' : 'ghost'}
-            size="sm"
-            className={cn(
-              "rounded-xl transition-all duration-300 text-xs px-3",
-              view === 'board' 
-                ? 'bg-gradient-primary text-white shadow-glass' 
-                : 'btn-ghost-fixed hover:bg-muted/50'
-            )}
-            onClick={() => setView('board')}
-          >
-            <LayoutGrid className="w-4 h-4 mr-1" />
-            Канбан
-          </Button>
-          <Button
-            variant={view === 'list' ? 'default' : 'ghost'}
-            size="sm"
-            className={cn(
-              "rounded-xl transition-all duration-300 text-xs px-3",
-              view === 'list' 
-                ? 'bg-gradient-primary text-white shadow-glass' 
-                : 'btn-ghost-fixed hover:bg-muted/50'
-            )}
-            onClick={() => setView('list')}
-          >
-            <List className="w-4 h-4 mr-1" />
-            Список
-          </Button>
-        </div>
-      </Card>
-
-      <Button
-        variant="outline"
-        className="rounded-2xl btn-outline-fixed"
-        onClick={() => (view === 'list' ? setPage(1) : setKanbanRefreshKey((k) => k + 1))}
-      >
-        <RefreshCw className="w-4 h-4 mr-2" />
-        Обновить
-      </Button>
-      
-      <Button 
-        className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]"
-        onClick={() => setOpenCreate(true)}
-      >
-        <Plus className="w-4 h-4 mr-2" />
-        Новый заказ
-      </Button>
-    </div>
-  );
 
   return (
     <AppLayout 
       title="Заказы" 
-      description="Управление заказ-нарядами"
+      description="Управление заказ-нарядами с Канбан-доской"
       icon={Wrench}
       actions={headerActions}
     >
       <div className="container mx-auto px-6 py-6 space-y-6">
-        {/* Kanban Feature Badge */}
-        {view === 'board' && (
-          <Card className="p-4 glass border-primary/20 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-3xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-gradient-primary">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-primary">Интерактивная Канбан-доска</h3>
-                <p className="text-sm text-muted-foreground">
-                  Перетаскивайте заказы между колонками для изменения статусов. Удерживайте пробел для режима фокуса.
-                </p>
-              </div>
-              <div className="ml-auto">
-                <TrendingUp className="w-6 h-6 text-secondary" />
-              </div>
-            </div>
-          </Card>
-        )}
+        
+        {/* Feature Badge */}
+        <PageFeatureBadge
+          variant="orange-amber"
+          icon={view === 'board' ? LayoutGrid : List}
+          title={view === 'board' ? "Интерактивная Канбан-доска" : "Список заказов"}
+          description={
+            view === 'board' 
+              ? "Перетаскивайте заказы между колонками для изменения статусов. Удерживайте пробел для режима фокуса."
+              : "Табличное представление с фильтрацией по статусам, поиском и сортировкой."
+          }
+          aside={<TrendingUp className="w-6 h-6 text-secondary" />}
+        />
 
-        {/* Search & Filters */}
-        <Card className="p-4 glass border-border/30 rounded-3xl surface-glow">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Stats */}
+        <StatsGrid cols={6}>
+          <StatsCard
+            title="Всего заказов"
+            value={stats.total}
+            icon={Wrench}
+            color="blue"
+          />
+          <StatsCard
+            title="Новые"
+            value={stats.newCount}
+            icon={Sparkles}
+            color="cyan"
+          />
+          <StatsCard
+            title="В работе"
+            value={stats.inProgress}
+            icon={Clock}
+            color="amber"
+            highlight={stats.inProgress > 0}
+          />
+          <StatsCard
+            title="Ожидание запчастей"
+            value={stats.awaitingParts}
+            icon={AlertTriangle}
+            color="purple"
+          />
+          <StatsCard
+            title="Завершено"
+            value={stats.completed}
+            icon={CheckCircle}
+            color="emerald"
+          />
+          <StatsCard
+            title="Выручка"
+            value={Math.round(stats.totalRevenue).toLocaleString('ru-RU')}
+            icon={DollarSign}
+            color="default"
+            suffix="₽"
+          />
+        </StatsGrid>
+
+        {/* Filters */}
+        <PageFiltersCard>
+          <PageFiltersRow>
             <div className="relative">
               <Input
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="Поиск по номеру/описанию/клиенту/авто"
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                placeholder="Поиск по номеру/описанию/клиенту/авто..."
                 className="pl-9 h-10 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
               />
               <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
             </div>
             
-            <div className="relative">
+            <div className="flex items-center gap-2">
               <select
                 value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value as OrderStatus | '');
-                  setPage(1);
-                }}
-                className="w-full h-10 rounded-2xl border border-border/50 bg-background text-sm px-3 focus:border-primary/50 transition-all duration-300"
+                onChange={(e) => { setStatus(e.target.value as OrderStatus | ''); setPage(1); }}
+                className="h-10 rounded-2xl border border-border/50 bg-background text-sm px-3 focus:border-primary/50 transition-all duration-300"
               >
                 <option value="">Все статусы</option>
                 <option value="new">Новый</option>
@@ -234,36 +301,21 @@ export default function OrdersListPage() {
                 <option value="completed">Завершен</option>
                 <option value="canceled">Отменен</option>
               </select>
-              <Filter className="w-4 h-4 absolute right-3 top-3 text-muted-foreground pointer-events-none" />
-            </div>
 
-            {view === 'list' && (
-              <div className="flex gap-2">
+              {view === 'list' && (
                 <select
                   value={limit}
-                  onChange={(e) => {
-                    setLimit(parseInt(e.target.value, 10));
-                    setPage(1);
-                  }}
-                  className="w-28 h-10 rounded-2xl border border-border/50 bg-background text-sm px-3 focus:border-primary/50 transition-all duration-300"
+                  onChange={(e) => { setLimit(parseInt(e.target.value, 10)); setPage(1); }}
+                  className="h-10 rounded-2xl border border-border/50 bg-background text-sm px-3 focus:border-primary/50 transition-all duration-300"
                 >
                   {[10, 20, 50].map((n) => (
-                    <option key={n} value={n}>
-                      {n} / стр
-                    </option>
+                    <option key={n} value={n}>{n} / стр</option>
                   ))}
                 </select>
-                <Button 
-                  variant="outline" 
-                  className="rounded-2xl btn-outline-fixed"
-                  onClick={() => setPage(1)}
-                >
-                  Применить
-                </Button>
-              </div>
-            )}
-          </div>
-        </Card>
+              )}
+            </div>
+          </PageFiltersRow>
+        </PageFiltersCard>
 
         {/* Content */}
         {view === 'board' ? (
@@ -273,59 +325,43 @@ export default function OrdersListPage() {
             onOrderOpen={(id) => router.push(`/dashboard/orders/${id}`)}
           />
         ) : (
-          <Card className="p-0 glass border-border/30 rounded-3xl surface-glow overflow-hidden">
-            {loading ? (
-              <div className="p-6 space-y-3">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="h-16 bg-surface-1/40 rounded-2xl animate-pulse" />
-                ))}
-              </div>
-            ) : error ? (
-              <div className="p-6 text-center text-destructive">{error}</div>
-            ) : items.length === 0 ? (
-              <div className="p-10 text-center text-muted-foreground">
-                <Wrench className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <h3 className="font-semibold mb-2">Заказы не найдены</h3>
-                <p className="text-sm">Попробуйте изменить параметры поиска</p>
-              </div>
-            ) : (
+          <>
+            <PageContentCard
+              loading={loading}
+              error={error}
+              empty={items.length === 0}
+              emptyState={{
+                icon: Wrench,
+                title: 'Заказы не найдены',
+                description: search 
+                  ? 'Попробуйте изменить параметры поиска' 
+                  : 'Создайте первый заказ-наряд',
+                action: {
+                  label: 'Создать заказ',
+                  onClick: () => setOpenCreate(true),
+                  icon: Plus,
+                },
+              }}
+              onRetry={handleRefresh}
+              loadingRows={5}
+            >
               <div className="divide-y divide-border/30">
                 {items.map((o) => (
                   <OrderRow key={o.id} order={o} />
                 ))}
               </div>
-            )}
-          </Card>
-        )}
+            </PageContentCard>
 
-        {/* Pagination */}
-        {view === 'list' && data && data.totalPages > 1 && (
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              Всего: {data.total || 0} заказов
-            </div>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                className="rounded-2xl btn-outline-fixed"
-                disabled={page <= 1} 
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Назад
-              </Button>
-              <span className="text-sm px-3 py-1 rounded-xl bg-surface-1/60">
-                {page} / {data.totalPages}
-              </span>
-              <Button 
-                variant="outline" 
-                className="rounded-2xl btn-outline-fixed"
-                disabled={page >= data.totalPages} 
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Далее
-              </Button>
-            </div>
-          </div>
+            {/* Pagination */}
+            <PaginationControls
+              page={page}
+              totalPages={data?.totalPages || 1}
+              total={data?.total || 0}
+              showing={items.length}
+              onPageChange={setPage}
+              itemLabel="заказов"
+            />
+          </>
         )}
       </div>
 
@@ -334,6 +370,7 @@ export default function OrdersListPage() {
   );
 }
 
+// Order Row Component (уникальный для Orders)
 function OrderRow({ order }: { order: OrderResponse }) {
   type StatusBadgeProps = ComponentProps<typeof StatusBadge>;
   const badgeStatus = order.status as StatusBadgeProps['status'];
@@ -341,13 +378,13 @@ function OrderRow({ order }: { order: OrderResponse }) {
   return (
     <Link href={`/dashboard/orders/${order.id}`} className="block hover:bg-surface-1/30 transition-all duration-300 group">
       <div className="p-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-primary/20 flex items-center justify-center group-hover:scale-105 transition-transform">
-            <span className="text-primary text-sm font-semibold">
+        <div className="flex items-center gap-4 flex-1">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-r from-orange-500/20 to-amber-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+            <span className="text-orange-600 dark:text-orange-400 text-sm font-semibold">
               {order.orderNumber.split('-').pop()}
             </span>
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-1">
               <span className="font-medium">{order.orderNumber}</span>
               <StatusBadge status={badgeStatus} />
@@ -370,8 +407,4 @@ function OrderRow({ order }: { order: OrderResponse }) {
       </div>
     </Link>
   );
-}
-
-function cn(...classes: (string | undefined | false)[]): string {
-  return classes.filter(Boolean).join(' ');
 }

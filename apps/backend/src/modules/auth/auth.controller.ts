@@ -200,13 +200,25 @@ export class AuthController {
     return this.authService.registerCompany(registerDto, ipAddress, userAgent);
   }
 
-  @ApiOperation({ summary: '📨 Регистрация по приглашению', description: 'Функция недоступна' })
-  @ApiResponse({ status: 404, description: '🚫 Endpoint not available' })
+  @ApiOperation({ summary: '📨 Регистрация по приглашению', description: 'Создание пользователя по инвайту + автологин' })
+  @ApiResponse({ status: 201, description: '✅ Пользователь создан и авторизован', type: LoginResponseDto })
+  @ApiBadRequestResponse({ description: '❌ Некорректные данные или истёкший токен приглашения' })
+  @ApiConflictResponse({ description: '❌ Пользователь с таким email уже существует' })
+  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много попыток регистрации (лимит: 5 в минуту)' })
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  @HttpCode(HttpStatus.NOT_FOUND)
+  @UsePipes(EnhancedValidationPipe)
+  @HttpCode(HttpStatus.CREATED)
   @Post('register-invite')
-  async registerByInvite(@Body() _registerDto: RegisterInviteDto): Promise<never> {
-    throw new HttpException('Endpoint not available', HttpStatus.NOT_FOUND);
+  async registerByInvite(
+    @Body() registerDto: RegisterInviteDto,
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponseDto> {
+    const userAgent = req.headers['user-agent'] || '';
+    const ipAddress = req.ip || '';
+    const result = await this.authService.registerByInvite(registerDto, ipAddress, userAgent);
+    this.setRtCookie(res, result.refreshToken);
+    return result as any;
   }
 
   @ApiOperation({ summary: 'Обновление access по refresh (HttpOnly cookie)' })

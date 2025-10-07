@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/subscriptions/subscription-billing/dto/response/billing-subscription-response.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { SubscriptionStatus } from '../../../../../database/entities/subscription.entity';
 
@@ -18,6 +19,8 @@ export class BillingSubscriptionResponseDto {
   @ApiPropertyOptional({ type: BillingTariffInfoDto }) tariff?: BillingTariffInfoDto;
   @ApiProperty() startDate: Date;
   @ApiProperty() endDate: Date;
+  @ApiProperty({ description: 'Период биллинга', enum: ['monthly', 'yearly'] })
+  billingPeriod: 'monthly' | 'yearly';
   @ApiProperty({ enum: SubscriptionStatus }) status: SubscriptionStatus;
   @ApiProperty() paymentMethod: string;
   @ApiProperty({ description: 'Автопродление отключено' }) autoRenew: boolean;

@@ -147,13 +147,16 @@ export default function OrderDetailsPage() {
     }
   };
 
-  const handleUpdateStatus = async () => {
-    if (!id || !newStatus) return;
+  // FIX: принимаем статус как аргумент, чтобы избежать гонки setState -> чтение старого значения
+  const handleUpdateStatus = async (statusArg?: OrderStatus) => {
+    const statusToSet = statusArg ?? newStatus;
+    if (!id || !statusToSet) return;
     setUpdating(true);
     setError(null);
     try {
-      const updated = await ordersAPI.updateOrderStatus(id, newStatus);
+      const updated = await ordersAPI.updateOrderStatus(id, statusToSet);
       setOrder(updated);
+      setNewStatus(updated.status);
       toast.success('Статус заказа обновлен');
     } catch (e) {
       try {
@@ -197,12 +200,10 @@ export default function OrderDetailsPage() {
   };
 
   const quickToInProgress = async () => {
-    setNewStatus('in_progress');
-    await handleUpdateStatus();
+    await handleUpdateStatus('in_progress');
   };
   const quickToCompleted = async () => {
-    setNewStatus('completed');
-    await handleUpdateStatus();
+    await handleUpdateStatus('completed');
   };
 
   const handleRecalculate = async () => {
@@ -360,7 +361,12 @@ export default function OrderDetailsPage() {
                         <option value="completed">Завершен</option>
                         <option value="canceled">Отменен</option>
                       </select>
-                      <Button size="sm" onClick={handleUpdateStatus} disabled={updating} className="rounded-xl">
+                      <Button
+                        size="sm"
+                        onClick={() => handleUpdateStatus()}
+                        disabled={updating || !newStatus || newStatus === order.status}
+                        className="rounded-xl"
+                      >
                         <Save className="w-3.5 h-3.5 mr-1" />
                         Обновить
                       </Button>

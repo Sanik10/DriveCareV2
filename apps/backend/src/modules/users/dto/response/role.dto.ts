@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/users/dto/response/role.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RoleDto {

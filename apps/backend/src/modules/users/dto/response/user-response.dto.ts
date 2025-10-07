@@ -1,11 +1,10 @@
+// path: apps/backend/src/modules/users/dto/response/user-response.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import { RoleDto } from './role.dto';
 
 /**
- * 🔐 USER RESPONSE DTO
- * 
- * CRITICAL SECURITY: company_id удален из response!
- * Это предотвращает information disclosure атаки
+ * USER RESPONSE DTO
+ * SECURITY: company_id не возвращаем
  */
 export class UserResponseDto {
   @ApiProperty({ 
@@ -70,11 +69,6 @@ export class UserResponseDto {
     }
   })
   role: RoleDto;
-
-  // 🔐 CRITICAL SECURITY FIX: company_id УДАЛЕН!
-  // Ранее: company_id: string | null; 
-  // Причина удаления: Предотвращение information disclosure атак
-  // Multi-tenant безопасность: ID компании не должен быть доступен клиенту
 
   @ApiProperty({ 
     example: '2025-01-06T10:30:00.000Z', 

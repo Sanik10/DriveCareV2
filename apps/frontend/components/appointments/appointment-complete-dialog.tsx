@@ -2,9 +2,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { CheckCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Kbd } from '@/components/ui/kbd';
 
 type CompletePayload = {
   finalCost?: number;
@@ -53,15 +55,22 @@ export function AppointmentCompleteDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !loading && onOpenChange(v)}>
-      <DialogContent className="max-w-md">
+      <DialogContent glow className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Завершить запись</DialogTitle>
-          <DialogDescription>Укажите итоговую стоимость и заметки мастера (опционально)</DialogDescription>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+              <CheckCircle className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle>Завершить запись</DialogTitle>
+              <DialogDescription>Укажите итоговую стоимость и заметки мастера (опционально)</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 gap-3 py-2">
+        <div className="grid grid-cols-1 gap-4 mt-2">
           <div>
-            <label className="text-sm text-muted-foreground">Итоговая стоимость (₽)</label>
+            <div className="text-xs text-muted-foreground mb-1">Итоговая стоимость (₽)</div>
             <Input
               inputMode="decimal"
               placeholder="Например, 6500"
@@ -73,7 +82,7 @@ export function AppointmentCompleteDialog({
             )}
           </div>
           <div>
-            <label className="text-sm text-muted-foreground">Заметки мастера</label>
+            <div className="text-xs text-muted-foreground mb-1">Заметки мастера</div>
             <textarea
               className="w-full min-h-[90px] rounded-md border border-border bg-background text-sm px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               placeholder="Опционально"
@@ -83,8 +92,14 @@ export function AppointmentCompleteDialog({
           </div>
         </div>
 
-        <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>
+        <DialogFooter className="mt-4">
+          <div className="hidden sm:flex items-center text-xs text-muted-foreground mr-auto">
+            <span className="mr-2">Горячие клавиши:</span>
+            <Kbd>Esc</Kbd>
+            <span className="mx-1">—</span>
+            <span className="mr-2">Закрыть</span>
+          </div>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Отмена
           </Button>
           <Button

@@ -2,9 +2,11 @@
 'use client';
 
 import { useState } from 'react';
+import { XCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Kbd } from '@/components/ui/kbd';
 
 type Props = {
   open: boolean;
@@ -20,14 +22,23 @@ export function AppointmentCancelDialog({ open, onOpenChange, onConfirm, loading
 
   return (
     <Dialog open={open} onOpenChange={(v) => !loading && onOpenChange(v)}>
-      <DialogContent className="max-w-md">
+      <DialogContent glow className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Отменить запись</DialogTitle>
-          <DialogDescription>Укажите причину отмены (минимум 3 символа)</DialogDescription>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-destructive/20 flex items-center justify-center text-destructive">
+              <XCircle className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle>Отменить запись</DialogTitle>
+              <DialogDescription>Укажите причину отмены (минимум 3 символа)</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
         <div className="space-y-2">
-          <label className="text-sm text-muted-foreground">Причина</label>
+          <div className="text-xs text-muted-foreground mb-1">
+            Причина отмены <span className="text-rose-500">*</span>
+          </div>
           <Input
             value={reason}
             onChange={(e) => setReason(e.target.value)}
@@ -46,9 +57,14 @@ export function AppointmentCancelDialog({ open, onOpenChange, onConfirm, loading
           />
         </div>
 
-        <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>
-            Отмена
+        <DialogFooter className="mt-4">
+          <div className="hidden sm:flex items-center text-xs text-muted-foreground mr-auto">
+            <span className="mr-2">Горячие клавиши:</span>
+            <Kbd>Enter</Kbd>
+            <span className="ml-1">— Отменить</span>
+          </div>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+            Назад
           </Button>
           <Button
             variant="destructive"
@@ -63,7 +79,7 @@ export function AppointmentCancelDialog({ open, onOpenChange, onConfirm, loading
               }
             }}
           >
-            {loading ? 'Отмена...' : 'Отменить'}
+            {loading ? 'Отмена...' : 'Отменить запись'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,5 +1,5 @@
 // path: apps/backend/src/modules/auth/auth.service.ts
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Inject, forwardRef, Logger } from '@nestjs/common';
 import {
   InvalidCredentialsException,
   InactiveUserException,
@@ -9,6 +9,7 @@ import {
 import { UsersService } from '../users/users.service';
 import { LogoutDeviceDto } from './dto/request/logout-device.dto';
 import { RegisterCompanyDto } from './dto/request/register-company.dto';
+import { RegisterInviteDto } from './dto/request/register-invite.dto';
 import { AuditService, AuditAction, AuditLevel } from '../../common/audit/audit.service';
 
 import { TokenService } from './services/token.service';
@@ -17,8 +18,13 @@ import { SecurityService } from './services/security.service';
 import { CompanyOnboardingService } from './services/company-onboarding.service';
 import { TwoFAService } from './services/twofa.service';
 
+import { UsersInvitationsService } from '../users/services/users-invitations.service';
+import { UsersBusinessService } from '../users/services/users-business.service';
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private usersService: UsersService,
     private auditService: AuditService,
@@ -27,6 +33,10 @@ export class AuthService {
     private securityService: SecurityService,
     private companyOnboardingService: CompanyOnboardingService,
     private twoFA: TwoFAService,
+    @Inject(forwardRef(() => UsersInvitationsService))
+    private invitations: UsersInvitationsService,
+    @Inject(forwardRef(() => UsersBusinessService))
+    private usersBusinessService: UsersBusinessService,
   ) {}
 
   async validateUser(email: string, password: string, ipAddress?: string, userAgent?: string, twoFactorCode?: string): Promise<any> {
@@ -201,6 +211,100 @@ export class AuthService {
         userAgent,
         level: AuditLevel.ERROR,
         status: 'error',
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * 🔧 УЛУЧШЕНО: Детальное логирование регистрации по приглашению
+   */
+  async registerByInvite(registerDto: RegisterInviteDto, ipAddress?: string, userAgent?: string) {
+    const dto: any = registerDto as any;
+    const token: string = dto.token;
+    const password: string = dto.password;
+    const firstName: string | undefined = dto.firstName;
+    const lastName: string | undefined = dto.lastName;
+    const phone: string | undefined = dto.phone;
+
+    this.logger.log(`Register by invite started: token=${token?.substring(0, 16)}...`);
+
+    if (!token || !password) {
+      this.logger.error(`Missing required fields: token=${!!token}, password=${!!password}`);
+      throw new InvalidTokenException();
+    }
+
+    try {
+      // 1) Проверка и получение инвайта
+      this.logger.debug(`Validating invite token: ${token.substring(0, 16)}...`);
+      const invite = await this.invitations.getPendingInviteOrThrow(token);
+      this.logger.log(`✅ Valid invite found: id=${invite.id}, email=${invite.email}, companyId=${invite.companyId}`);
+
+      // 2) Проверка, что пользователь ещё не существует
+      const existing = await this.usersService.findByEmail(invite.email);
+      if (existing) {
+        this.logger.error(`User already exists: email=${invite.email}`);
+        throw new InvalidTokenException(); // email уже занят
+      }
+
+      // 3) Создание пользователя через бизнес-сервис
+      this.logger.debug(`Creating user: email=${invite.email}, roleId=${invite.roleId}`);
+      const createPayload: any = {
+        email: invite.email,
+        password,
+        firstName,
+        lastName,
+        phone,
+        company_id: invite.companyId,
+        role_id: invite.roleId,
+      };
+
+      const created = await this.usersBusinessService.createUser(createPayload, invite.invitedByUserId, {
+        ipAddress: ipAddress || '',
+        userAgent: userAgent || '',
+      });
+
+      this.logger.log(`✅ User created: id=${(created as any).id}, email=${invite.email}`);
+
+      // 4) Отмечаем инвайт как принятый
+      await this.invitations.consumeInvite(token, (created as any).id);
+      this.logger.log(`✅ Invite consumed: id=${invite.id}`);
+
+      // 5) Автологин: выдаём токены
+      this.logger.debug(`Generating tokens for new user: id=${(created as any).id}`);
+      const { tokens, user } = await this.generateTokens({ id: (created as any).id }, userAgent || '', ipAddress || '');
+
+      // 6) Аудит
+      await this.auditService.logRegistration({
+        userId: (created as any).id,
+        companyId: invite.companyId,
+        ipAddress,
+        userAgent,
+        details: {
+          email: this.maskEmail(invite.email),
+          registrationType: 'invite',
+          invitedBy: invite.invitedByUserId,
+        },
+      });
+
+      this.logger.log(`✅ Register by invite completed successfully: userId=${(created as any).id}, email=${invite.email}`);
+
+      return {
+        user,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn as any,
+        deviceId: tokens.deviceId,
+      };
+    } catch (error) {
+      this.logger.error(`Register by invite failed: ${error?.message || String(error)}`);
+      
+      await this.auditService.log(AuditAction.USER_REGISTERED, {
+        details: { reason: 'invite_registration_failed', error: error?.message || String(error) },
+        ipAddress,
+        userAgent,
+        status: 'error',
+        level: AuditLevel.ERROR,
       });
       throw error;
     }

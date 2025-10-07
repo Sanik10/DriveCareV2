@@ -24,6 +24,8 @@ import {
   ArrowRight
 } from 'lucide-react'
 import Link from 'next/link'
+import { useAuth } from '@/lib/hooks/use-auth'
+import { TariffPurchaseDialog } from './TariffPurchaseDialog'
 
 const FEATURE_CONFIG = {
   reports: { label: 'Базовые отчёты', icon: ClipboardList, description: 'Создание и экспорт стандартных отчётов' },
@@ -44,6 +46,8 @@ interface TariffDetailViewProps {
 
 export function TariffDetailView({ tariff, similarTariffs = [], popularTariffs = [] }: TariffDetailViewProps) {
   const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly')
+  const [purchaseOpen, setPurchaseOpen] = useState(false)
+  const { isAuthenticated } = useAuth()
   
   const price = period === 'monthly' ? tariff.priceMonthly : tariff.priceYearly
   const yearlyDiscount = tariff.yearlyDiscount || 0
@@ -144,15 +148,26 @@ export function TariffDetailView({ tariff, similarTariffs = [], popularTariffs =
 
         {/* CTA */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-          <Link href={`/auth/register?tariffId=${tariff.id}`}>
+          {isAuthenticated ? (
             <Button 
               size="lg" 
               className="px-8 py-4 rounded-2xl bg-gradient-primary hover:opacity-90 hover:scale-105 transition-all duration-300 font-semibold text-lg group"
+              onClick={() => setPurchaseOpen(true)}
             >
-              Выбрать {tariff.name}
+              Подключить {tariff.name}
               <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
             </Button>
-          </Link>
+          ) : (
+            <Link href={`/auth/register?tariffId=${tariff.id}`}>
+              <Button 
+                size="lg" 
+                className="px-8 py-4 rounded-2xl bg-gradient-primary hover:opacity-90 hover:scale-105 transition-all duration-300 font-semibold text-lg group"
+              >
+                Выбрать {tariff.name}
+                <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </Link>
+          )}
           
           <Link href={`/tariffs/compare?ids=${tariff.id}`}>
             <Button 
@@ -286,6 +301,14 @@ export function TariffDetailView({ tariff, similarTariffs = [], popularTariffs =
           )}
         </div>
       </div>
+
+      {/* Покупка тарифа (модалка) */}
+      <TariffPurchaseDialog
+        open={purchaseOpen}
+        onOpenChange={setPurchaseOpen}
+        tariff={tariff}
+        initialPeriod={period}
+      />
     </div>
   )
 }

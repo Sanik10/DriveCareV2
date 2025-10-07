@@ -1,3 +1,5 @@
+// path: apps/backend/src/modules/subscriptions/subscription-billing/dto/request/cancel-subscription.dto.ts
+
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 

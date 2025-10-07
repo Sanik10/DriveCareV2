@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/users/dto/response/paginated-users-response.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import { UserResponseDto } from './user-response.dto';
 

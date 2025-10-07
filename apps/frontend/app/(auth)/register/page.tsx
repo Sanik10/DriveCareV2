@@ -19,6 +19,8 @@ import {
   Lock,
   Sparkles,
   Loader2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -369,11 +371,24 @@ function SecurityStepForm({
     register,
     handleSubmit,
     formState: { errors },
+    watch,
   } = useForm<SecurityForm>({
     resolver: zodResolver(securitySchema),
     defaultValues,
     mode: 'onSubmit',
   });
+
+  const password = watch('ownerPassword') || '';
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const requirements = [
+    { key: 'len', label: 'Минимум 8 символов', valid: password.length >= 8 },
+    { key: 'lower', label: 'Строчная буква (a-z)', valid: /[a-z]/.test(password) },
+    { key: 'upper', label: 'Заглавная буква (A-Z)', valid: /[A-Z]/.test(password) },
+    { key: 'digit', label: 'Хотя бы одна цифра (0-9)', valid: /\d/.test(password) },
+    { key: 'special', label: 'Спецсимвол (!@#$%^&* и т.д.)', valid: /[^A-Za-z0-9]/.test(password) },
+  ] as const;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" autoComplete="off" noValidate data-form-type="other" data-lpignore="true">
@@ -385,13 +400,36 @@ function SecurityStepForm({
         </div>
 
         <div className="space-y-5" id="reg-step-security" aria-labelledby="reg-step-security-title">
+          {/* 🔥 ПЕРЕНЕСЕНО ВЫШЕ: Требования к паролю */}
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-primary">
+              <Lock className="w-4 h-4" />
+              <span>Требования к паролю:</span>
+            </div>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {requirements.map((r) => (
+                <li key={r.key} className="flex items-center gap-2 text-sm">
+                  {r.valid ? (
+                    <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                  ) : (
+                    <span className="w-4 h-4 rounded-full border border-border inline-block flex-shrink-0" />
+                  )}
+                  <span className={r.valid ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}>
+                    {r.label}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Поле пароля */}
           <div className="relative group">
             <Lock className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
             <Input
               id="ownerPassword"
               {...register('ownerPassword')}
-              type="password"
-              placeholder="Пароль"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Введите пароль"
               autoComplete="new-password"
               autoCorrect="off"
               autoCapitalize="off"
@@ -401,14 +439,24 @@ function SecurityStepForm({
               error={errors.ownerPassword?.message || externalValidationErrors?.ownerPassword}
               className="pl-12 pr-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
             />
+            <button
+              type="button"
+              aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-2.5 p-1 rounded-md text-muted-foreground hover:text-foreground transition-colors"
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
           </div>
 
+          {/* Подтверждение пароля */}
           <div className="relative group">
             <Lock className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
             <Input
               id="confirmPassword"
               {...register('confirmPassword')}
-              type="password"
+              type={showConfirmPassword ? 'text' : 'password'}
               placeholder="Подтвердите пароль"
               autoComplete="new-password"
               autoCorrect="off"
@@ -419,8 +467,18 @@ function SecurityStepForm({
               error={errors.confirmPassword?.message}
               className="pl-12 pr-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
             />
+            <button
+              type="button"
+              aria-label={showConfirmPassword ? 'Скрыть пароль' : 'Показать пароль'}
+              onClick={() => setShowConfirmPassword((v) => !v)}
+              className="absolute right-3 top-2.5 p-1 rounded-md text-muted-foreground hover:text-foreground transition-colors"
+              tabIndex={-1}
+            >
+              {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
           </div>
 
+          {/* Checkbox соглашения */}
           <div className="flex items-start gap-3 p-4 rounded-2xl glass-subtle border border-border/30">
             <input
               id="acceptTerms"
@@ -505,7 +563,7 @@ function RegisterPageContent() {
 
     setTariffLoading(true);
     setTariffError(null);
-    
+
     try {
       const tariff = await tariffsAPI.get(tariffId);
       if (!tariff.isActive) {
@@ -570,10 +628,8 @@ function RegisterPageContent() {
       await authAPI.registerCompany(requestData);
 
       // Передаем tariffId в success page для отображения выбранного плана
-      const successUrl = selectedTariff 
-        ? `/register/success?tariffId=${selectedTariff.id}`
-        : '/register/success';
-      
+      const successUrl = selectedTariff ? `/register/success?tariffId=${selectedTariff.id}` : '/register/success';
+
       router.push(successUrl);
     } catch (error) {
       if (error instanceof Error) {
@@ -746,9 +802,9 @@ function RegisterPageContent() {
                   <div className="flex items-center gap-3">
                     <AlertCircle className="w-5 h-5 text-destructive" />
                     <span className="text-sm text-destructive">{tariffError}</span>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={handleChangeTariff}
                       className="ml-auto rounded-xl btn-outline-fixed text-xs"
                     >
@@ -764,11 +820,7 @@ function RegisterPageContent() {
                     <h3 className="text-lg font-semibold text-primary">Выбранный тарифный план</h3>
                     <p className="text-sm text-muted-foreground">Тариф будет активирован после создания аккаунта</p>
                   </div>
-                  <TariffPreview 
-                    tariff={selectedTariff} 
-                    period="monthly"
-                    onEdit={handleChangeTariff}
-                  />
+                  <TariffPreview tariff={selectedTariff} period="monthly" onEdit={handleChangeTariff} />
                 </div>
               )}
             </div>
@@ -791,11 +843,7 @@ function RegisterPageContent() {
                     {index < currentStep ? <Check className="w-5 h-5" /> : index + 1}
                   </div>
                   {index < steps.length - 1 && (
-                    <div
-                      className={`w-16 h-0.5 mx-3 transition-all duration-500 ${
-                        index < currentStep ? 'bg-gradient-primary shadow-glow' : 'bg-border'
-                      }`}
-                    />
+                    <div className={`w-16 h-0.5 mx-3 transition-all duration-500 ${index < currentStep ? 'bg-gradient-primary shadow-glow' : 'bg-border'}`} />
                   )}
                 </div>
               ))}
@@ -867,11 +915,7 @@ function RegisterPageContent() {
 
               {!selectedTariff && (
                 <div className="pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={handleChangeTariff}
-                    className="rounded-2xl btn-outline-fixed text-sm"
-                  >
+                  <Button variant="outline" onClick={handleChangeTariff} className="rounded-2xl btn-outline-fixed text-sm">
                     Выбрать тарифный план
                   </Button>
                 </div>
@@ -886,14 +930,16 @@ function RegisterPageContent() {
 
 export default function RegisterPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex items-center gap-3">
-          <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          <span className="text-muted-foreground">Загрузка...</span>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            <span className="text-muted-foreground">Загрузка...</span>
+          </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <RegisterPageContent />
     </Suspense>
   );
