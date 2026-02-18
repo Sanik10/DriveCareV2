@@ -60,8 +60,9 @@ import { UsersInvitationsService } from './services/users-invitations.service';
 import { RoleHierarchyService } from './services/role-hierarchy.service';
 import { CreateInviteDto } from './dto/request/create-invite.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Role } from '../../database/entities/role.entity';
+import { UserSession } from '../../database/entities/user-session.entity';
 
 @ApiTags('👥 Управление пользователями')
 @Controller('users')
@@ -76,6 +77,7 @@ export class UsersController {
     private readonly usersInvitationsService: UsersInvitationsService,
     private readonly roleHierarchyService: RoleHierarchyService,
     @InjectRepository(Role) private readonly rolesRepo: Repository<Role>,
+    private readonly dataSource: DataSource, // NEW: используем DataSource для репозитория сессий
   ) {}
 
   @Post()
@@ -238,6 +240,53 @@ export class UsersController {
   @Throttle({ default: { limit: 50, ttl: 60_000 } })
   async getUserById(@Param('id') userId: string, @Req() req: RequestWithUser): Promise<UserResponseDto> {
     return this.usersService.getUserByIdSecure(userId, req.user);
+  }
+
+  // NEW: Сессии пользователя (админский просмотр)
+  @Get(':id([0-9a-fA-F-]{36})/sessions')
+  @Roles('company_owner', 'company_admin', 'superadmin')
+  @ApiOperation({
+    summary: 'Сессии пользователя (админский просмотр)',
+    description: 'Возвращает активные сессии пользователя. Проводится проверка принадлежности пользователя к компании.',
+  })
+  @ApiParam({ name: 'id', description: 'UUID пользователя' })
+  @ApiResponse({ status: 200, description: '✅ Ок' })
+  @ApiTooManyRequestsResponse({ description: '⚠️ Слишком много запросов (лимит: 30 в минуту)' })
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  async listUserSessions(@Param('id') userId: string, @Req() req: RequestWithUser) {
+    // Проверка доступа/существования пользователя
+    await this.usersService.getUserByIdSecure(userId, req.user);
+
+    const repo = this.dataSource.getRepository(UserSession);
+    const sessions = await repo.find({
+      where: { userId },
+      order: { lastUsedAt: 'DESC', createdAt: 'DESC' },
+    });
+
+    // Дедуп по deviceId — оставляем самую свежую
+    const byDevice = new Map<string, UserSession>();
+    for (const s of sessions) {
+      const key = s.deviceId || s.id;
+      const prev = byDevice.get(key);
+      const curTs = new Date(s.lastUsedAt || s.updatedAt || s.createdAt).getTime();
+      const prevTs = prev ? new Date(prev.lastUsedAt || prev.updatedAt || prev.createdAt).getTime() : -1;
+      if (!prev || curTs > prevTs) {
+        byDevice.set(key, s);
+      }
+    }
+
+    return Array.from(byDevice.values()).map((s) => ({
+      id: s.id,
+      deviceId: s.deviceId,
+      deviceName: s.deviceName,
+      userAgent: s.userAgent,
+      ipAddress: s.ipAddress,
+      isActive: s.isActive,
+      lastUsedAt: s.lastUsedAt,
+      createdAt: s.createdAt,
+      expiresAt: s.expiresAt,
+      compromisedAt: s.compromisedAt,
+    }));
   }
 
   @Post('invitations/:id/resend')

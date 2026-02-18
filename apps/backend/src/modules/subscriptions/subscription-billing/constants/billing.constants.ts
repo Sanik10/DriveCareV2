@@ -15,12 +15,22 @@ export const BILLING_CONSTANTS = {
     ACTIVE_SUBSCRIPTION_MS: 30 * 60 * 1000,
     COMPLIANCE_REPORT_MS: 10 * 60 * 1000,
     IDEMPOTENCY_MS: 15 * 60 * 1000,
+
+    // Оставляем старое поле, если где-то используется
     WEBHOOK_DEDUP_MS: 60 * 60 * 1000, // 1 час удержания обработанных событий
+
+    // Единый TTL из env (в секундах)
+    WEBHOOK_IDEMPOTENCY_TTL_SEC: Number(process.env.WEBHOOK_IDEMPOTENCY_TTL_SEC ?? 3600),
   },
   REDIS_KEYS: {
     IDEMPOTENCY_CREATE: (companyId: string, hash: string) => `idemp:billing:create:${companyId}:${hash}`,
     IDEMPOTENCY_PAYMENT: (companyId: string, hash: string) => `idemp:billing:payment:${companyId}:${hash}`,
+
     WEBHOOK_EVENT: (provider: string, eventId: string) => `billing:webhook:${provider}:${eventId}`,
+
+    // Дедуп бизнес-события (provider + paymentId + status)
+    WEBHOOK_PAYMENT_EVENT: (provider: string, paymentId: string, status: string) =>
+      `billing:webhook:${provider}:${paymentId}:${status}`,
   },
   WEBHOOK: {
     SIGNATURE_HEADERS: {

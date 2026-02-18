@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/auth/interfaces/token-payload.interface.ts
 import { AuthRole } from '../types/auth.types';
 
 export interface TokenPayload {

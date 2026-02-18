@@ -1,7 +1,7 @@
 // src/modules/payments/dto/request/update-payment.dto.ts (✅ XSS PROTECTED)
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import * as sanitizeHtml from 'sanitize-html';
+import sanitizeHtml from 'sanitize-html';
 import { 
   IsOptional, 
   IsString, 

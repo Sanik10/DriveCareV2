@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/auth/strategies/jwt.strategy.ts
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -48,6 +49,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
       const user = await usersService.findById(payload.sub);
       if (!user || !user.isActive) throw new UnauthorizedException('User not found or inactive');
+
+      // 🔄 ВАЖНО: апдейтим активность сессии на каждый авторизованный запрос
+      // Это поддерживает корректный lastUsedAt/updatedAt для "онлайн"/активности и аналитики
+      await sessionService.updateSessionActivity(payload.sessionId);
 
       return {
         id: payload.sub,

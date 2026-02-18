@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { AppLayout } from '@/components/app/AppLayout';
+import { PageFeatureBadge } from '@/components/app/PageFeatureBadge';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { invoicesAPI } from '@/lib/api/invoices';
 import { apiRequest } from '@/lib/api/core';
@@ -81,22 +82,37 @@ export default function NewInvoiceClient() {
   const router = useRouter();
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
 
+  // ✅ Все useState
   const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  // Form state
-  const today = useMemo(() => new Date(), []);
-  const defaultDue = useMemo(() => addDays(today, 30), [today]);
-  const [dueDate, setDueDate] = useState<string>(toDateInputValue(defaultDue));
+  const [dueDate, setDueDate] = useState<string>('');
   const [notes, setNotes] = useState('');
   const [paymentTermsDays, setPaymentTermsDays] = useState<number>(30);
   const [discountPercent, setDiscountPercent] = useState<number>(0);
-
-  // Order picker
   const [orderOpt, setOrderOpt] = useState<OrderOption | null>(null);
+
+  // ✅ Все useMemo
+  const today = useMemo(() => new Date(), []);
+  const defaultDue = useMemo(() => addDays(today, 30), [today]);
   const order = orderOpt?.meta ?? null;
 
+  const headerActions = useMemo(() => (
+    <div className="flex items-center gap-2">
+      <Link href="/dashboard/invoices">
+        <Button variant="outline" className="rounded-2xl btn-outline-fixed">
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          К списку
+        </Button>
+      </Link>
+    </div>
+  ), []);
+
+  // ✅ Все useEffect
   useEffect(() => setIsMounted(true), []);
+
+  useEffect(() => {
+    setDueDate(toDateInputValue(defaultDue));
+  }, [defaultDue]);
 
   useEffect(() => {
     if (!isMounted) return;
@@ -107,7 +123,6 @@ export default function NewInvoiceClient() {
     }
   }, [isMounted, authLoading, isAuthenticated, user, router]);
 
-  // keep paymentTermsDays in sync with dueDate
   useEffect(() => {
     try {
       const due = new Date(dueDate);
@@ -119,12 +134,11 @@ export default function NewInvoiceClient() {
     }
   }, [dueDate, today]);
 
+  // ✅ Функции-обработчики
   const fetchOrders = async (query: string): Promise<OrderOption[]> => {
-    // Ищем завершенные заказы компании; бэкенд фильтры могут отличаться — минимально: search + limit
     const sp = new URLSearchParams();
     if (query && query.trim()) sp.set('search', query.trim());
     sp.set('limit', '10');
-    // попытка сузить до "completed" если бэк поддерживает
     sp.set('status', 'completed');
     try {
       const res = await apiRequest<{ items?: OrderLite[] } | OrderLite[]>(
@@ -155,7 +169,7 @@ export default function NewInvoiceClient() {
     try {
       const payload = {
         orderId: order.id,
-        paymentTermsDays, // будет рассчитан на бэке в dueDate или использован как есть
+        paymentTermsDays,
         discountPercent: discountPercent || undefined,
         notes: notes || undefined,
       };
@@ -169,6 +183,7 @@ export default function NewInvoiceClient() {
     }
   };
 
+  // ✅ Условные return
   if (!isMounted) return null;
 
   if (authLoading) {
@@ -186,17 +201,6 @@ export default function NewInvoiceClient() {
 
   if (!isAuthenticated || !user) return null;
 
-  const headerActions = (
-    <div className="flex items-center gap-2">
-      <Link href="/dashboard/invoices">
-        <Button variant="outline" className="rounded-2xl btn-outline-fixed">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          К списку
-        </Button>
-      </Link>
-    </div>
-  );
-
   return (
     <AppLayout
       title="Создание счёта"
@@ -205,25 +209,17 @@ export default function NewInvoiceClient() {
       actions={headerActions}
     >
       <div className="container mx-auto px-6 py-6 space-y-6">
-        {/* Invoice Creation Feature Badge */}
-        <Card className="p-4 glass border-primary/20 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-3xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-r from-primary to-secondary">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-primary">Автоматическое создание счетов</h3>
-              <p className="text-sm text-muted-foreground">
-                Счета генерируются на основе заказов с автоматическим расчетом НДС, скидок и сроков оплаты.
-              </p>
-            </div>
-            <div className="ml-auto">
-              <TrendingUp className="w-6 h-6 text-secondary" />
-            </div>
-          </div>
-        </Card>
+        
+        {/* Feature Badge */}
+        <PageFeatureBadge
+          variant="orange-amber"
+          icon={Sparkles}
+          title="Автоматическое создание счетов"
+          description="Счета генерируются на основе заказов с автоматическим расчетом НДС, скидок и сроков оплаты."
+          aside={<TrendingUp className="w-6 h-6 text-secondary" />}
+        />
 
-        {/* Order Selection (без ввода UUID) */}
+        {/* Order Selection */}
         <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-xl bg-blue-500/20">
@@ -259,7 +255,7 @@ export default function NewInvoiceClient() {
                   className="rounded-2xl btn-outline-fixed"
                   title="Открыть список заказов"
                 >
-                  Перейти к заказам
+                  К заказам
                 </Button>
               </Link>
             </div>

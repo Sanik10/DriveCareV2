@@ -1,5 +1,5 @@
 // path: apps/frontend/lib/api/payment-methods.ts
-import { buildApiUrl } from '@/lib/api/core';
+import { apiRequest, type ApiRequestInit } from '@/lib/api/core';
 import type {
   PaymentMethodsQuery,
   PaginatedPaymentMethodsResponse,
@@ -10,20 +10,6 @@ import type {
   TestIntegrationResponse,
   CalculateFeeResponse,
 } from '@/lib/types/payment-methods';
-
-function authHeaders(base?: HeadersInit): HeadersInit {
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    ...(base as Record<string, string>),
-  };
-  try {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-    if (token) headers.Authorization = `Bearer ${token}`;
-  } catch {
-    // ignore
-  }
-  return headers;
-}
 
 function toQueryStringPM(q: PaymentMethodsQuery): string {
   const qs = new URLSearchParams();
@@ -40,25 +26,10 @@ function toQueryStringPM(q: PaymentMethodsQuery): string {
 export const paymentMethodsAPI = {
   async getPaymentMethods(query: PaymentMethodsQuery): Promise<PaginatedPaymentMethodsUI> {
     const qs = toQueryStringPM(query);
-    const url = buildApiUrl(`/payment-methods${qs ? `?${qs}` : ''}`);
+    const url = `/payment-methods${qs ? `?${qs}` : ''}`;
 
-    const res = await fetch(url, {
-      method: 'GET',
-      credentials: 'include',
-      headers: authHeaders(),
-      cache: 'no-store',
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(
-        JSON.stringify({
-          message: `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ''}`,
-        }),
-      );
-    }
-
-    const json: unknown = await res.json();
+    // Используем единый клиент с автоподстановкой Authorization и авто‑refresh по 401
+    const json = await apiRequest<unknown>(url, { method: 'GET' });
 
     // Ожидаемый DTO: { data, pagination }
     if (
@@ -114,103 +85,39 @@ export const paymentMethodsAPI = {
   },
 
   async getPaymentMethod(id: string): Promise<PaymentMethodResponse> {
-    const url = buildApiUrl(`/payment-methods/${id}`);
-    const res = await fetch(url, {
-      method: 'GET',
-      credentials: 'include',
-      headers: authHeaders(),
-      cache: 'no-store',
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(JSON.stringify({ message: `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ''}` }));
-    }
-    return (await res.json()) as PaymentMethodResponse;
+    return apiRequest<PaymentMethodResponse>(`/payment-methods/${id}`, { method: 'GET' });
   },
 
   async create(payload: PaymentMethodCreateRequest): Promise<PaymentMethodResponse> {
-    const url = buildApiUrl(`/payment-methods`);
-    const res = await fetch(url, {
+    return apiRequest<PaymentMethodResponse>(`/payment-methods`, {
       method: 'POST',
-      credentials: 'include',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload),
+      json: payload,
     });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(JSON.stringify({ message: `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ''}` }));
-    }
-    return (await res.json()) as PaymentMethodResponse;
   },
 
   async update(id: string, payload: PaymentMethodUpdateRequest): Promise<PaymentMethodResponse> {
-    const url = buildApiUrl(`/payment-methods/${id}`);
-    const res = await fetch(url, {
+    return apiRequest<PaymentMethodResponse>(`/payment-methods/${id}`, {
       method: 'PATCH',
-      credentials: 'include',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload),
+      json: payload,
     });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(JSON.stringify({ message: `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ''}` }));
-    }
-    return (await res.json()) as PaymentMethodResponse;
   },
 
   async remove(id: string): Promise<void> {
-    const url = buildApiUrl(`/payment-methods/${id}`);
-    const res = await fetch(url, {
-      method: 'DELETE',
-      credentials: 'include',
-      headers: authHeaders(),
-    });
-    if (!res.ok && res.status !== 204) {
-      const text = await res.text().catch(() => '');
-      throw new Error(JSON.stringify({ message: `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ''}` }));
-    }
+    await apiRequest<void>(`/payment-methods/${id}`, { method: 'DELETE' });
   },
 
   async toggleStatus(id: string): Promise<PaymentMethodResponse> {
-    const url = buildApiUrl(`/payment-methods/${id}/toggle-status`);
-    const res = await fetch(url, {
-      method: 'POST',
-      credentials: 'include',
-      headers: authHeaders(),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(JSON.stringify({ message: `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ''}` }));
-    }
-    return (await res.json()) as PaymentMethodResponse;
+    return apiRequest<PaymentMethodResponse>(`/payment-methods/${id}/toggle-status`, { method: 'POST' });
   },
 
   async testIntegration(id: string): Promise<TestIntegrationResponse> {
-    const url = buildApiUrl(`/payment-methods/${id}/test-integration`);
-    const res = await fetch(url, {
-      method: 'POST',
-      credentials: 'include',
-      headers: authHeaders(),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(JSON.stringify({ message: `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ''}` }));
-    }
-    return (await res.json()) as TestIntegrationResponse;
+    return apiRequest<TestIntegrationResponse>(`/payment-methods/${id}/test-integration`, { method: 'POST' });
   },
 
   async calculateFee(id: string, amount: number): Promise<CalculateFeeResponse> {
-    const url = buildApiUrl(`/payment-methods/${id}/calculate-fee`);
-    const res = await fetch(url, {
+    return apiRequest<CalculateFeeResponse>(`/payment-methods/${id}/calculate-fee`, {
       method: 'POST',
-      credentials: 'include',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ amount }),
+      json: { amount },
     });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(JSON.stringify({ message: `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ''}` }));
-    }
-    return (await res.json()) as CalculateFeeResponse;
   },
 };

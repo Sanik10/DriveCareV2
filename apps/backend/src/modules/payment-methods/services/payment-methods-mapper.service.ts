@@ -11,6 +11,12 @@ import {
 
 @Injectable()
 export class PaymentMethodsMapperService {
+  private requiresIntegration(type?: string | null): boolean {
+    const t = String(type || '').toLowerCase();
+    // Онлайн-методы, для которых нужна интеграция с PSP
+    return t === 'card' || t === 'digital_wallet' || t === 'cryptocurrency';
+  }
+
   mapToResponseDto(pm: PaymentMethod): PaymentMethodResponseDto {
     return {
       id: pm.id,
@@ -46,12 +52,26 @@ export class PaymentMethodsMapperService {
     };
   }
 
+  /**
+   * ВАЖНО:
+   * - Для офлайн-методов (cash, bank_transfer, corporate, installments) интеграция не требуется.
+   *   Возвращаем { isConfigured: true, testMode: false }, чтобы в UI не горела плашка "Требует настройки".
+   * - Для онлайн-методов (card, digital_wallet, cryptocurrency):
+   *   • если gatewayType не задан → isConfigured=false, testMode=false
+   *   • если задан → isConfigured=true, testMode = !!gatewayTestMode
+   */
   private mapIntegrationStatus(pm: PaymentMethod) {
-    if (!pm.gatewayType) return { isConfigured: false, testMode: true };
+    const needs = this.requiresIntegration(pm.type as any);
+    if (!needs) {
+      return { isConfigured: true, testMode: false } as const;
+    }
+    if (!pm.gatewayType) {
+      return { isConfigured: false, testMode: false } as const;
+    }
     return {
       isConfigured: true,
       gatewayType: pm.gatewayType,
-      testMode: pm.gatewayTestMode ?? true,
+      testMode: !!pm.gatewayTestMode,
     };
   }
 
@@ -159,7 +179,7 @@ export class PaymentMethodsMapperService {
       type: pm.type || 'unknown',
       fee: pm.processingFeePercent ? `${pm.processingFeePercent}%` : '0%',
       status: pm.isActive ? 'Активен' : 'Неактивен',
-      integration: pm.gatewayType || 'Не настроена',
+      integration: pm.gatewayType || 'Не требуется',
       created: pm.createdAt.toLocaleDateString('ru-RU'),
     }));
   }
@@ -187,8 +207,6 @@ export class PaymentMethodsMapperService {
     };
     return iconMap[type] || '💰';
   }
-
-  // === ДОБАВЛЕНО: используется бизнес-слоем ===
 
   mapBulkOperationResult(updated: number, total: number, errors: string[] = []): BulkUpdateResult {
     const failed = total - updated;

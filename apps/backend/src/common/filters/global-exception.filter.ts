@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
-import { TypeORMError, QueryFailedError } from 'typeorm';
+  import { TypeORMError, QueryFailedError } from 'typeorm';
 import { ValidationError } from 'class-validator';
 import { ThrottlerException } from '@nestjs/throttler';
 import { v4 as uuidv4 } from 'uuid';
@@ -60,8 +60,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const requestContext = this.extractRequestContext(request, correlationId);
     const exceptionDetails = await this.analyzeException(exception, requestContext);
 
-    // Если ответ уже отправлен (например, в контроллере использовали @Res() и res.send()),
-    // не пытаемся писать ещё раз, иначе будет ERR_HTTP_HEADERS_SENT.
     if (response.headersSent) {
       this.logForMonitoring(
         {
@@ -72,14 +70,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         requestContext,
         correlationId,
       );
-      // Всё равно пишем в аудит (fire-and-forget)
       this.auditExceptionAsync(exceptionDetails, requestContext).catch((auditError) => {
         this.logger.error(`Audit logging failed: ${auditError.message}`);
       });
       return;
     }
 
-    // fire-and-forget audit
     this.auditExceptionAsync(exceptionDetails, requestContext).catch((auditError) => {
       this.logger.error(`Audit logging failed: ${auditError.message}`);
     });
@@ -108,7 +104,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   }
 
   private async analyzeException(exception: unknown, context: any) {
-    // Domain exceptions
     if (exception instanceof EntityNotFoundException) {
       return {
         type: 'ENTITY_NOT_FOUND',
@@ -185,42 +180,49 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       };
     }
 
-    // HTTP Exceptions
     if (exception instanceof HttpException) {
       return this.handleHttpException(exception);
     }
 
-    // DB Exceptions
     if (exception instanceof TypeORMError) {
       return this.handleDatabaseException(exception);
     }
 
-    // Throttling
     if (exception instanceof ThrottlerException) {
       return this.handleThrottlerException();
     }
 
-    // class-validator ValidationError[]
     if (Array.isArray(exception) && exception[0] instanceof ValidationError) {
       return this.handleValidationException(exception as ValidationError[]);
     }
 
-    // Unknown
     return this.handleUnknownException(exception as Error);
   }
 
   private handleHttpException(exception: HttpException) {
     const status = exception.getStatus();
-    const responseBody = exception.getResponse();
+    const responseBody = exception.getResponse() as any;
+
+    let message = this.extractHttpMessage(responseBody);
+    let joinedErrors: string[] | undefined;
+
+    // В DEV добавляем подробности из EnhancedValidationPipe: errors[]
+    if (this.isDevelopment && responseBody && typeof responseBody === 'object' && Array.isArray(responseBody.errors)) {
+      joinedErrors = responseBody.errors.map((e: any) => String(e));
+      if (joinedErrors.length > 0) {
+        message = `${message}: ${joinedErrors.join('; ')}`;
+      }
+    }
 
     return {
       type: 'HTTP_EXCEPTION',
       statusCode: status,
-      message: this.extractHttpMessage(responseBody),
+      message,
       originalError: this.isDevelopment ? exception.message : undefined,
       stack: this.isDevelopment ? (exception.stack || undefined) : undefined,
       level: status >= 500 ? AuditLevel.ERROR : AuditLevel.WARNING,
       category: this.categorizeHttpStatus(status),
+      errors: joinedErrors,
     };
   }
 
@@ -303,6 +305,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           sanitizedMessage: exceptionDetails.message,
           internalError: exceptionDetails.internalError,
           field: exceptionDetails.field,
+          errors: exceptionDetails.errors,
         },
         status: 'error',
       });
@@ -322,6 +325,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     if (exceptionDetails.field) {
       baseResponse.field = exceptionDetails.field;
+    }
+    if (this.isDevelopment && exceptionDetails.errors) {
+      baseResponse.errors = exceptionDetails.errors;
     }
 
     if (this.isDevelopment && exceptionDetails.originalError) {
@@ -358,8 +364,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       this.logger.warn(`${logMessage} ${JSON.stringify(details)}`);
     }
   }
-
-  // Utils
 
   private sanitizeUrl(url: string): string {
     return url.replace(/([?&])(password|token|secret|key)=[^&]*/gi, '$1$2=***');

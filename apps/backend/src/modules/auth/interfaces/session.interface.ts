@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/auth/interfaces/session.interface.ts
 import { SessionStatus } from '../types/auth.types';
 
 export interface CreateSessionData {

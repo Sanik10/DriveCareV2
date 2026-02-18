@@ -10,7 +10,7 @@ import {
   ValidateNested
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-import * as sanitizeHtml from 'sanitize-html';
+import sanitizeHtml from 'sanitize-html';
 import { COMPANIES_CONSTANTS } from '../../constants/companies.constants';
 import { WorkingHoursDto } from './create-company.dto'; // ✅ ИСПРАВЛЕНО: Импорт строгой типизации
 

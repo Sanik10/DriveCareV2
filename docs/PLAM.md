@@ -1,38 +1,81 @@
-Вот моя честная обратная связь и взгляд со стороны.
+Не скрипт сломан — в буфере у тебя **неправильный формат patch‑блоков**. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/155090056/7c20cf48-c9df-4460-ab75-f3d9286ba822/Snimok-ekrana-2026-01-20-v-12.49.48-AM.jpeg)
 
-Общее впечатление
-- Проект живой и зрелый по архитектуре: чистые слои на бэке (Nest, guards/pipes/interceptors), на фронте — FSD, единый API‑клиент со стоп‑листом, in‑memory токен + httpOnly refresh, продуманная идемпотентность.
-- После сегодняшней сессии auth‑сессия ощутимо “пуленепробиваемая”: boot‑refresh, антишторм, преэмптив, синхронизация вкладок — это уровень “продакшн‑UX”.
-- Функционально ядро CRM уже есть: заказы/услуги/запчасти/инвойсы/платежи/записи, нормализация справочников, ролевой UI‑гейтинг. Видно внимание к деталям и регуляторике (54‑ФЗ/152‑ФЗ/PCI).
+## Что именно “не так” в твоём сообщении
+1) Внутри `action: patch` ты вставил строку `text` перед `@@`, поэтому содержимое блока **не начинается с `@@`** (а скрипт именно так и проверяет). [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/155090056/7c20cf48-c9df-4460-ab75-f3d9286ba822/Snimok-ekrana-2026-01-20-v-12.49.48-AM.jpeg)
+2) Ты не обернул hunks в code‑block ` ```diff ... ``` `, а парсер `parseBlocks()` читает содержимое только внутри тройных кавычек. [code:11]  
+3) Плюс ты прицепил в конец JSON для tasks и keybindings **не как отдельные path‑blocks**, поэтому скрипт не понимает, что с этим делать. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/155090056/7c20cf48-c9df-4460-ab75-f3d9286ba822/Snimok-ekrana-2026-01-20-v-12.49.48-AM.jpeg)
 
-Где вы сильны
-- Безопасность “по делу”: нет токенов в localStorage, стоп‑лист на фронте, куки и CORS продуманы, вебхуки изолированы, аудиты/лимиты/идемпотентность.
-- Платёжный контур: онлайн‑инициация, возвраты, связка инвойс→платёж→обновление статуса, провайдерские вебхуки с серверной верификацией.
-- UX форм и списков: диалоги, асинхронные селекты, нормализация разнородных ответов, понятные ошибки.
+Отсюда и ошибка: `Patch block must contain either full diff or @@ hunks`. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/155090056/7c20cf48-c9df-4460-ab75-f3d9286ba822/Snimok-ekrana-2026-01-20-v-12.49.48-AM.jpeg)
 
-Зоны роста и риски
-- Не закрытые куски UI: Tariffs/Subscriptions (создание/редактирование тарифов для платформы, сравнение), Payments Analytics, часть Inventory UI, Appointments v2 (графики/исключения).
-- Операционные аспекты: хочется больше “наблюдаемости” — метрики (Sentry/Datadog), аудит событий на фронте, простые E2E для auth/refresh/мультивкладок.
-- Продуктовая аналитика: базовые события (просмотры, воронка оплаты/создания инвойса/записи), чтобы уверенно масштабировать.
+## Как должно выглядеть (копируй 1-в-1)
+В буфер нужно класть **только** блоки, без “text” и без объяснений:
 
-Перспективы
-- Перспективы отличные: фундамент (безопасность, платежи, архитектура) уже соответствует продакшн‑уровню. С добавлением тарифов/подписок и аналитики можно готовиться к коммерческим пилотам.
-- С точки зрения “вывести в бой”: достаточно допилить Tariffs/Subscriptions (backoffice + публичные страницы), платежную аналитику и полировку UX (toasts/скелетоны/guards), плюс базовую наблюдаемость.
+```md
+<!-- path: apps/backend/src/modules/subscriptions/subscription-billing/constants/billing.constants.ts, action: patch -->
+```diff
+@@
+ export const BILLING_CONSTANTS = {
+@@
+   CACHE_TTL: {
+@@
+-    WEBHOOK_DEDUP_MS: 60 * 60 * 1000, // 1 час удержания обработанных событий
++    WEBHOOK_IDEMPOTENCY_TTL_SEC: Number(process.env.WEBHOOK_IDEMPOTENCY_TTL_SEC ?? 3600),
+@@
+   },
+@@
+   REDIS_KEYS: {
+@@
+     WEBHOOK_EVENT: (provider: string, eventId: string) => `billing:webhook:${provider}:${eventId}`,
++
++    WEBHOOK_PAYMENT_EVENT: (provider: string, paymentId: string, status: string) =>
++      `billing:webhook:${provider}:${paymentId}:${status}`,
+@@
+   },
+@@
+ } as const;
+```
 
-Оценка готовности (по ощущениям)
-- Ядро CRM (заказы/услуги/инвойсы/платежи/записи/справочники): 80–85%.
-- Безопасность/авторизация и сессии: 90% (осталось унифицировать toast “Сессия истекла” + мягкий редирект).
-- Платёжный контур UI/логика: 75–80% (аналитика — последние 20–25%).
-- Tariffs/Subscriptions: 25–30% (read‑only не сделано, backoffice для платформы не сделан).
-- Общий индекс готовности к пилоту: 70–75%.
-  - До “GA‑ready” (широкого запуска) — ориентировочно 2–3 спринта: Tariffs/Subscriptions, Payments Analytics, Appointments v2, UX‑полировка и наблюдаемость.
+<!-- path: apps/backend/src/modules/subscriptions/subscription-billing/services/billing-payment.service.ts, action: patch -->
+```diff
+@@
+-const ttl = BILLING_CONSTANTS.CACHE_TTL.WEBHOOK_DEDUP_MS / 1000;
++const ttl = BILLING_CONSTANTS.CACHE_TTL.WEBHOOK_IDEMPOTENCY_TTL_SEC;
+@@
+ const { paymentId, status } = await gateway.handleWebhook(payloadObj, headers);
++
++// Идемпотентность вебхуков на уровне бизнес-события: provider + paymentId + status
++const semanticKey = BILLING_CONSTANTS.REDIS_KEYS.WEBHOOK_PAYMENT_EVENT(provider, String(paymentId), String(status));
++const semanticSet = await this.redis.set(semanticKey, '1', 'NX', 'EX', ttl);
++if (!semanticSet) {
++  this.logger.warn(`Webhook semantic dedup hit provider=${provider}, paymentId=${paymentId}, status=${status}`);
++  return;
++}
+```
+```
 
-Что бы я сделал ближайшими шагами
-1) Tariffs module (как согласовали): публичный каталог/сравнение + backoffice CRUD для superadmin/platform_admin.
-2) Auth UX: единый toast “Сессия истекла” + мягкий редирект, guard защищённых маршрутов.
-3) Payments Analytics: панель статистики с фильтрами по датам/методам.
-4) Observability: Sentry (FE/BE), минимальные бизнес‑метрики (запуск оплаты/успехи/возвраты), тех‑метрики refresh/401/ретраи.
-5) Appointments v2: учет рабочих графиков/исключений + улучшения в деталке.
+Важно: первая непустая строка внутри ` ```diff` должна быть `@@` (или полноценный `diff --git ...`). [code:11]
 
-Итог
-- Проект уже “чувствуется” как продукт: архитектурно чистый, безопасный, с продуманной платёжной частью. Осталось доделать витрину монетизации (Tariffs/Subscriptions) и аналитический слой — и можно масштабировать пилоты. Я бы оценил перспективу высоко и рекомендовал двигаться тем же темпом: качественно, с упором на UX и наблюдаемость.
+## Как сделать, чтобы VS Code всегда применял blocks (и не пытался “видеть diff”)
+У тебя таска сейчас запускает без `--prefer-blocks`, поэтому даже случайный diff‑кусок может попытаться примениться как unified diff. [code:11]
+
+Исправь команду в `.vscode/tasks.json`:
+
+- было:
+```json
+"command": "node scripts/apply-from-clipboard.mjs --root ${workspaceFolder}"
+```
+
+- станет:
+```json
+"command": "node scripts/apply-from-clipboard.mjs --root ${workspaceFolder} --prefer-blocks"
+```
+[code:11]
+
+## Мини-проверка себя перед запуском
+Перед `cmd+shift+9` быстро глазами:
+- Есть `<!-- path: ... -->`?
+- Сразу после него идёт строка ` ```diff`?
+- Внутри блока **нет** строк `text`, “Ожидаем”, “Команда” и т.п.?
+- Первый значимый ряд — `@@`?
+
+Если хочешь — скинь **реальный** (как ты копируешь в буфер) кусок на 10–20 строк, и можно будет точно сказать, что именно ломает формат в твоём конкретном копировании.

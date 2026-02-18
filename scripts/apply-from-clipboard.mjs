@@ -20,9 +20,9 @@
       - Saves ai.patch / ai.rewritten.patch / ai.sanitized.patch for debugging
       - On failure: falls back to path-blocks if present
    B) Path-blocks:
-      <!-- path: relative/path.ext[, action: delete|replace|append|move, from: old/path.ext] -->
-      ```lang
-      ...full file content...
+      <!-- path: relative/path.ext[, action: delete|replace|append|move|patch, from: old/path.ext] -->
+      ```lang|diff
+      ...content or hunks...
       ```
    Default action for blocks: replace
 
@@ -208,13 +208,12 @@ function extractUnifiedDiffSegmentsByDiffGit(input) {
 // If message contains unified diff without "diff --git" (e.g. plain ---/+++), extract whole patch
 function extractWholeUnifiedPatch(input) {
   const txt = normalizeEOL(input);
-  // find first plausible patch header
   const lines = txt.split('\n');
 
   const isHeader = (l) =>
     /^diff --git /.test(l) ||
     /^---\s+\S/.test(l) ||
-    /^\*\*\*\s+\S/.test(l) ||   // context diff (rare from LLMs)
+    /^\*\*\*\s+\S/.test(l) ||
     /^Index:\s+\S/.test(l);
 
   let start = -1;
@@ -225,7 +224,6 @@ function extractWholeUnifiedPatch(input) {
 
   const patch = lines.slice(start).join('\n');
 
-  // quick sanity check: unified diff should have +++ and @@ somewhere
   const hasTriple = /(^|\n)\+\+\+ /.test(patch);
   const hasHunk = /(^|\n)@@ /.test(patch);
   if (hasTriple || hasHunk) return ensureTrailingLF(patch);
@@ -238,7 +236,6 @@ function getPatchText(input) {
   const blocks = extractCodeBlockDiffs(input);
   if (blocks.length) {
     log(`found ${blocks.length} diff/patch code block(s)`);
-    // If blocks exist → use only them to avoid duplication
     return ensureTrailingLF(blocks.join('\n\n'));
   }
   const segs = extractUnifiedDiffSegmentsByDiffGit(input);
@@ -246,7 +243,6 @@ function getPatchText(input) {
     log(`found ${segs.length} raw unified diff segment(s) via diff --git`);
     return ensureTrailingLF(segs.join('\n'));
   }
-  // Try a whole unified patch (---/+++), if any
   const whole = extractWholeUnifiedPatch(input);
   if (whole) {
     log('found raw unified patch (---/+++ without diff --git)');
@@ -261,11 +257,7 @@ function sanitizePatch(patch) {
     .replace(/^\uFEFF/, '')
     .replace(/\n\uFEFF/g, '\n');
 
-  // Common invisible troublemakers
-  txt = txt.replace(/[\u200B\u200C\u200D\u2060\u00A0]/g, (m) => {
-    // remove zero-widths and NBSP entirely
-    return '';
-  });
+  txt = txt.replace(/[\u200B\u200C\u200D\u2060\u00A0]/g, () => '');
 
   const lines = txt.split('\n');
   let inHunk = false;
@@ -273,7 +265,6 @@ function sanitizePatch(patch) {
   for (let i = 0; i < lines.length; i++) {
     let l = lines[i];
 
-    // Trim only trailing \r (in case some sneaked in)
     if (l.endsWith('\r')) l = l.slice(0, -1);
 
     if (/^@@ /.test(l)) {
@@ -281,16 +272,13 @@ function sanitizePatch(patch) {
       lines[i] = l;
       continue;
     }
-    // Headers turn hunk mode off
     if (/^(diff --git |index |--- |\+\+\+ |new file mode|deleted file mode|rename from |rename to |similarity index |dissimilarity index |old mode |new mode |Binary files |GIT binary patch|Index: )/.test(l)) {
       inHunk = false;
       lines[i] = l;
       continue;
     }
     if (inHunk) {
-      // Valid hunk lines: ' ', '+', '-', '\' (No newline at end of file)
       if (!/^[ +\-\\]/.test(l)) {
-        // Prepend space to salvage malformed context lines
         l = ' ' + l;
       }
       lines[i] = l;
@@ -312,7 +300,6 @@ function rewritePatchPaths(patch, pairs) {
       { from: `b/${from}/`, to: `b/${to}/` },
       { from: `--- a/${from}/`, to: `--- a/${to}/` },
       { from: `+++ b/${from}/`, to: `+++ b/${to}/` },
-      // Also attempt raw ---/+++ without a/b prefixes
       { from: `--- ${from}/`, to: `--- ${to}/` },
       { from: `+++ ${from}/`, to: `+++ ${to}/` },
     ];
@@ -347,7 +334,6 @@ function splitPatchIntoSegments(patch) {
   }
   if (buf.length) segments.push(ensureTrailingLF(buf.join('\n')));
 
-  // If there was no diff --git at all, treat the "segment" as a single patch
   if (!sawAnyDiffGit) {
     return [ensureTrailingLF(patch)];
   }
@@ -384,12 +370,10 @@ function buildStrategies() {
   const with3way = [];
   for (const c of combos) with3way.push(['--3way', ...c]);
 
-  // Prefer 3-way first (helps when worktree diverged), then plain combos
   return [...with3way, ...combos];
 }
 
 function reverseCheck(text) {
-  // If segment seems already applied, `git apply --reverse --check` should succeed for some combo
   const reverseCombos = [
     [],
     ['--unidiff-zero'],
@@ -409,7 +393,6 @@ function reverseCheck(text) {
 function applySegment(seg) {
   const strategies = buildStrategies();
 
-  // Quick reverse-check per segment
   if (!flags.dryRun && reverseCheck(seg)) {
     console.log('Segment already applied (reverse-check). Skipping.');
     return { ok: true, alreadyApplied: true };
@@ -427,7 +410,6 @@ function applyGitPatch(patchText, { tryRewrites = true } = {}) {
 
   const orig = sanitizePatch(patchText);
 
-  // 1) Try original, split into segments, apply sequentially
   let segments = splitPatchIntoSegments(orig);
   let allOk = true;
   let anyApplied = false;
@@ -444,7 +426,6 @@ function applyGitPatch(patchText, { tryRewrites = true } = {}) {
     return { ok: true, alreadyApplied: !anyApplied };
   }
 
-  // 2) Try path rewrites if allowed
   if (tryRewrites && !flags.noPathRewrite) {
     let mapped = rewritePatchPaths(orig, flags.maps);
     const inferred = inferDefaultMappingsForSrc(mapped);
@@ -467,7 +448,6 @@ function applyGitPatch(patchText, { tryRewrites = true } = {}) {
       return { ok: true, alreadyApplied: !anyApplied2 };
     }
 
-    // Save debugging artifacts
     const p1 = path.join(process.cwd(), 'ai.patch');
     const p2 = path.join(process.cwd(), 'ai.rewritten.patch');
     const p3 = path.join(process.cwd(), 'ai.sanitized.patch');
@@ -510,13 +490,41 @@ function parseBlocks(input) {
 }
 
 function applyBlocks(blocks, rootDir) {
+  function buildMinimalFilePatch(relPath, hunkOnlyText) {
+    const p = relPath.replace(/^\/+/, '');
+    const hunks = ensureTrailingLF(normalizeEOL(hunkOnlyText));
+    return ensureTrailingLF(
+      [
+        `diff --git a/${p} b/${p}`,
+        `--- a/${p}`,
+        `+++ b/${p}`,
+        hunks.trimEnd(),
+        '',
+      ].join('\n'),
+    );
+  }
+
+  function looksLikeHunksOnly(txt) {
+    const s = String(txt || '').trimStart();
+    return s.startsWith('@@ ');
+  }
+
+  function looksLikeFullDiff(txt) {
+    const s = String(txt || '');
+    return /(^|\n)diff --git /.test(s) || /(^|\n)---\s+/.test(s) || /(^|\n)\+\+\+\s+/.test(s);
+  }
+
   const actions = [];
   for (const b of blocks) {
     const outPath = resolveSafe(rootDir, b.relPath);
     const action = ((b.options.action || b.options.mode) ?? 'replace').toString().toLowerCase();
-    if (action === 'delete') actions.push({ type: 'delete', outPath });
-    else if (action === 'append') actions.push({ type: 'append', outPath, content: normalizeEOL(b.content) });
-    else if (action === 'move') {
+    if (action === 'patch') {
+      actions.push({ type: 'patch', relPath: b.relPath, outPath, content: normalizeEOL(b.content) });
+    } else if (action === 'delete') {
+      actions.push({ type: 'delete', outPath });
+    } else if (action === 'append') {
+      actions.push({ type: 'append', outPath, content: normalizeEOL(b.content) });
+    } else if (action === 'move') {
       const fromRel = b.options.from;
       if (!fromRel) {
         console.error(`Move action requires "from: old/path". Block: ${b.relPath}`);
@@ -525,13 +533,16 @@ function applyBlocks(blocks, rootDir) {
       const fromPath = resolveSafe(rootDir, fromRel);
       actions.push({ type: 'move', fromPath, outPath });
       if (b.content && b.content.trim()) actions.push({ type: 'replace', outPath, content: normalizeEOL(b.content) });
-    } else actions.push({ type: 'replace', outPath, content: normalizeEOL(b.content) });
+    } else {
+      actions.push({ type: 'replace', outPath, content: normalizeEOL(b.content) });
+    }
   }
 
   if (flags.dryRun) {
     console.log('Dry-run. Planned changes:');
     for (const a of actions) {
       if (a.type === 'move') console.log('- move', path.relative(process.cwd(), a.fromPath), '→', path.relative(process.cwd(), a.outPath));
+      else if (a.type === 'patch') console.log('- patch', path.relative(process.cwd(), a.outPath));
       else console.log('-', a.type, path.relative(process.cwd(), a.outPath));
     }
     return;
@@ -559,6 +570,27 @@ function applyBlocks(blocks, rootDir) {
       fs.renameSync(a.fromPath, a.outPath);
       log('moved', a.fromPath, '→', a.outPath);
       changed++;
+    } else if (a.type === 'patch') {
+      if (!fs.existsSync(a.outPath)) {
+        console.error(`Patch failed: file not found ${a.outPath}`);
+        process.exit(2);
+      }
+
+      let patchText = a.content;
+      if (!looksLikeFullDiff(patchText)) {
+        if (!looksLikeHunksOnly(patchText)) {
+          console.error(`Patch block must contain either full diff or @@ hunks. File: ${a.relPath}`);
+          process.exit(2);
+        }
+        patchText = buildMinimalFilePatch(a.relPath, patchText);
+      }
+
+      const res = applyGitPatch(patchText, { tryRewrites: !flags.noPathRewrite });
+      if (!res.ok) {
+        console.error(`Patch failed for ${a.relPath}`);
+        process.exit(2);
+      }
+      changed++;
     } else if (a.type === 'replace') {
       ensureDir(a.outPath);
       fs.writeFileSync(a.outPath, a.content);
@@ -580,7 +612,6 @@ function applyBlocks(blocks, rootDir) {
   const patch = flags.onlyBlocks ? '' : getPatchText(input);
   const blocks = flags.onlyDiff ? [] : parseBlocks(input);
 
-  // Prefer blocks if asked
   if (flags.preferBlocks && blocks.length) {
     applyBlocks(blocks, path.resolve(flags.root));
     process.exit(0);
@@ -590,19 +621,16 @@ function applyBlocks(blocks, rootDir) {
     const res = applyGitPatch(patch, { tryRewrites: !flags.noPathRewrite });
     if (res.ok) process.exit(0);
 
-    // Fallback to blocks if diff failed and blocks exist
     if (blocks.length) {
       console.warn('Diff failed. Falling back to path-blocks...');
       applyBlocks(blocks, path.resolve(flags.root));
       process.exit(0);
     }
 
-    // Final failure
     console.error('Diff/patch failed and no path-blocks found. See ai.patch/ai.rewritten.patch/ai.sanitized.patch for details.');
     process.exit(2);
   }
 
-  // No diff → try blocks
   if (blocks.length) {
     applyBlocks(blocks, path.resolve(flags.root));
     process.exit(0);

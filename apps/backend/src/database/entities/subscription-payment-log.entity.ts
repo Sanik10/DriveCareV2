@@ -37,6 +37,15 @@ export class SubscriptionPaymentLog {
   @Index()
   subscriptionId: string | null;
 
+  @Column({ name: 'idempotency_key', type: 'varchar', length: 128, nullable: true })
+  @Index(
+    'uniq_sub_pay_idempotency',
+    ['companyId', 'subscriptionId', 'idempotencyKey'],
+    { unique: true, where: '"idempotency_key" IS NOT NULL AND "subscription_id" IS NOT NULL' },
+  )
+  idempotencyKey: string | null;
+
+
   @Column({ name: 'company_id', type: 'uuid' })
   @Index()
   companyId: string;

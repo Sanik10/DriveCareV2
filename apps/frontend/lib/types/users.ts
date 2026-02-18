@@ -1,5 +1,5 @@
 // path: apps/frontend/lib/types/users.ts
-export type UserStatus = 'active' | 'inactive' | 'blocked' | string;
+export type UserStatus = 'active' | 'inactive' | 'suspended' | 'blocked' | string;
 
 export interface RoleInfo {
   id: string;
@@ -14,6 +14,12 @@ export interface UserResponse {
   phone?: string | null;
   role?: RoleInfo | null;
   status?: UserStatus; // нормализуем из isActive
+
+  // Доп. поля для карточки сотрудника
+  createdAt?: string;
+  updatedAt?: string;
+  lastLoginAt?: string | null;
+  specialization?: string | null;
 }
 
 export interface UsersQuery {

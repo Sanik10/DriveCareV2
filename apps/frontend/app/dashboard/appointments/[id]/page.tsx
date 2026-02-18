@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AppLayout } from '@/components/app/AppLayout';
+import { PageFeatureBadge } from '@/components/app/PageFeatureBadge';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { appointmentsAPI } from '@/lib/api/appointments';
 import type { Appointment, AppointmentStatus } from '@/lib/types/appointments';
@@ -82,17 +83,17 @@ export default function AppointmentDetailsPage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
 
+  // ✅ Все useState
   const [loading, setLoading] = useState(true);
   const [item, setItem] = useState<Appointment | null>(null);
   const [actionLoading, setActionLoading] = useState<'confirm' | 'cancel' | 'reschedule' | 'complete' | 'rating' | null>(null);
-
   const [openReschedule, setOpenReschedule] = useState(false);
   const [openCancel, setOpenCancel] = useState(false);
   const [openComplete, setOpenComplete] = useState(false);
   const [openRating, setOpenRating] = useState(false);
-
   const [tracking, setTracking] = useState<TrackingInfo | null>(null);
 
+  // ✅ Все useMemo
   const canManage = useMemo(() => {
     const r = user?.role?.name || '';
     return ['company_owner', 'company_admin', 'manager', 'owner', 'admin'].includes(r);
@@ -111,6 +112,25 @@ export default function AppointmentDetailsPage() {
   const canActionComplete = canComplete && status === 'IN_PROGRESS';
   const canRate = status === 'COMPLETED';
 
+  const statusConfig = STATUS_COLORS[status as keyof typeof STATUS_COLORS] || STATUS_COLORS.DRAFT;
+  const priorityConfig = PRIORITY_COLORS[item?.priority as keyof typeof PRIORITY_COLORS] || PRIORITY_COLORS.NORMAL;
+
+  const headerActions = useMemo(() => (
+    <div className="flex items-center gap-2">
+      <Link href="/dashboard/appointments">
+        <Button variant="outline" className="rounded-2xl btn-outline-fixed">
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          К календарю
+        </Button>
+      </Link>
+      <Button variant="outline" onClick={() => refresh()} className="rounded-2xl btn-outline-fixed">
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Обновить
+      </Button>
+    </div>
+  ), []);
+
+  // ✅ Все useEffect
   useEffect(() => {
     if (authLoading) return;
     if (!isAuthenticated) {
@@ -134,7 +154,7 @@ export default function AppointmentDetailsPage() {
     };
   }, [id, isAuthenticated, authLoading, router]);
 
-  // Autopoll tracking widget (останавливаем для терминальных статусов)
+  // Autopoll tracking widget
   useEffect(() => {
     if (!isAuthenticated || !id) return;
     const terminal: AppointmentStatus[] = ['COMPLETED', 'CANCELED', 'NO_SHOW'];
@@ -164,6 +184,7 @@ export default function AppointmentDetailsPage() {
     };
   }, [id, isAuthenticated, status]);
 
+  // ✅ Функции-обработчики
   const refresh = async () => {
     try {
       const a = await appointmentsAPI.get(id);
@@ -196,7 +217,7 @@ export default function AppointmentDetailsPage() {
       toast.success('Запись отменена');
     } catch (e) {
       toast.error((e as Error)?.message || 'Не удалось отменить запись');
-      throw e; // диалог оставляем открытым
+      throw e;
     } finally {
       setActionLoading(null);
     }
@@ -211,7 +232,7 @@ export default function AppointmentDetailsPage() {
       toast.success('Запись перенесена');
     } catch (e) {
       toast.error((e as Error)?.message || 'Не удалось перенести запись');
-      throw e; // диалог оставляем открытым
+      throw e;
     } finally {
       setActionLoading(null);
     }
@@ -229,7 +250,7 @@ export default function AppointmentDetailsPage() {
       toast.success('Запись завершена');
     } catch (e) {
       toast.error((e as Error)?.message || 'Не удалось завершить запись');
-      throw e; // диалог оставляем открытым
+      throw e;
     } finally {
       setActionLoading(null);
     }
@@ -244,7 +265,7 @@ export default function AppointmentDetailsPage() {
       toast.success('Спасибо за оценку!');
     } catch (e) {
       toast.error((e as Error)?.message || 'Не удалось добавить оценку');
-      throw e; // диалог оставляем открытым
+      throw e;
     } finally {
       setActionLoading(null);
     }
@@ -261,6 +282,7 @@ export default function AppointmentDetailsPage() {
     }
   };
 
+  // ✅ Условные return
   if (authLoading) {
     return (
       <AppLayout>
@@ -285,7 +307,7 @@ export default function AppointmentDetailsPage() {
               Возможно, запись была удалена или у вас нет прав доступа
             </p>
             <Link href="/dashboard/appointments">
-              <Button className="rounded-2xl">
+              <Button className="rounded-2xl bg-gradient-primary hover:opacity-90">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Вернуться к календарю
               </Button>
@@ -296,24 +318,7 @@ export default function AppointmentDetailsPage() {
     );
   }
 
-  const statusConfig = STATUS_COLORS[status as keyof typeof STATUS_COLORS] || STATUS_COLORS.DRAFT;
-  const priorityConfig = PRIORITY_COLORS[item?.priority as keyof typeof PRIORITY_COLORS] || PRIORITY_COLORS.NORMAL;
-
-  const headerActions = (
-    <div className="flex items-center gap-2">
-      <Link href="/dashboard/appointments">
-        <Button variant="ghost" className="rounded-2xl btn-ghost-fixed">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Назад
-        </Button>
-      </Link>
-      <Button variant="outline" onClick={refresh} className="rounded-2xl btn-outline-fixed">
-        <RefreshCw className="w-4 h-4 mr-2" />
-        Обновить
-      </Button>
-    </div>
-  );
-
+  // ✅ Финальный рендер
   return (
     <AppLayout
       title={`Запись ${item?.id.slice(0, 8) || '...'}`}
@@ -339,23 +344,14 @@ export default function AppointmentDetailsPage() {
           </div>
         ) : (
           <>
-            {/* Feature badge */}
-            <Card className="p-4 glass border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-3xl">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500">
-                  <Sparkles className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400">Детальная карточка записи</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Live-трекинг прогресса, управление статусами, оценки клиентов и автообновление данных.
-                  </p>
-                </div>
-                <div className="ml-auto">
-                  <TrendingUp className="w-6 h-6 text-secondary" />
-                </div>
-              </div>
-            </Card>
+            {/* Feature Badge */}
+            <PageFeatureBadge
+              variant="emerald-green"
+              icon={Sparkles}
+              title="Детальная карточка записи"
+              description="Live-трекинг прогресса, управление статусами, оценки клиентов и автообновление данных."
+              aside={<TrendingUp className="w-6 h-6 text-secondary" />}
+            />
 
             {/* Header with Status */}
             <Card className="p-6 glass border-border/30 rounded-3xl surface-glow">
@@ -399,7 +395,7 @@ export default function AppointmentDetailsPage() {
                     <Button
                       onClick={doConfirm}
                       disabled={actionLoading === 'confirm'}
-                      className="rounded-xl"
+                      className="rounded-xl bg-gradient-primary hover:opacity-90"
                     >
                       {actionLoading === 'confirm' ? (
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -735,7 +731,7 @@ function AppointmentInfoRow({
   multiline?: boolean;
 }) {
   return (
-    <div className="flex items-start gap-3 p-3 rounded-2xl bg-surface-1/40 border border-border/30">
+    <div className="flex items-start gap-3 p-3 rounded-2xl bg-surface-1/40 border border-border/30 transition-all duration-300 hover:bg-surface-1/60">
       <div className="p-1.5 rounded-lg bg-background/50 mt-0.5">
         <Icon className="w-4 h-4 text-muted-foreground" />
       </div>

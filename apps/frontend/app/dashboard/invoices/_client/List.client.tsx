@@ -5,6 +5,11 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AppLayout } from '@/components/app/AppLayout';
+import { PageFeatureBadge } from '@/components/app/PageFeatureBadge';
+import { PageFiltersCard, PageFiltersRow } from '@/components/app/PageFiltersCard';
+import { PageContentCard } from '@/components/app/PageContentCard';
+import { StatsCard, StatsGrid } from '@/components/app/StatsCard';
+import { PaginationControls } from '@/components/app/PaginationControls';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +26,9 @@ import {
   Download,
   Clock,
   CheckCircle,
-  XCircle
+  XCircle,
+  Sparkles,
+  TrendingUp,
 } from 'lucide-react';
 
 import { invoicesAPI } from '@/lib/api/invoices';
@@ -89,28 +96,37 @@ function useQueryState<T extends Record<string, string | undefined>>() {
 export default function List() {
   const { user } = useAuth();
   const [qs, patchQs] = useQueryState<{ page?: string; search?: string; status?: string }>();
+
+  // ✅ Все useState
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<PaginatedInvoicesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-
   const [stats, setStats] = useState<InvoicesStats | null>(null);
-  const canSeeStats = ['company_owner', 'company_admin', 'manager'].includes(user?.role?.name || '');
-
   const [suggestions, setSuggestions] = useState<Invoice[]>([]);
   const [showSug, setShowSug] = useState(false);
   const [searchInput, setSearchInput] = useState('');
 
-  // Auto-refresh every 30 seconds (silent)
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
   const listAbortRef = useRef<AbortController | null>(null);
   const statsAbortRef = useRef<AbortController | null>(null);
   const typeaheadAbortRef = useRef<AbortController | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ✅ Все useMemo (базовые вычисления)
+  const canSeeStats = useMemo(() => 
+    ['company_owner', 'company_admin', 'manager'].includes(user?.role?.name || ''),
+    [user?.role?.name]
+  );
+
+  const canCreate = useMemo(() => 
+    ['company_owner', 'company_admin', 'manager'].includes(user?.role?.name || ''),
+    [user?.role?.name]
+  );
 
   const page = Number(qs.page ?? 1);
   const effectiveSearch = qs.search ?? '';
   const status = (qs.status as InvoiceStatus | 'ALL' | undefined) ?? 'ALL';
 
+  // ✅ Все useCallback
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (listAbortRef.current) listAbortRef.current.abort();
     const controller = new AbortController();
@@ -172,6 +188,39 @@ export default function List() {
     }
   }, []);
 
+  // ✅ useMemo ПОСЛЕ useCallback (headerActions)
+  const headerActions = useMemo(() => (
+    <div className="flex items-center gap-2">
+      {canSeeStats && (
+        <Button 
+          variant="outline" 
+          onClick={downloadOverdue} 
+          className="rounded-2xl btn-outline-fixed"
+        >
+          <Download className="w-4 h-4 mr-2" />
+          Просрочки
+        </Button>
+      )}
+      <Button
+        variant="outline"
+        className="rounded-2xl btn-outline-fixed"
+        onClick={() => load()}
+      >
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Обновить
+      </Button>
+      {canCreate && (
+        <Link href="/dashboard/invoices/new">
+          <Button className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]">
+            <Plus className="w-4 h-4 mr-2" />
+            Новый счёт
+          </Button>
+        </Link>
+      )}
+    </div>
+  ), [canSeeStats, canCreate, downloadOverdue, load]);
+
+  // ✅ Все useEffect
   useEffect(() => {
     setSearchInput(effectiveSearch);
   }, [effectiveSearch]);
@@ -185,7 +234,7 @@ export default function List() {
     };
   }, [load, loadStats]);
 
-  // Silent auto-refresh (no toggle)
+  // Silent auto-refresh
   useEffect(() => {
     intervalRef.current = setInterval(() => {
       void load({ silent: true });
@@ -197,7 +246,7 @@ export default function List() {
     };
   }, [load, loadStats, canSeeStats]);
 
-  // Typeahead suggestions (abortable)
+  // Typeahead suggestions
   useEffect(() => {
     if (typeaheadAbortRef.current) typeaheadAbortRef.current.abort();
     const controller = new AbortController();
@@ -222,31 +271,6 @@ export default function List() {
     };
   }, [searchInput]);
 
-  const canCreate = ['company_owner', 'company_admin', 'manager'].includes(user?.role?.name || '');
-
-  const headerActions = (
-    <div className="flex items-center gap-2">
-      {canSeeStats && (
-        <Button 
-          variant="outline" 
-          onClick={downloadOverdue} 
-          className="rounded-2xl btn-outline-fixed"
-        >
-          <Download className="w-4 h-4 mr-2" />
-          Просрочки
-        </Button>
-      )}
-      {canCreate && (
-        <Link href="/dashboard/invoices/new">
-          <Button className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]">
-            <Plus className="w-4 h-4 mr-2" />
-            Новый счёт
-          </Button>
-        </Link>
-      )}
-    </div>
-  );
-
   return (
     <AppLayout 
       title="Счета" 
@@ -255,264 +279,165 @@ export default function List() {
       actions={headerActions}
     >
       <div className="container mx-auto px-6 py-6 space-y-6">
-        {/* Invoice Payments Feature Badge */}
-        <Card className="p-4 glass border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 to-primary/5 rounded-3xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-primary">
-              <BarChart3 className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-indigo-600 dark:text-indigo-400">Интерактивные статусы оплаты</h3>
-              <p className="text-sm text-muted-foreground">
-                Прогресс-бары частичных оплат и автообновление каждые 30 сек.
-              </p>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/30">
+        
+        {/* Feature Badge */}
+        <PageFeatureBadge
+          variant="orange-amber"
+          icon={Sparkles}
+          title="Интерактивные статусы оплаты"
+          description="Прогресс-бары частичных оплат и автообновление каждые 30 сек."
+          aside={
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/30 text-xs rounded-xl">
                 <CheckCircle className="w-3 h-3 mr-1" />
                 Оплачено
               </Badge>
-              <Badge variant="outline" className="bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/30">
+              <Badge variant="outline" className="bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/30 text-xs rounded-xl">
                 <Clock className="w-3 h-3 mr-1" />
                 Ожидает
               </Badge>
+              <TrendingUp className="w-6 h-6 text-secondary" />
             </div>
-          </div>
-        </Card>
+          }
+        />
 
-        {/* Stats Dashboard for manager+ */}
-        {canSeeStats && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Filters */}
+        <PageFiltersCard>
+          <PageFiltersRow>
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+              <Input
+                className="pl-9 h-10 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
+                placeholder="Поиск по номеру счёта, заказу или клиенту…"
+                value={searchInput}
+                onFocus={() => setShowSug(true)}
+                onBlur={() => setTimeout(() => setShowSug(false), 200)}
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
+                  patchQs({ search: e.target.value, page: '1' });
+                }}
+              />
+              {showSug && suggestions.length > 0 && (
+                <div className="absolute z-20 mt-1 w-full rounded-2xl border border-border/50 bg-background shadow-lg glass overflow-hidden">
+                  {suggestions.map((s) => (
+                    <Link key={s.id} href={`/dashboard/invoices/${s.id}`}>
+                      <div className="px-4 py-3 text-sm hover:bg-surface-1/30 transition-colors cursor-pointer">
+                        <div className="font-medium">{s.invoiceNumber}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {s.status} • {formatMoney(s.totalAmount)}
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="relative w-56">
+              <Filter className="w-4 h-4 absolute left-3 top-3 text-muted-foreground pointer-events-none" />
+              <select
+                className="w-full h-10 pl-9 pr-3 rounded-2xl bg-background border border-border/50 text-sm focus:border-primary/50 transition-all duration-300 appearance-none"
+                value={status}
+                onChange={(e) => patchQs({ status: e.target.value, page: '1' })}
+              >
+                {STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* <Button 
+              variant="ghost" 
+              className="rounded-xl" 
+              onClick={() => patchQs({ search: '', status: 'ALL', page: '1' })}
+            >
+              Сбросить
+            </Button> */}
+          </PageFiltersRow>
+
+          <div className="flex items-center justify-between text-sm text-muted-foreground pt-2">
+            <span>Обновление каждые 30 сек</span>
+            {data && <span>Найдено: {data.total} счетов</span>}
+          </div>
+        </PageFiltersCard>
+
+        {/* Stats Dashboard */}
+        {canSeeStats && stats && (
+          <StatsGrid cols={4}>
             <StatsCard
               title="Всего счетов"
-              value={stats?.total || 0}
+              value={stats.total || 0}
               icon={FileText}
               color="blue"
             />
             <StatsCard
               title="Оплачено"
-              value={stats?.paid || 0}
+              value={stats.paid || 0}
               icon={CheckCircle}
               color="emerald"
-              amount={stats?.paidAmount}
             />
             <StatsCard
               title="Ожидает оплаты"
-              value={stats?.pending || 0}
+              value={stats.pending || 0}
               icon={Clock}
               color="amber"
-              amount={stats?.pendingAmount}
             />
             <StatsCard
               title="Просрочено"
-              value={stats?.overdueCount || 0}
+              value={stats.overdueCount || 0}
               icon={AlertTriangle}
               color="red"
-              pulse={!!stats?.overdueCount}
+              highlight={!!stats.overdueCount}
             />
-          </div>
+          </StatsGrid>
         )}
 
-        {/* Search & Filters */}
-        <Card className="p-4 glass border-border/30 rounded-3xl surface-glow">
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="relative md:col-span-2">
-                <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
-                <Input
-                  className="pl-9 h-10 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
-                  placeholder="Поиск по номеру счёта, заказу или клиенту…"
-                  value={searchInput}
-                  onFocus={() => setShowSug(true)}
-                  onBlur={() => setTimeout(() => setShowSug(false), 200)}
-                  onChange={(e) => {
-                    setSearchInput(e.target.value);
-                    patchQs({ search: e.target.value, page: '1' });
-                  }}
-                />
-                {showSug && suggestions.length > 0 && (
-                  <div className="absolute z-20 mt-1 w-full rounded-2xl border border-border/50 bg-background shadow-lg glass overflow-hidden">
-                    {suggestions.map((s) => (
-                      <Link key={s.id} href={`/dashboard/invoices/${s.id}`}>
-                        <div className="px-4 py-3 text-sm hover:bg-surface-1/30 transition-colors cursor-pointer">
-                          <div className="font-medium">{s.invoiceNumber}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {s.status} • {formatMoney(s.totalAmount)}
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="relative">
-                <Filter className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
-                <select
-                  className="w-full h-10 pl-9 pr-3 rounded-2xl bg-background border border-border/50 text-sm focus:border-primary/50 transition-all duration-300"
-                  value={status}
-                  onChange={(e) => patchQs({ status: e.target.value, page: '1' })}
-                >
-                  {STATUS_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Button 
-                  variant="ghost" 
-                  className="rounded-xl" 
-                  onClick={() => patchQs({ search: '', status: 'ALL', page: '1' })}
-                >
-                  Сбросить фильтры
-                </Button>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  Обновление каждые 30 сек
-                </div>
-              </div>
-
-              {data && (
-                <div className="text-sm text-muted-foreground">
-                  Найдено: {data.total} счетов
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
-
         {/* Invoice List */}
-        <Card className="p-0 glass border-border/30 rounded-3xl surface-glow overflow-hidden">
-          {loading ? (
-            <div className="p-6 space-y-3">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-24 bg-surface-1/40 rounded-2xl animate-pulse" />
-              ))}
-            </div>
-          ) : error ? (
-            <div className="p-8 text-center">
-              <div className="flex items-center justify-center gap-3 text-destructive mb-4">
-                <AlertTriangle className="w-6 h-6" />
-                <p className="text-lg font-medium">{error}</p>
-              </div>
-              <Button onClick={() => load()} className="rounded-2xl">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Повторить
-              </Button>
-            </div>
-          ) : (data?.items ?? []).length === 0 ? (
-            <div className="p-10 text-center text-muted-foreground">
-              <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <h3 className="font-semibold mb-2">Счета не найдены</h3>
-              <p className="text-sm mb-4">
-                {status !== 'ALL' 
-                  ? `Нет счетов со статусом "${STATUS_OPTIONS.find(o => o.value === status)?.label}"`
-                  : 'Попробуйте изменить параметры поиска или создайте первый счёт'
-                }
-              </p>
-              {canCreate && (
-                <Link href="/dashboard/invoices/new">
-                  <Button className="rounded-2xl bg-gradient-primary hover:opacity-90">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Создать счёт
-                  </Button>
-                </Link>
-              )}
-            </div>
-          ) : (
-            <div className="p-6 space-y-3">
-              {(data?.items ?? []).map((invoice) => (
-                <InvoiceCard key={invoice.id} invoice={invoice} />
-              ))}
-            </div>
-          )}
-        </Card>
+        <PageContentCard
+          loading={loading}
+          error={error}
+          empty={(data?.items ?? []).length === 0}
+          emptyState={{
+            icon: FileText,
+            title: 'Счета не найдены',
+            description: status !== 'ALL' 
+              ? `Нет счетов со статусом "${STATUS_OPTIONS.find(o => o.value === status)?.label}"`
+              : 'Попробуйте изменить параметры поиска или создайте первый счёт',
+            action: canCreate ? {
+              label: 'Создать счёт',
+              onClick: () => window.location.href = '/dashboard/invoices/new',
+              // icon: Plus,
+            } : undefined,
+          }}
+          onRetry={() => load()}
+          loadingRows={5}
+        >
+          <div className="p-6 space-y-3">
+            {(data?.items ?? []).map((invoice) => (
+              <InvoiceCard key={invoice.id} invoice={invoice} />
+            ))}
+          </div>
+        </PageContentCard>
 
         {/* Pagination */}
         {data && data.totalPages > 1 && (
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              Страница {data.page} из {data.totalPages} • Всего: {data.total} счетов
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                className="rounded-2xl btn-outline-fixed"
-                disabled={data.page <= 1}
-                onClick={() => patchQs({ page: String(data.page - 1) })}
-              >
-                Назад
-              </Button>
-              <span className="text-sm px-3 py-1 rounded-xl bg-surface-1/60">
-                {data.page} / {data.totalPages}
-              </span>
-              <Button
-                variant="outline"
-                className="rounded-2xl btn-outline-fixed"
-                disabled={data.page >= data.totalPages}
-                onClick={() => patchQs({ page: String(data.page + 1) })}
-              >
-                Далее
-              </Button>
-            </div>
-          </div>
+          <PaginationControls
+            page={data.page}
+            totalPages={data.totalPages}
+            total={data.total}
+            showing={(data?.items ?? []).length}
+            onPageChange={(newPage) => patchQs({ page: String(newPage) })}
+            itemLabel="счетов"
+          />
         )}
       </div>
     </AppLayout>
   );
 }
 
-// Stats Card Component
-function StatsCard({ 
-  title, 
-  value, 
-  icon: Icon, 
-  color, 
-  amount, 
-  pulse 
-}: {
-  title: string;
-  value: number;
-  icon: React.ComponentType<{ className?: string }>;
-  color: 'blue' | 'emerald' | 'amber' | 'red';
-  amount?: number;
-  pulse?: boolean;
-}) {
-  const colorMap = {
-    blue: 'bg-blue-500/20 text-blue-500',
-    emerald: 'bg-emerald-500/20 text-emerald-500',
-    amber: 'bg-amber-500/20 text-amber-500',
-    red: 'bg-red-500/20 text-red-500',
-  };
-
-  return (
-    <Card className={cn(
-      "p-4 glass border-border/30 rounded-2xl",
-      pulse && "animate-pulse border-red-300 dark:border-red-700"
-    )}>
-      <div className="flex items-center gap-3">
-        <div className={cn("p-2 rounded-xl", colorMap[color])}>
-          <Icon className="w-5 h-5" />
-        </div>
-        <div className="flex-1">
-          <div className="text-sm text-muted-foreground">{title}</div>
-          <div className="text-xl font-bold">{value.toLocaleString('ru-RU')}</div>
-          {amount !== undefined && (
-            <div className="text-xs text-muted-foreground">
-              {formatMoney(amount)}
-            </div>
-          )}
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-// Invoice Card Component with Payment Progress
+// Invoice Card Component with Payment Progress (уникальный контент)
 function InvoiceCard({ invoice }: { invoice: Invoice }) {
   const isOverdue = invoice.isOverdue;
   const progressPercentage = Math.round(((invoice.paidAmount || 0) / (invoice.totalAmount || 1)) * 100);

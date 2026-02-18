@@ -10,6 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { AppLayout } from '@/components/app/AppLayout';
+import { PageFeatureBadge } from '@/components/app/PageFeatureBadge';
+import { PageFiltersCard, PageFiltersRow } from '@/components/app/PageFiltersCard';
+import { StatsCard, StatsGrid } from '@/components/app/StatsCard';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { appointmentsAPI } from '@/lib/api/appointments';
 import { workSchedulesAPI } from '@/lib/api/work-schedules';
@@ -28,12 +31,12 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Clock,
-  Zap,
   CheckCircle,
   Search,
   Filter,
   Sparkles,
   AlertTriangle,
+  TrendingUp,
 } from 'lucide-react';
 import { AppointmentCreateDialog } from '@/components/appointments/appointment-create-dialog';
 import { MechanicSelect, type MechanicOption } from '@/components/appointments/selects/MechanicSelect';
@@ -46,7 +49,7 @@ const VIEW_LABELS: Record<CalendarView, string> = {
   month: 'Месяц'
 };
 
-// Local date to YYYY-MM-DD (без UTC-сдвига)
+// Local date to YYYY-MM-DD
 function toYMD(d: Date) {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -54,20 +57,20 @@ function toYMD(d: Date) {
   return `${year}-${month}-${day}`;
 }
 
-// Парсинг часов: старт округляем вниз (floor), конец — вверх (ceil) до часа
 function parseStartHour(hhmm?: string): number | null {
   if (!hhmm || typeof hhmm !== 'string') return null;
   const [h, m] = hhmm.split(':').map((x) => parseInt(x || '0', 10));
   if (Number.isNaN(h) || h < 0 || h > 23) return null;
   if (Number.isNaN(m) || m < 0 || m > 59) return Math.max(0, Math.min(23, h));
-  return Math.max(0, Math.min(23, h)); // floor
+  return Math.max(0, Math.min(23, h));
 }
+
 function parseEndHour(hhmm?: string): number | null {
   if (!hhmm || typeof hhmm !== 'string') return null;
   const [h, m] = hhmm.split(':').map((x) => parseInt(x || '0', 10));
   if (Number.isNaN(h) || h < 0 || h > 23) return null;
   if (Number.isNaN(m) || m < 0 || m > 59) return Math.max(0, Math.min(23, h));
-  return Math.max(0, Math.min(23, m === 0 ? h : h + 1)); // ceil
+  return Math.max(0, Math.min(23, m === 0 ? h : h + 1));
 }
 
 function makeTimeSlots(minHour: number, maxHour: number): string[] {
@@ -96,79 +99,24 @@ export default function AppointmentsPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  // ✅ Все useState
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<Appointment[]>([]);
+  const [view, setView] = useState<CalendarView>('week');
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<AppointmentStatus | ''>('');
+  const [mechanic, setMechanic] = useState<MechanicOption | null>(null);
+  const [openCreate, setOpenCreate] = useState(false);
+  const [showAllHours, setShowAllHours] = useState(false);
+  const [scheduleMap, setScheduleMap] = useState<Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }>>({});
+
+  // ✅ Все useMemo (НО БЕЗ loadAppointments - он будет useCallback ниже)
   const canCreate = useMemo(() => {
     const r = user?.role?.name || '';
     return ['company_owner', 'company_admin', 'manager', 'owner', 'admin'].includes(r);
   }, [user?.role?.name]);
 
-  const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<Appointment[]>([]);
-
-  // Calendar state
-  const [view, setView] = useState<CalendarView>('week');
-  const [currentDate, setCurrentDate] = useState(new Date());
-  
-  // Filters
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<AppointmentStatus | ''>('');
-  const [mechanic, setMechanic] = useState<MechanicOption | null>(null);
-
-  const [openCreate, setOpenCreate] = useState(false);
-
-  // Work schedules state (for dynamic hours)
-  const [showAllHours, setShowAllHours] = useState(false);
-  // Map dayOfWeek (0..6) -> intervals and hour bounds
-  const [scheduleMap, setScheduleMap] = useState<Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }>>({});
-
-  // Restore "all hours" from URL/localStorage once
-  useEffect(() => {
-    // URL has priority
-    const urlVal = searchParams?.get('all');
-    if (urlVal !== null) {
-      const val = urlVal === '1';
-      setShowAllHours(val);
-      localStorage.setItem(LS_KEY_ALL_HOURS, val ? '1' : '0');
-      return;
-    }
-    // LocalStorage fallback
-    const ls = localStorage.getItem(LS_KEY_ALL_HOURS);
-    if (ls === '1' || ls === '0') {
-      setShowAllHours(ls === '1');
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once, after mount
-
-  const updateAllHours = useCallback((val: boolean) => {
-    setShowAllHours(val);
-    try {
-      localStorage.setItem(LS_KEY_ALL_HOURS, val ? '1' : '0');
-    } catch {}
-    // Update URL param without full reload
-    try {
-      const sp = new URLSearchParams(Array.from(searchParams?.entries?.() || []));
-      if (val) sp.set('all', '1');
-      else sp.delete('all');
-      const qs = sp.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    } catch {}
-  }, [pathname, router, searchParams]);
-
-  // Date navigation helpers
-  const navigateDate = (direction: 'prev' | 'next' | 'today') => {
-    const newDate = new Date(currentDate);
-    if (direction === 'today') {
-      setCurrentDate(new Date());
-      return;
-    }
-    switch (view) {
-      case 'day': newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1)); break;
-      case 'week': newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7)); break;
-      case 'month': newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1)); break;
-    }
-    setCurrentDate(newDate);
-  };
-
-  // Строки диапазона дат для запроса (стабильные зависимости, без Date-объектов)
   const { rangeStartStr, rangeEndStr } = useMemo(() => {
     let start = new Date(currentDate);
     let end = new Date(currentDate);
@@ -179,7 +127,7 @@ export default function AppointmentsPage() {
       case 'week': {
         const s = new Date(currentDate);
         const dayOfWeek = s.getDay();
-        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Пн
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
         s.setDate(s.getDate() + diff);
         const e = new Date(s);
         e.setDate(s.getDate() + 6);
@@ -202,7 +150,60 @@ export default function AppointmentsPage() {
     };
   }, [currentDate, view]);
 
-  // Load appointments
+  const filteredAppointments = useMemo(() => {
+    return items.filter(apt => {
+      if (
+        search &&
+        !apt.customerName?.toLowerCase().includes(search.toLowerCase()) &&
+        !apt.vehicleInfo?.toLowerCase().includes(search.toLowerCase()) &&
+        !apt.mechanicName?.toLowerCase().includes(search.toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [items, search]);
+
+  const hasAnySchedule = useMemo(
+    () => Object.values(scheduleMap).some((v) => v && v.minHour >= 0 && v.maxHour >= 0),
+    [scheduleMap]
+  );
+
+  const stats = useMemo(() => {
+    const total = filteredAppointments.length;
+    const inProgress = filteredAppointments.filter(apt => apt.status === 'IN_PROGRESS').length;
+    const urgent = filteredAppointments.filter(apt => apt.priority === 'URGENT').length;
+    const completed = filteredAppointments.filter(apt => apt.status === 'COMPLETED').length;
+    return { total, inProgress, urgent, completed };
+  }, [filteredAppointments]);
+
+  // ✅ useCallback функции (ДО headerActions!)
+  const getDayHourRange = useCallback((date: Date): { min: number; max: number } => {
+    const dow = date.getDay();
+    const conf = scheduleMap[dow];
+
+    if (conf && conf.minHour >= 0 && conf.maxHour >= 0) {
+      return { min: conf.minHour, max: conf.maxHour };
+    }
+
+    const dateStr = toYMD(date);
+    const hours: number[] = [];
+    filteredAppointments.forEach((apt) => {
+      const aptDate = toYMD(new Date(apt.startTime));
+      if (aptDate === dateStr) {
+        hours.push(new Date(apt.startTime).getHours());
+        hours.push(new Date(apt.endTime).getHours());
+      }
+    });
+    if (hours.length > 0) {
+      const min = Math.max(0, Math.min(...hours));
+      const max = Math.min(23, Math.max(...hours));
+      if (max >= min) return { min, max };
+    }
+
+    return getEnvDefaultRange();
+  }, [scheduleMap, filteredAppointments]);
+
   const loadAppointments = useCallback(async () => {
     setLoading(true);
     try {
@@ -225,117 +226,29 @@ export default function AppointmentsPage() {
     }
   }, [search, status, mechanic?.id, rangeStartStr, rangeEndStr]);
 
-  // Load schedules (for dynamic hours). Рекомендательный характер: мы только визуально подсвечиваем
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    let cancelled = false;
+  const updateAllHours = useCallback((val: boolean) => {
+    setShowAllHours(val);
+    try {
+      localStorage.setItem(LS_KEY_ALL_HOURS, val ? '1' : '0');
+    } catch {}
+    try {
+      const sp = new URLSearchParams(Array.from(searchParams?.entries?.() || []));
+      if (val) sp.set('all', '1');
+      else sp.delete('all');
+      const qs = sp.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    } catch {}
+  }, [pathname, router, searchParams]);
 
-    const fetchSchedules = async () => {
-      try {
-        const res = await workSchedulesAPI.getSchedules({ isActive: true, page: 1, limit: 200 });
-        const list = (res.items || []) as WorkSchedule[];
-
-        // Map dayOfWeek -> intervals + bounds
-        const tmp: Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }> = {};
-        for (let d = 0; d <= 6; d++) {
-          tmp[d] = { intervals: [], minHour: 23, maxHour: 0 };
-        }
-
-        list.forEach((s) => {
-          if (s.isDayOff) return;
-          const startH = parseStartHour(s.startTime);
-          const endH = parseEndHour(s.endTime);
-          if (startH === null || endH === null) return;
-          if (endH <= startH) return;
-
-          const day = s.dayOfWeek;
-          tmp[day].intervals.push({ start: startH, end: endH });
-          tmp[day].minHour = Math.min(tmp[day].minHour, startH);
-          tmp[day].maxHour = Math.max(tmp[day].maxHour, endH);
-        });
-
-        // Пустые дни = неизвестно (min/max = -1). Будет фолбэк к дефолту/апп-интервалам
-        for (let d = 0; d <= 6; d++) {
-          if (tmp[d].intervals.length === 0) {
-            tmp[d].minHour = -1;
-            tmp[d].maxHour = -1;
-          }
-        }
-
-        if (!cancelled) setScheduleMap(tmp);
-      } catch (e) {
-        // Если расписание недоступно — помечаем как "неопределено" (fallback ниже)
-        if (!cancelled) {
-          const tmp: Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }> = {};
-          for (let d = 0; d <= 6; d++) {
-            tmp[d] = { intervals: [], minHour: -1, maxHour: -1 };
-          }
-          setScheduleMap(tmp);
-        }
-      }
-    };
-
-    void fetchSchedules();
-    return () => { cancelled = true; };
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadAppointments();
-    }
-  }, [isAuthenticated, loadAppointments]);
-
-  // Filter appointments by search
-  const filteredAppointments = useMemo(() => {
-    return items.filter(apt => {
-      if (
-        search &&
-        !apt.customerName?.toLowerCase().includes(search.toLowerCase()) &&
-        !apt.vehicleInfo?.toLowerCase().includes(search.toLowerCase()) &&
-        !apt.mechanicName?.toLowerCase().includes(search.toLowerCase())
-      ) {
-        return false;
-      }
+  const isWorkingHour = useCallback((date: Date, hour: number): boolean => {
+    const conf = scheduleMap[date.getDay()];
+    if (!conf || conf.intervals.length === 0) {
       return true;
-    });
-  }, [items, search]);
-
-  const hasAnySchedule = useMemo(
-    () => Object.values(scheduleMap).some((v) => v && v.minHour >= 0 && v.maxHour >= 0),
-    [scheduleMap]
-  );
-
-  // Получить часовой диапазон для конкретной даты (учитывая расписание, либо данные аппов, либо дефолт из env)
-  const getDayHourRange = useCallback((date: Date): { min: number; max: number } => {
-    const dow = date.getDay(); // 0..6
-    const conf = scheduleMap[dow];
-
-    // 1) Если есть интервалы расписания — используем их
-    if (conf && conf.minHour >= 0 && conf.maxHour >= 0) {
-      return { min: conf.minHour, max: conf.maxHour };
     }
+    return conf.intervals.some((itv) => hour >= itv.start && hour < itv.end);
+  }, [scheduleMap]);
 
-    // 2) Иначе — пробуем вычислить по имеющимся апойнтментам за этот день
-    const dateStr = toYMD(date);
-    const hours: number[] = [];
-    filteredAppointments.forEach((apt) => {
-      const aptDate = toYMD(new Date(apt.startTime));
-      if (aptDate === dateStr) {
-        hours.push(new Date(apt.startTime).getHours());
-        hours.push(new Date(apt.endTime).getHours());
-      }
-    });
-    if (hours.length > 0) {
-      const min = Math.max(0, Math.min(...hours));
-      const max = Math.min(23, Math.max(...hours));
-      if (max >= min) return { min, max };
-    }
-
-    // 3) Фоллбек — дефолтные "бизнес-часы" (не 24 часа)
-    return getEnvDefaultRange();
-  }, [scheduleMap, filteredAppointments]);
-
-  // Compute dynamic time slots for current view (either show all 24h or business hours derived from schedules/appointments)
+  // ✅ useMemo которые зависят от useCallback
   const timeSlots = useMemo(() => {
     if (showAllHours) return makeTimeSlots(0, 23);
 
@@ -365,87 +278,12 @@ export default function AppointmentsPage() {
         return makeTimeSlots(min, max);
       }
       case 'month':
-        // Month view не использует time slots, вернем любой диапазон — не критично
         return makeTimeSlots(8, 18);
     }
   }, [showAllHours, view, currentDate, getDayHourRange]);
 
-  // Helpers for working/non-working highlight
-  const isWorkingHour = useCallback((date: Date, hour: number): boolean => {
-    const conf = scheduleMap[date.getDay()];
-    if (!conf || conf.intervals.length === 0) {
-      // Нет явного расписания: считаем нейтральным (рабочим), чтобы не "серить" всё
-      return true;
-    }
-    return conf.intervals.some((itv) => hour >= itv.start && hour < itv.end);
-  }, [scheduleMap]);
-
-  // Get appointments for specific date/time slot (локальная дата, без UTC сдвига)
-  const getSlotAppointments = (date: Date, timeSlot?: string) => {
-    const dateStr = toYMD(date);
-    return filteredAppointments.filter(apt => {
-      const aptStart = new Date(apt.startTime);
-      const aptEnd = new Date(apt.endTime);
-      const aptDate = toYMD(aptStart);
-      if (aptDate !== dateStr) return false;
-
-      if (timeSlot && view !== 'month') {
-        const slotHour = parseInt(timeSlot.split(':')[0], 10);
-        const slotStart = new Date(date);
-        slotStart.setHours(slotHour, 0, 0, 0);
-        const slotEnd = new Date(date);
-        slotEnd.setHours(Math.min(23, slotHour + 1), 0, 0, 0);
-        return aptStart < slotEnd && aptEnd > slotStart; // перекрытие слота
-      }
-      return true;
-    });
-  };
-
-  // Get slot status color
-  const getSlotStatus = (date: Date, timeSlot?: string) => {
-    const appointments = getSlotAppointments(date, timeSlot);
-    if (appointments.length === 0) return 'free';
-    if (appointments.some(apt => apt.status === 'IN_PROGRESS')) return 'busy';
-    if (appointments.some(apt => apt.priority === 'URGENT')) return 'urgent';
-    return 'booked';
-  };
-
-  const statusColors = {
-    free: 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/30',
-    booked: 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/30 hover:bg-blue-100 dark:hover:bg-blue-950/30',
-    busy: 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/30 hover:bg-amber-100 dark:hover:bg-amber-950/30',
-    urgent: 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/30 hover:bg-red-100 dark:hover:bg-red-950/30 animate-pulse',
-  };
-
-  const nonWorkingClass =
-    'opacity-60 grayscale-[15%] hover:grayscale-0 border-dashed border-muted/50';
-
-  const handleSlotClick = () => {
-    // Рекомендационный характер: можно создавать запись даже вне расписания
-    if (canCreate) {
-      setOpenCreate(true);
-    }
-  };
-
-  const formatDateHeader = () => {
-    const formatter = new Intl.DateTimeFormat('ru-RU', {
-      year: 'numeric',
-      month: 'long',
-      day: view === 'day' ? 'numeric' : undefined,
-    });
-    return formatter.format(currentDate);
-  };
-
-  // Calculate stats
-  const stats = useMemo(() => {
-    const total = filteredAppointments.length;
-    const inProgress = filteredAppointments.filter(apt => apt.status === 'IN_PROGRESS').length;
-    const urgent = filteredAppointments.filter(apt => apt.priority === 'URGENT').length;
-    const completed = filteredAppointments.filter(apt => apt.status === 'COMPLETED').length;
-    return { total, inProgress, urgent, completed };
-  }, [filteredAppointments]);
-
-  const headerActions = (
+  // ✅ headerActions ПОСЛЕ loadAppointments
+  const headerActions = useMemo(() => (
     <div className="flex items-center gap-2">
       <Button
         variant="outline"
@@ -465,14 +303,153 @@ export default function AppointmentsPage() {
         </Button>
       )}
     </div>
-  );
+  ), [canCreate, loadAppointments]);
 
-  // "Сейчас" — подсветка текущего часа
+  // ✅ Все useEffect
+  useEffect(() => {
+    const urlVal = searchParams?.get('all');
+    if (urlVal !== null) {
+      const val = urlVal === '1';
+      setShowAllHours(val);
+      localStorage.setItem(LS_KEY_ALL_HOURS, val ? '1' : '0');
+      return;
+    }
+    const ls = localStorage.getItem(LS_KEY_ALL_HOURS);
+    if (ls === '1' || ls === '0') {
+      setShowAllHours(ls === '1');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+
+    const fetchSchedules = async () => {
+      try {
+        const res = await workSchedulesAPI.getSchedules({ isActive: true, page: 1, limit: 200 });
+        const list = (res.items || []) as WorkSchedule[];
+
+        const tmp: Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }> = {};
+        for (let d = 0; d <= 6; d++) {
+          tmp[d] = { intervals: [], minHour: 23, maxHour: 0 };
+        }
+
+        list.forEach((s) => {
+          if (s.isDayOff) return;
+          const startH = parseStartHour(s.startTime);
+          const endH = parseEndHour(s.endTime);
+          if (startH === null || endH === null) return;
+          if (endH <= startH) return;
+
+          const day = s.dayOfWeek;
+          tmp[day].intervals.push({ start: startH, end: endH });
+          tmp[day].minHour = Math.min(tmp[day].minHour, startH);
+          tmp[day].maxHour = Math.max(tmp[day].maxHour, endH);
+        });
+
+        for (let d = 0; d <= 6; d++) {
+          if (tmp[d].intervals.length === 0) {
+            tmp[d].minHour = -1;
+            tmp[d].maxHour = -1;
+          }
+        }
+
+        if (!cancelled) setScheduleMap(tmp);
+      } catch (e) {
+        if (!cancelled) {
+          const tmp: Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }> = {};
+          for (let d = 0; d <= 6; d++) {
+            tmp[d] = { intervals: [], minHour: -1, maxHour: -1 };
+          }
+          setScheduleMap(tmp);
+        }
+      }
+    };
+
+    void fetchSchedules();
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadAppointments();
+    }
+  }, [isAuthenticated, loadAppointments]);
+
+  // ✅ Обычные функции (не хуки)
+  const navigateDate = (direction: 'prev' | 'next' | 'today') => {
+    const newDate = new Date(currentDate);
+    if (direction === 'today') {
+      setCurrentDate(new Date());
+      return;
+    }
+    switch (view) {
+      case 'day': newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1)); break;
+      case 'week': newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7)); break;
+      case 'month': newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1)); break;
+    }
+    setCurrentDate(newDate);
+  };
+
+  const getSlotAppointments = (date: Date, timeSlot?: string) => {
+    const dateStr = toYMD(date);
+    return filteredAppointments.filter(apt => {
+      const aptStart = new Date(apt.startTime);
+      const aptEnd = new Date(apt.endTime);
+      const aptDate = toYMD(aptStart);
+      if (aptDate !== dateStr) return false;
+
+      if (timeSlot && view !== 'month') {
+        const slotHour = parseInt(timeSlot.split(':')[0], 10);
+        const slotStart = new Date(date);
+        slotStart.setHours(slotHour, 0, 0, 0);
+        const slotEnd = new Date(date);
+        slotEnd.setHours(Math.min(23, slotHour + 1), 0, 0, 0);
+        return aptStart < slotEnd && aptEnd > slotStart;
+      }
+      return true;
+    });
+  };
+
+  const getSlotStatus = (date: Date, timeSlot?: string) => {
+    const appointments = getSlotAppointments(date, timeSlot);
+    if (appointments.length === 0) return 'free';
+    if (appointments.some(apt => apt.status === 'IN_PROGRESS')) return 'busy';
+    if (appointments.some(apt => apt.priority === 'URGENT')) return 'urgent';
+    return 'booked';
+  };
+
+  const statusColors = {
+    free: 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/30',
+    booked: 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/30 hover:bg-blue-100 dark:hover:bg-blue-950/30',
+    busy: 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/30 hover:bg-amber-100 dark:hover:bg-amber-950/30',
+    urgent: 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/30 hover:bg-red-100 dark:hover:bg-red-950/30 animate-pulse',
+  };
+
+  const nonWorkingClass = 'opacity-60 grayscale-[15%] hover:grayscale-0 border-dashed border-muted/50';
+
+  const handleSlotClick = () => {
+    if (canCreate) {
+      setOpenCreate(true);
+    }
+  };
+
+  const formatDateHeader = () => {
+    const formatter = new Intl.DateTimeFormat('ru-RU', {
+      year: 'numeric',
+      month: 'long',
+      day: view === 'day' ? 'numeric' : undefined,
+    });
+    return formatter.format(currentDate);
+  };
+
   const now = new Date();
   const isTodayCurrent = now.toDateString() === currentDate.toDateString();
   const currentHour = now.getHours();
   const nowSlotClass = 'ring-2 ring-primary/50';
 
+  // ✅ Условные return
   if (authLoading) {
     return (
       <AppLayout>
@@ -486,6 +463,7 @@ export default function AppointmentsPage() {
     );
   }
 
+  // ✅ Финальный рендер
   return (
     <AppLayout 
       title="Календарь записей" 
@@ -494,35 +472,66 @@ export default function AppointmentsPage() {
       actions={headerActions}
     >
       <div className="container mx-auto px-6 py-6 space-y-6">
-        {/* Calendar Feature Badge */}
-        <Card className="p-4 glass border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-3xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-indigo-600 dark:text-indigo-400">Календарная сетка с динамичными часами</h3>
-              <p className="text-sm text-muted-foreground">
-                Поддержка 24/7 и ночных смен. Нерабочие часы подсвечиваются, но не блокируются — всё рекомендательно.
-              </p>
-              {!hasAnySchedule && !showAllHours && (
-                <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                  Расписание не задано — показаны дефолтные бизнес‑часы ({getEnvDefaultRange().min}:00–{getEnvDefaultRange().max}:00)
-                </div>
-              )}
-            </div>
-            <div className="ml-auto flex items-center gap-3">
+        
+        {/* Feature Badge */}
+        <PageFeatureBadge
+          variant="emerald-green"
+          icon={Sparkles}
+          title="Календарная сетка с динамичными часами"
+          description="Поддержка 24/7 и ночных смен. Нерабочие часы подсвечиваются, но не блокируются — всё рекомендательно."
+          aside={
+            <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-muted-foreground">Все 24 часа</span>
                 <Switch checked={showAllHours} onCheckedChange={updateAllHours} />
               </div>
+              <TrendingUp className="w-6 h-6 text-secondary" />
             </div>
-          </div>
-        </Card>
+          }
+        />
 
-        {/* Calendar Controls */}
-        <Card className="p-4 glass border-border/30 rounded-3xl surface-glow">
-          <div className="flex flex-col lg:flex-row gap-4">
+        {!hasAnySchedule && !showAllHours && (
+          <Card className="p-3 glass border-amber-400/30 bg-amber-500/5 text-amber-600 dark:text-amber-400 rounded-2xl">
+            <div className="flex items-center gap-2 text-sm">
+              <AlertTriangle className="w-4 h-4" />
+              Расписание не задано — показаны дефолтные бизнес‑часы ({getEnvDefaultRange().min}:00–{getEnvDefaultRange().max}:00)
+            </div>
+          </Card>
+        )}
+
+        {/* Stats */}
+        <StatsGrid cols={4}>
+          <StatsCard
+            title="Всего записей"
+            value={stats.total}
+            icon={CalendarDays}
+            color="blue"
+          />
+          <StatsCard
+            title="В работе"
+            value={stats.inProgress}
+            icon={Clock}
+            color="amber"
+            highlight={stats.inProgress > 0}
+          />
+          <StatsCard
+            title="Срочные"
+            value={stats.urgent}
+            icon={AlertTriangle}
+            color="red"
+            highlight={stats.urgent > 0}
+          />
+          <StatsCard
+            title="Завершено"
+            value={stats.completed}
+            icon={CheckCircle}
+            color="emerald"
+          />
+        </StatsGrid>
+
+        {/* Filters */}
+        <PageFiltersCard>
+          <PageFiltersRow>
             {/* Navigation */}
             <div className="flex items-center gap-2">
               <Button variant="outline" className="rounded-xl btn-outline-fixed" onClick={() => navigateDate('prev')}>
@@ -555,7 +564,7 @@ export default function AppointmentsPage() {
               ))}
             </div>
 
-            {/* Filters */}
+            {/* Search & Filters */}
             <div className="flex items-center gap-2 ml-auto">
               <div className="relative">
                 <Input
@@ -581,67 +590,12 @@ export default function AppointmentsPage() {
                 </select>
                 <Filter className="w-3 h-3 absolute right-2.5 top-2.5 text-muted-foreground pointer-events-none" />
               </div>
-              {/* Mechanic filter */}
               <div className="w-56">
                 <MechanicSelect value={mechanic} onChange={setMechanic} placeholder="Фильтр: мастер" />
               </div>
             </div>
-          </div>
-        </Card>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-blue-500/20">
-                <CalendarDays className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Всего записей</div>
-                <div className="text-xl font-bold">{stats.total}</div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-amber-500/20">
-                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">В работе</div>
-                <div className="text-xl font-bold">{stats.inProgress}</div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className={cn(
-            "p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300",
-            stats.urgent > 0 && "border-red-500/30 bg-red-500/5"
-          )}>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-red-500/20">
-                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Срочные</div>
-                <div className="text-xl font-bold">{stats.urgent}</div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4 glass border-border/30 rounded-2xl hover:scale-[1.02] transition-all duration-300">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-emerald-500/20">
-                <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Завершено</div>
-                <div className="text-xl font-bold">{stats.completed}</div>
-              </div>
-            </div>
-          </Card>
-        </div>
+          </PageFiltersRow>
+        </PageFiltersCard>
 
         {/* Calendar Grid */}
         <Card className="p-0 glass border-border/30 rounded-3xl surface-glow overflow-hidden">
@@ -727,7 +681,6 @@ function MonthView({
   const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
   const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
   
-  // Start from Monday of the week containing the first day
   const startDate = new Date(firstDay);
   const dayOfWeek = startDate.getDay();
   const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -865,7 +818,6 @@ function WeekView({
   });
 
   const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-
   const todayStr = new Date().toDateString();
 
   return (

@@ -16,7 +16,7 @@ import { PaymentGatewayInterface } from '../interfaces/payment-gateway.interface
 import { YooKassaGateway } from './gateways/yookassa.gateway';
 import { TinkoffGateway } from './gateways/tinkoff.gateway';
 import { BILLING_CONSTANTS } from '../constants/billing.constants';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { REDIS_CLIENT } from '../../../auth/constants/redis.constants';
 import { BillingBusinessService } from './billing-business.service';
 
@@ -39,6 +39,51 @@ function parseJsonSafe(body: any): any {
   return body;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function mapLogStatusToGatewayStatus(
+  status: SubscriptionPaymentStatus,
+): 'pending' | 'succeeded' | 'failed' {
+  if (status === SubscriptionPaymentStatus.COMPLETED) return 'succeeded';
+  if (status === SubscriptionPaymentStatus.FAILED) return 'failed';
+  return 'pending';
+}
+
+function parseIdempotencyValue(raw: string | null): { paymentId?: string; ts?: string } | null {
+  if (!raw) return null;
+  try {
+    const obj = JSON.parse(raw);
+    return obj && typeof obj === 'object' ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
+const RELEASE_LOCK_LUA = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+else
+  return 0
+end
+`;
+
+async function safeReleaseRedisLock(redis: any, key: string, expectedValue: string): Promise<void> {
+  // ioredis: eval(script, numKeys, key1, arg1)
+  try {
+    await redis.eval(RELEASE_LOCK_LUA, 1, key, expectedValue);
+    return;
+  } catch {}
+
+  // node-redis v4: eval(script, { keys: [...], arguments: [...] })
+  try {
+    await redis.eval(RELEASE_LOCK_LUA, { keys: [key], arguments: [expectedValue] });
+  } catch {}
+}
+
+
+
 @Injectable()
 export class BillingPaymentService {
   private readonly logger = new Logger(BillingPaymentService.name);
@@ -53,7 +98,13 @@ export class BillingPaymentService {
   ) {}
 
   private getGateway(provider?: string): PaymentGatewayInterface {
-    const prov = (provider || process.env.DEFAULT_PAYMENT_PROVIDER || 'yookassa').toLowerCase();
+    const prov = (
+      provider ||
+      process.env.DEFAULTPAYMENTPROVIDER ||        // канон по конфигу
+      process.env.DEFAULT_PAYMENT_PROVIDER ||      // временный fallback
+      'yookassa'
+    ).toLowerCase();
+
     if (prov === 'tinkoff') return this.tinkoff;
     return this.yooKassa;
   }
@@ -81,84 +132,165 @@ export class BillingPaymentService {
     chargedAmount: number;
     currency: 'RUB';
   }> {
-    const sub = await this.subRepo.findOne({
-      where: { id: dto.subscriptionId, companyId },
-      relations: ['tariff'],
-    });
-    if (!sub) throw new NotFoundException('Подписка не найдена');
+    // P0.5: Idempotency for payment creation
+    const ttlSec =
+      (BILLING_CONSTANTS.CACHE_TTL as any).PAYMENT_IDEMPOTENCY_TTL_SEC ??
+      Math.ceil(BILLING_CONSTANTS.CACHE_TTL.IDEMPOTENCY_MS / 1000);
 
-    // Валюта фиксирована
-    const currency: 'RUB' = 'RUB';
+    let idempotencyRedisKey: string | null = null;
+    let lockAcquired = false;
 
-    // Определяем период и сумму на сервере
-    const ms = sub.endDate.getTime() - sub.startDate.getTime();
-    const approxDays = ms / 86400000;
-    const period: 'monthly' | 'yearly' = (sub as any).billingPeriod || (approxDays >= 330 ? 'yearly' : 'monthly');
+    let lockPayload: string | null = null;
 
-    const price = period === 'yearly' ? sub.tariff?.priceYearly : sub.tariff?.priceMonthly;
-    if (typeof price !== 'number' || isNaN(price)) {
-      throw new BadRequestException('Невозможно определить стоимость тарифа');
+    if (ctx?.idempotencyKey) {
+      const hash = createHash('sha256')
+        .update(`${dto.subscriptionId}:${String(ctx.idempotencyKey)}`)
+        .digest('hex');
+
+      idempotencyRedisKey = BILLING_CONSTANTS.REDIS_KEYS.IDEMPOTENCY_PAYMENT(companyId, hash);
+
+      const token = randomUUID();
+      lockPayload = JSON.stringify({ paymentId: 'LOCK', ts: new Date().toISOString(), token });
+
+      const setRes = await this.redis.set(idempotencyRedisKey, lockPayload, 'NX', 'EX', ttlSec);
+
+      if (!setRes) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const raw = await this.redis.get(idempotencyRedisKey);
+          const parsed = parseIdempotencyValue(raw);
+
+          if (parsed?.paymentId && parsed.paymentId !== 'LOCK') {
+            const existingLog = await this.payRepo.findOne({ where: { id: parsed.paymentId } as any });
+            if (existingLog) {
+              return {
+                paymentId: existingLog.id,
+                status: mapLogStatusToGatewayStatus(existingLog.status),
+                provider: existingLog.gatewayType as BillingProvider,
+                redirectUrl: undefined,
+                chargedAmount: Number(existingLog.amount),
+                currency: existingLog.currency as any,
+              };
+            }
+          }
+
+          await sleep(70);
+          continue;
+        }
+
+        throw new BadRequestException('payment is being created, retry with same idempotency key');
+      }
+
+      lockAcquired = true;
     }
 
-    // Минимальные/максимальные пороги безопасности
-    if (price < 1) throw new BadRequestException('Сумма платежа слишком мала');
-    if (price > 1_000_000) throw new BadRequestException('Сумма платежа превышает допустимый предел');
+    try {
+      const sub = await this.subRepo.findOne({
+        where: { id: dto.subscriptionId, companyId },
+        relations: ['tariff'],
+      });
+      if (!sub) throw new NotFoundException('Подписка не найдена');
 
-    const gateway = this.getGateway(dto.gatewayProvider);
-    const result = await gateway.createPayment(
-      {
-        amount: price,
-        currency,
-        paymentMethod: (dto.paymentMethod || 'card') as any, // по умолчанию редиректный сценарий
-        gatewayProvider: (dto.gatewayProvider || 'yookassa') as any,
-        metadata: {
-          subscriptionId: sub.id,
-          companyId,
-          context: 'subscription',
-          billingPeriod: period,
+      // Валюта фиксирована
+      const currency: 'RUB' = 'RUB';
+
+      // Определяем период и сумму на сервере
+      const ms = sub.endDate.getTime() - sub.startDate.getTime();
+      const approxDays = ms / 86400000;
+      const period: 'monthly' | 'yearly' =
+        (sub as any).billingPeriod || (approxDays >= 330 ? 'yearly' : 'monthly');
+
+      const price = period === 'yearly' ? sub.tariff?.priceYearly : sub.tariff?.priceMonthly;
+      if (typeof price !== 'number' || isNaN(price)) {
+        throw new BadRequestException('Невозможно определить стоимость тарифа');
+      }
+
+      // Минимальные/максимальные пороги безопасности
+      if (price < 1) throw new BadRequestException('Сумма платежа слишком мала');
+      if (price > 1_000_000) throw new BadRequestException('Сумма платежа превышает допустимый предел');
+
+      const gateway = this.getGateway(dto.gatewayProvider);
+      const result = await gateway.createPayment(
+        {
+          amount: price,
+          currency,
+          paymentMethod: (dto.paymentMethod || 'card') as any, // по умолчанию редиректный сценарий
+          gatewayProvider: (dto.gatewayProvider || 'yookassa') as any,
+          metadata: {
+            subscriptionId: sub.id,
+            companyId,
+            context: 'subscription',
+            billingPeriod: period,
+          },
         },
-      },
-      { idempotencyKey: ctx.idempotencyKey },
-    );
+        { idempotencyKey: ctx.idempotencyKey },
+      );
 
-    const log = await this.payRepo.save({
-      subscriptionId: sub.id,
-      companyId,
-      amount: Number(price).toFixed(2),
-      currency,
-      status:
-        result.status === 'succeeded'
-          ? SubscriptionPaymentStatus.COMPLETED
-          : result.status === 'failed'
-          ? SubscriptionPaymentStatus.FAILED
-          : SubscriptionPaymentStatus.PENDING,
-      gatewayType: result.provider,
-      gatewayTransactionId: result.id,
-      gatewayResponse: this.truncateJson(result.raw),
-      mirCardUsed: (dto.paymentMethod?.toLowerCase() || '') === 'mir',
-      paymentMethodType:
-        ((dto.paymentMethod?.toLowerCase() as PaymentMethodType) ||
-          PaymentMethodType.CARD) ?? PaymentMethodType.CARD,
-      amlCheckStatus: 'passed',
-      amlRiskScore: 0,
-      suspiciousActivityReported: false,
-      userIpAddress: ctx.ipAddress || null,
-      userAgent: ctx.userAgent || null,
-      processingLocation: 'RU',
-      description: 'Subscription payment',
-    });
+      let log: SubscriptionPaymentLog;
 
-    this.logger.log(`Платёж создан: ${log.id}, provider=${result.provider}, status=${result.status}, amount=${price.toFixed(2)} ${currency}`);
+      try {
+        log = await this.payRepo.save({ /*...*/ });
+      } catch (e: any) {
+        const err = e?.driverError ?? e;
+        if (
+          ctx?.idempotencyKey &&
+          err?.code === '23505' &&
+          (err?.constraint === 'uniq_sub_pay_idempotency' || String(err?.message || '').includes('uniq_sub_pay_idempotency'))
+        ) {
+          const existingLog = await this.payRepo.findOne({
+            where: {
+              companyId,
+              subscriptionId: dto.subscriptionId,
+              idempotencyKey: String(ctx.idempotencyKey),
+            } as any,
+          });
 
-    return {
-      paymentId: log.id,
-      status: result.status,
-      provider: result.provider as BillingProvider,
-      redirectUrl: result.redirectUrl,
-      chargedAmount: price,
-      currency,
-    };
+          if (existingLog) {
+            return {
+              paymentId: existingLog.id,
+              status: mapLogStatusToGatewayStatus(existingLog.status),
+              provider: existingLog.gatewayType as BillingProvider,
+              redirectUrl: undefined,
+              chargedAmount: Number(existingLog.amount),
+              currency: existingLog.currency as any,
+            };
+          }
+        }
+        throw e;
+      }
+
+      if (idempotencyRedisKey && lockAcquired) {
+        const finalPayload = JSON.stringify({
+          paymentId: String(log.id),
+          ts: new Date().toISOString(),
+        });
+        // обновляем только существующий ключ (XX), TTL оставляем тем же окном
+        await this.redis.set(idempotencyRedisKey, finalPayload, 'XX', 'EX', ttlSec);
+      }
+
+      this.logger.log(
+        `Платёж создан: ${log.id}, provider=${result.provider}, status=${result.status}, amount=${price.toFixed(
+          2,
+        )} ${currency}`,
+      );
+
+      return {
+        paymentId: log.id,
+        status: result.status,
+        provider: result.provider as BillingProvider,
+        redirectUrl: result.redirectUrl,
+        chargedAmount: price,
+        currency,
+      };
+    } catch (e) {
+      if (idempotencyRedisKey && lockAcquired && lockPayload) {
+        try {
+          await safeReleaseRedisLock(this.redis, idempotencyRedisKey, lockPayload);
+        } catch {}
+      }
+      throw e;
+    }
   }
+
 
   async handleWebhook(
     provider: BillingProvider,
@@ -168,7 +300,7 @@ export class BillingPaymentService {
     // Идемпотентность вебхуков: дедуп по хэшу сырого тела
     const hash = createHash('sha256').update(payloadRaw || Buffer.from('')).digest('hex');
     const redisKey = BILLING_CONSTANTS.REDIS_KEYS.WEBHOOK_EVENT(provider, hash);
-    const ttl = BILLING_CONSTANTS.CACHE_TTL.WEBHOOK_DEDUP_MS / 1000;
+    const ttl = BILLING_CONSTANTS.CACHE_TTL.WEBHOOK_IDEMPOTENCY_TTL_SEC;
 
     const setRes = await this.redis.set(redisKey, '1', 'NX', 'EX', ttl);
     if (!setRes) {
@@ -181,7 +313,21 @@ export class BillingPaymentService {
 
     const { paymentId, status } = await gateway.handleWebhook(payloadObj, headers);
 
+    // Идемпотентность вебхуков на уровне бизнес-события: provider + paymentId + status
+    const semanticKey = BILLING_CONSTANTS.REDIS_KEYS.WEBHOOK_PAYMENT_EVENT(
+      provider,
+      String(paymentId),
+      String(status),
+    );
+
+    const semanticSet = await this.redis.set(semanticKey, '1', 'NX', 'EX', ttl);
+    if (!semanticSet) {
+      this.logger.warn(`Webhook semantic dedup hit provider=${provider}, paymentId=${paymentId}, status=${status}`);
+      return;
+    }
+
     const existing = await this.payRepo.findOne({ where: { gatewayTransactionId: paymentId } });
+
     if (!existing) {
       this.logger.warn(`Webhook: payment log not found for gateway payment id ${paymentId}`);
       return;

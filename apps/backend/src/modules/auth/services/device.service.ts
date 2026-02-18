@@ -1,3 +1,4 @@
+// path: apps/backend/src/modules/auth/services/device.service.ts
 import { Injectable } from '@nestjs/common';
 import { createHash, createHmac } from 'crypto';
 import { UAParser } from 'ua-parser-js';
@@ -8,6 +9,11 @@ import { ConfigService } from '@nestjs/config';
 export class DeviceService {
   constructor(private readonly configService: ConfigService) {}
 
+  /**
+   * Стабильный deviceId для одного и того же устройства/браузера.
+   * ВНИМАНИЕ: НЕ включаем IP в идентификатор, чтобы не плодить "новые устройства"
+   * при смене сети/мобильного интернета. IP учитываем только в fingerprint.
+   */
   generateDeviceId(identifier: DeviceIdentifier): string {
     const parser = new UAParser(identifier.userAgent);
     const device = parser.getDevice();
@@ -24,6 +30,7 @@ export class DeviceService {
       browserVersion: browser.version || '',
     };
 
+    // Убираем зависимость от IP — стабильный хэш только от userId + UA-параметров
     const deviceString = `${identifier.userId}:${JSON.stringify(deviceInfo)}`;
     const secret = this.configService.get<string>('DEVICE_ID_SECRET', 'dev-device-secret');
     return createHmac('sha256', secret).update(deviceString).digest('hex');
@@ -59,6 +66,10 @@ export class DeviceService {
     };
   }
 
+  /**
+   * Отдельный fingerprint включает IP‑подсеть (для корреляций/аномалий),
+   * но это не влияет на deviceId и количество "устройств".
+   */
   createDeviceFingerprint(userAgent: string, ipAddress: string): string {
     const deviceInfo = this.parseDeviceInfo(userAgent);
     const fingerprintData = { ...deviceInfo, ipSubnet: this.getIpSubnet(ipAddress) };

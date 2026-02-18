@@ -1,7 +1,8 @@
 // path: apps/frontend/app/dashboard/payment-methods/page.tsx
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { AppLayout } from '@/components/app/AppLayout';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,50 +38,31 @@ const METHOD_ICONS = {
 } as const;
 
 const METHOD_COLORS = {
-  cash: {
-    bg: 'bg-emerald-500/10',
-    border: 'border-emerald-500/20',
-    icon: 'text-emerald-500',
-  },
-  card: {
-    bg: 'bg-blue-500/10', 
-    border: 'border-blue-500/20',
-    icon: 'text-blue-500',
-  },
-  bank_transfer: {
-    bg: 'bg-indigo-500/10',
-    border: 'border-indigo-500/20', 
-    icon: 'text-indigo-500',
-  },
-  digital_wallet: {
-    bg: 'bg-purple-500/10',
-    border: 'border-purple-500/20',
-    icon: 'text-purple-500', 
-  },
-  cryptocurrency: {
-    bg: 'bg-amber-500/10',
-    border: 'border-amber-500/20',
-    icon: 'text-amber-500',
-  },
-  installments: {
-    bg: 'bg-teal-500/10',
-    border: 'border-teal-500/20',
-    icon: 'text-teal-500',
-  },
-  corporate: {
-    bg: 'bg-slate-500/10',
-    border: 'border-slate-500/20',
-    icon: 'text-slate-500',
-  },
+  cash: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', icon: 'text-emerald-500' },
+  card: { bg: 'bg-blue-500/10', border: 'border-blue-500/20', icon: 'text-blue-500' },
+  bank_transfer: { bg: 'bg-indigo-500/10', border: 'border-indigo-500/20', icon: 'text-indigo-500' },
+  digital_wallet: { bg: 'bg-purple-500/10', border: 'border-purple-500/20', icon: 'text-purple-500' },
+  cryptocurrency: { bg: 'bg-amber-500/10', border: 'border-amber-500/20', icon: 'text-amber-500' },
+  installments: { bg: 'bg-teal-500/10', border: 'border-teal-500/20', icon: 'text-teal-500' },
+  corporate: { bg: 'bg-slate-500/10', border: 'border-slate-500/20', icon: 'text-slate-500' },
 } as const;
 
+function requiresIntegration(type?: string): boolean {
+  const t = String(type || '').toLowerCase();
+  return t === 'card' || t === 'digital_wallet' || t === 'cryptocurrency';
+}
+
 export default function PaymentMethodsPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<PaymentMethodResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const canManage = ['company_owner', 'company_admin', 'manager'].includes(user?.role?.name || '');
+  const roleName = user?.role?.name || '';
+  const canCreate = ['company_owner', 'company_admin'].includes(roleName);
+  const canToggle = canCreate;
+  const canTest = ['company_owner', 'company_admin', 'manager'].includes(roleName);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,22 +77,26 @@ export default function PaymentMethodsPage() {
     }
   }, []);
 
+  const goToCreate = useCallback(() => {
+    router.push('/dashboard/payment-methods/new');
+  }, [router]);
+
+  const goToDetails = useCallback((id: string) => {
+    router.push(`/dashboard/payment-methods/${id}`);
+  }, [router]);
+
   const toggleMethod = useCallback(async (id: string) => {
-    if (!canManage) return;
-    
+    if (!canToggle) return;
     try {
       const updated = await paymentMethodsAPI.toggleStatus(id);
-      setItems(prev => prev.map(item => 
-        item.id === id ? updated : item
-      ));
+      setItems(prev => prev.map(item => item.id === id ? updated : item));
     } catch (e: unknown) {
       alert((e as Error)?.message || 'Не удалось изменить статус способа оплаты');
     }
-  }, [canManage]);
+  }, [canToggle]);
 
   const testPayment = useCallback(async (id: string) => {
-    if (!canManage) return;
-    
+    if (!canTest) return;
     try {
       const result = await paymentMethodsAPI.testIntegration(id);
       if (result.ok) {
@@ -121,25 +107,24 @@ export default function PaymentMethodsPage() {
     } catch (e: unknown) {
       alert((e as Error)?.message || 'Ошибка тестирования интеграции');
     }
-  }, [canManage]);
+  }, [canTest]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  const configuredCount = useMemo(() => {
+    return items.filter((item) => requiresIntegration(item.type) ? item.integrationStatus?.isConfigured === true : true).length;
+  }, [items]);
+
   const headerActions = (
     <div className="flex items-center gap-2">
-      <Button 
-        variant="outline" 
-        onClick={load} 
-        className="rounded-2xl btn-outline-fixed"
-      >
+      <Button variant="outline" onClick={load} className="rounded-2xl btn-outline-fixed">
         <RefreshCw className="w-4 h-4 mr-2" />
         Обновить
       </Button>
-      
-      {canManage && (
-        <Button className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]">
+      {canCreate && (
+        <Button className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]" onClick={goToCreate}>
           <Plus className="w-4 h-4 mr-2" />
           Добавить метод
         </Button>
@@ -155,7 +140,6 @@ export default function PaymentMethodsPage() {
       actions={headerActions}
     >
       <div className="container mx-auto px-6 py-6 space-y-6">
-        {/* Payment Methods Feature Badge */}
         <Card className="p-4 glass border-purple-500/20 bg-gradient-to-r from-purple-500/5 to-primary/5 rounded-3xl">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-gradient-to-r from-purple-500 to-primary">
@@ -163,9 +147,7 @@ export default function PaymentMethodsPage() {
             </div>
             <div>
               <h3 className="font-semibold text-purple-600 dark:text-purple-400">Интерактивные переключатели методов</h3>
-              <p className="text-sm text-muted-foreground">
-                Smooth toggle анимации, настройки для каждого метода, тестовые транзакции для проверки интеграций.
-              </p>
+              <p className="text-sm text-muted-foreground">Настраивайте доступные способы и проверяйте интеграции онлайн-оплат.</p>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/30">
@@ -180,7 +162,6 @@ export default function PaymentMethodsPage() {
           </div>
         </Card>
 
-        {/* Payment Methods Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {loading ? (
             [...Array(6)].map((_, i) => (
@@ -212,9 +193,9 @@ export default function PaymentMethodsPage() {
             <div className="col-span-full p-10 text-center text-muted-foreground">
               <CreditCard className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <h3 className="font-semibold mb-2">Способы оплаты не найдены</h3>
-              <p className="text-sm mb-4">Добавьте первый способ оплаты для приема платежей</p>
-              {canManage && (
-                <Button className="rounded-2xl bg-gradient-primary hover:opacity-90">
+              <p className="text-sm mb-4">Добавьте первый способ оплаты для приёма платежей</p>
+              {canCreate && (
+                <Button className="rounded-2xl bg-gradient-primary hover:opacity-90" onClick={goToCreate}>
                   <Plus className="w-4 h-4 mr-2" />
                   Добавить метод
                 </Button>
@@ -225,15 +206,16 @@ export default function PaymentMethodsPage() {
               <PaymentMethodCard 
                 key={method.id}
                 method={method}
-                canManage={canManage}
+                canToggle={canToggle}
+                canTest={canTest}
                 onToggle={toggleMethod}
                 onTest={testPayment}
+                onConfigure={() => goToDetails(method.id)}
               />
             ))
           )}
         </div>
 
-        {/* Summary Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="p-4 glass border-border/30 rounded-2xl">
             <div className="flex items-center gap-3">
@@ -268,9 +250,7 @@ export default function PaymentMethodsPage() {
               </div>
               <div>
                 <div className="text-sm text-muted-foreground">Настроенных</div>
-                <div className="text-xl font-bold">
-                  {items.filter(item => item.integrationStatus?.isConfigured).length}
-                </div>
+                <div className="text-xl font-bold">{configuredCount}</div>
               </div>
             </div>
           </Card>
@@ -280,17 +260,20 @@ export default function PaymentMethodsPage() {
   );
 }
 
-// Payment Method Card Component
 function PaymentMethodCard({
   method,
-  canManage,
+  canToggle,
+  canTest,
   onToggle,
-  onTest
+  onTest,
+  onConfigure,
 }: {
   method: PaymentMethodResponse;
-  canManage: boolean;
+  canToggle: boolean;
+  canTest: boolean;
   onToggle: (id: string) => void;
   onTest: (id: string) => void;
+  onConfigure: () => void;
 }) {
   const IconComponent = METHOD_ICONS[method.type as keyof typeof METHOD_ICONS] || CreditCard;
   const colors = METHOD_COLORS[method.type as keyof typeof METHOD_COLORS] || METHOD_COLORS.card;
@@ -298,19 +281,18 @@ function PaymentMethodCard({
   const [isToggling, setIsToggling] = useState(false);
 
   const handleToggle = async (checked: boolean) => {
-    if (!canManage || isToggling || checked === method.isActive) return;
-    
+    if (!canToggle || isToggling || checked === method.isActive) return;
     setIsToggling(true);
     try {
       await onToggle(method.id);
     } finally {
-      // Add small delay for smooth animation
       setTimeout(() => setIsToggling(false), 300);
     }
   };
 
-  const isConfigured = method.integrationStatus?.isConfigured || false;
-  const isTestMode = method.integrationStatus?.testMode || false;
+  const needsIntegration = requiresIntegration(method.type as string);
+  const isConfigured = needsIntegration ? method.integrationStatus?.isConfigured === true : true;
+  const isTestMode = needsIntegration ? !!method.integrationStatus?.testMode : false;
 
   return (
     <Card className={cn(
@@ -318,15 +300,9 @@ function PaymentMethodCard({
       "hover:shadow-glass-lg hover:-translate-y-1",
       method.isActive && "ring-1 ring-primary/20 bg-primary/5"
     )}>
-      {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className={cn(
-            "p-3 rounded-2xl transition-all duration-300 group-hover:scale-105",
-            colors.bg,
-            colors.border,
-            "border"
-          )}>
+          <div className={cn("p-3 rounded-2xl transition-all duration-300 group-hover:scale-105", colors.bg, colors.border, "border")}>
             <IconComponent className={cn("w-6 h-6", colors.icon)} />
           </div>
           <div>
@@ -334,38 +310,17 @@ function PaymentMethodCard({
             <p className="text-sm text-muted-foreground">{method.description}</p>
           </div>
         </div>
-
-        {/* Status indicator */}
-        <div className={cn(
-          "w-3 h-3 rounded-full transition-all duration-300",
-          method.isActive ? "bg-emerald-500 shadow-lg shadow-emerald-500/30" : "bg-muted",
-          method.isActive && "animate-pulse"
-        )} />
+        <div className={cn("w-3 h-3 rounded-full transition-all duration-300", method.isActive ? "bg-emerald-500 shadow-lg shadow-emerald-500/30" : "bg-muted", method.isActive && "animate-pulse")} />
       </div>
 
-      {/* Configuration Status */}
       <div className="mb-4">
         <div className="flex items-center gap-2 mb-2">
           <Badge variant={isConfigured ? "default" : "secondary"} className="text-xs">
-            {isConfigured ? (
-              <>
-                <CheckCircle className="w-3 h-3 mr-1" />
-                Настроен
-              </>
-            ) : (
-              <>
-                <Settings className="w-3 h-3 mr-1" />
-                Требует настройки
-              </>
-            )}
+            {isConfigured ? (<><CheckCircle className="w-3 h-3 mr-1" /> Настроен</>) : (<><Settings className="w-3 h-3 mr-1" /> Требует настройки</>)}
           </Badge>
-          
-          {method.processingFeePercent && (
-            <Badge variant="outline" className="text-xs">
-              Комиссия: {method.processingFeePercent}%
-            </Badge>
-          )}
-
+          {method.processingFeePercent ? (
+            <Badge variant="outline" className="text-xs">Комиссия: {method.processingFeePercent}%</Badge>
+          ) : null}
           {isTestMode && (
             <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/30">
               Тест
@@ -380,54 +335,25 @@ function PaymentMethodCard({
         )}
       </div>
 
-      {/* Toggle Switch */}
       <div className="flex items-center justify-between p-3 rounded-2xl bg-surface-1/40 mb-4">
         <div className="flex items-center gap-2">
-          <Zap className={cn(
-            "w-4 h-4 transition-colors duration-300",
-            method.isActive ? "text-primary" : "text-muted-foreground"
-          )} />
-          <span className="text-sm font-medium">
-            {method.isActive ? 'Активен' : 'Отключен'}
-          </span>
+          <Zap className={cn("w-4 h-4 transition-colors duration-300", method.isActive ? "text-primary" : "text-muted-foreground")} />
+          <span className="text-sm font-medium">{method.isActive ? 'Активен' : 'Отключен'}</span>
         </div>
-        
-        <Switch
-          checked={method.isActive}
-          onCheckedChange={handleToggle}
-          disabled={!canManage || isToggling}
-          className={cn(
-            "transition-all duration-300",
-            isToggling && "opacity-50"
-          )}
-        />
+        <Switch checked={method.isActive} onCheckedChange={handleToggle} disabled={!canToggle || isToggling} className={cn("transition-all duration-300", isToggling && "opacity-50")} />
       </div>
 
-      {/* Action Buttons */}
       <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="rounded-xl text-xs"
-          disabled={!canManage}
-        >
+        <Button variant="outline" size="sm" className="rounded-xl text-xs" onClick={onConfigure}>
           <Settings className="w-3 h-3 mr-1" />
           Настроить
         </Button>
-        
-        <Button
-          variant="outline"
-          size="sm"
-          className="rounded-xl text-xs"
-          disabled={!canManage || !method.isActive || !isConfigured}
-          onClick={() => onTest(method.id)}
-        >
+        <Button variant="outline" size="sm" className="rounded-xl text-xs" disabled={!canTest || !needsIntegration || !isConfigured} onClick={() => onTest(method.id)}>
           <Zap className="w-3 h-3 mr-1" />
           Тест
         </Button>
       </div>
 
-      {/* Live Status Animation */}
       {method.isActive && (
         <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10" />
       )}

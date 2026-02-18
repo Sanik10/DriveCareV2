@@ -16,7 +16,7 @@ import {
   Min,
   Max,
 } from 'class-validator';
-import * as sanitizeHtml from 'sanitize-html';
+import sanitizeHtml from 'sanitize-html';
 import { PAYMENTS_CONSTANTS } from '../../constants/payments.constants';
 import { PaymentCurrency } from '../../types/payments.types';
 

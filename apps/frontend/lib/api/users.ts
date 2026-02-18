@@ -46,6 +46,12 @@ function normalizeStatus(input: unknown): string | undefined {
   return undefined;
 }
 
+function coerceDateISO(value: unknown): string {
+  if (value == null) return new Date(0).toISOString();
+  const d = new Date(value as string | number);
+  return isNaN(d.getTime()) ? new Date(0).toISOString() : d.toISOString();
+}
+
 function normalizeUser(input: unknown): User {
   if (!isObject(input)) {
     console.warn('normalizeUser received non-object input:', input);
@@ -64,43 +70,68 @@ function normalizeUser(input: unknown): User {
   const role = normalizeRole(obj.role);
   const status = normalizeStatus(obj.status ?? obj.isActive);
 
+  // Даты и доп. поля
+  const createdAtRaw =
+    (obj as any).createdAt ??
+    (obj as any).created_at ??
+    (obj as any).createdOn ??
+    (obj as any).created ??
+    null;
+
+  const updatedAtRaw =
+    (obj as any).updatedAt ??
+    (obj as any).updated_at ??
+    (obj as any).updatedOn ??
+    null;
+
+  const lastLoginAtRaw =
+    (obj as any).lastLoginAt ??
+    (obj as any).last_login_at ??
+    (obj as any).lastLogin ??
+    (obj as any).last_seen ??
+    (obj as any).lastSeenAt ??
+    null;
+
   return {
-    id: String(obj.id ?? obj.userId ?? ''),
+    id: String((obj as any).id ?? (obj as any).userId ?? ''),
     email:
-      typeof obj.email === 'string'
-        ? obj.email
-        : typeof obj.mail === 'string'
-        ? obj.mail
+      typeof (obj as any).email === 'string'
+        ? (obj as any).email
+        : typeof (obj as any).mail === 'string'
+        ? (obj as any).mail
         : undefined,
     firstName:
-      typeof obj.firstName === 'string'
-        ? obj.firstName
-        : typeof obj.first_name === 'string'
-        ? obj.first_name
+      typeof (obj as any).firstName === 'string'
+        ? (obj as any).firstName
+        : typeof (obj as any).first_name === 'string'
+        ? (obj as any).first_name
         : null,
     lastName:
-      typeof obj.lastName === 'string'
-        ? obj.lastName
-        : typeof obj.last_name === 'string'
-        ? obj.last_name
+      typeof (obj as any).lastName === 'string'
+        ? (obj as any).lastName
+        : typeof (obj as any).last_name === 'string'
+        ? (obj as any).last_name
         : null,
     phone:
-      typeof obj.phone === 'string'
-        ? obj.phone
-        : typeof obj.phoneNumber === 'string'
-        ? obj.phoneNumber
-        : typeof obj.phone_number === 'string'
-        ? obj.phone_number
+      typeof (obj as any).phone === 'string'
+        ? (obj as any).phone
+        : typeof (obj as any).phoneNumber === 'string'
+        ? (obj as any).phoneNumber
+        : typeof (obj as any).phone_number === 'string'
+        ? (obj as any).phone_number
         : null,
     role,
     status,
-  };
-}
 
-function coerceDateISO(value: unknown): string {
-  if (value == null) return new Date(0).toISOString();
-  const d = new Date(value as string | number);
-  return isNaN(d.getTime()) ? new Date(0).toISOString() : d.toISOString();
+    // NEW
+    createdAt: createdAtRaw ? coerceDateISO(createdAtRaw) : undefined,
+    updatedAt: updatedAtRaw ? coerceDateISO(updatedAtRaw) : undefined,
+    lastLoginAt: lastLoginAtRaw ? coerceDateISO(lastLoginAtRaw) : undefined,
+    specialization:
+      typeof (obj as any).specialization === 'string'
+        ? String((obj as any).specialization)
+        : null,
+  };
 }
 
 function getOrigin(): string {
@@ -132,9 +163,9 @@ function normalizeInvite(input: unknown): UserInvite {
   const obj = input as Record<string, unknown>;
 
   const rawStatus: string =
-    ((typeof obj.status === 'string' ? obj.status : null) ??
-      (typeof obj.state === 'string' ? obj.state : null) ??
-      (typeof obj.inviteStatus === 'string' ? obj.inviteStatus : null)) ??
+    ((typeof (obj as any).status === 'string' ? (obj as any).status : null) ??
+      (typeof (obj as any).state === 'string' ? (obj as any).state : null) ??
+      (typeof (obj as any).inviteStatus === 'string' ? (obj as any).inviteStatus : null)) ??
     'pending';
 
   const status = ((): UserInvite['status'] => {
@@ -147,33 +178,44 @@ function normalizeInvite(input: unknown): UserInvite {
   })();
 
   const token: string | undefined =
-    (typeof obj.token === 'string' ? obj.token : undefined) ??
-    (typeof obj.code === 'string' ? obj.code : undefined) ??
-    (typeof obj.inviteToken === 'string' ? obj.inviteToken : undefined) ??
-    (typeof obj.invite_token === 'string' ? obj.invite_token : undefined);
+    (typeof (obj as any).token === 'string' ? (obj as any).token : undefined) ??
+    (typeof (obj as any).code === 'string' ? (obj as any).code : undefined) ??
+    (typeof (obj as any).inviteToken === 'string' ? (obj as any).inviteToken : undefined) ??
+    (typeof (obj as any).invite_token === 'string' ? (obj as any).invite_token : undefined);
 
   const inviteUrl: string | undefined =
-    (typeof obj.inviteUrl === 'string' ? obj.inviteUrl : undefined) ??
-    (typeof obj.invite_url === 'string' ? obj.invite_url : undefined) ??
+    (typeof (obj as any).inviteUrl === 'string' ? (obj as any).inviteUrl : undefined) ??
+    (typeof (obj as any).invite_url === 'string' ? (obj as any).invite_url : undefined) ??
     buildInviteUrlFromToken(token);
 
   const roleId =
-    (typeof obj.roleId === 'string' ? obj.roleId : null) ??
-    (typeof obj.role_id === 'string' ? obj.role_id : null) ??
-    (isObject(obj.role)
-      ? (typeof (obj.role as any).id === 'string'
-          ? (obj.role as any).id
+    (typeof (obj as any).roleId === 'string' ? (obj as any).roleId : null) ??
+    (typeof (obj as any).role_id === 'string' ? (obj as any).role_id : null) ??
+    (isObject((obj as any).role)
+      ? (typeof ((obj as any).role as any).id === 'string'
+          ? ((obj as any).role as any).id
           : null) ??
-        (typeof (obj.role as any).roleId === 'string' ? (obj.role as any).roleId : null)
+        (typeof ((obj as any).role as any).roleId === 'string' ? ((obj as any).role as any).roleId : null)
       : null);
 
   return {
-    id: String(obj.id ?? obj.inviteId ?? obj.uuid ?? ''),
-    email: String(obj.email ?? obj.invitedEmail ?? obj.mail ?? ''),
+    id: String((obj as any).id ?? (obj as any).inviteId ?? (obj as any).uuid ?? ''),
+    email: String((obj as any).email ?? (obj as any).invitedEmail ?? (obj as any).mail ?? ''),
     roleId: roleId ? String(roleId) : '',
     status,
-    expiresAt: coerceDateISO(obj.expiresAt ?? (obj as any).expires_at ?? (obj as any).expiresOn ?? (obj as any).expires ?? null),
-    createdAt: coerceDateISO(obj.createdAt ?? (obj as any).created_at ?? (obj as any).createdOn ?? null),
+    expiresAt: coerceDateISO(
+      (obj as any).expiresAt ??
+        (obj as any).expires_at ??
+        (obj as any).expiresOn ??
+        (obj as any).expires ??
+        null,
+    ),
+    createdAt: coerceDateISO(
+      (obj as any).createdAt ??
+        (obj as any).created_at ??
+        (obj as any).createdOn ??
+        null,
+    ),
     inviteUrl,
   };
 }
@@ -200,7 +242,7 @@ function buildQuery(params: Record<string, unknown>) {
 
 function normalizePagination(raw: unknown) {
   const src = isObject(raw) ? (raw as Record<string, unknown>) : {};
-  const data = isObject(src.data) ? src.data : src;
+  const data = isObject((src as any).data) ? (src as any).data : src;
   const meta =
     isObject((data as any).meta)
       ? (data as any).meta
