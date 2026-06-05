@@ -1,227 +1,301 @@
 // path: apps/frontend/components/orders/order-create-dialog.tsx
-"use client";
+"use client"
 
-import * as React from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Car, User, Plus, ClipboardPaste, Save } from "lucide-react";
-import { customersAPI } from "@/lib/api/customers";
-import { vehiclesAPI } from "@/lib/api/vehicles";
-import { ordersAPI } from "@/lib/api/orders";
-import type { CustomerResponse } from "@/lib/types/customers";
-import type { VehicleResponse } from "@/lib/types/vehicles";
-import type { CreateOrderRequest, OrderResponse } from "@/lib/types/orders";
-import { Kbd } from "@/components/ui/kbd";
-import { CustomerCreateDialog } from "@/components/customers/customer-create-dialog";
-import { VehicleCreateDialog } from "@/components/vehicles/vehicle-create-dialog";
+import * as React from "react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Car, User, Plus, ClipboardPaste, Save, AlertTriangle } from "lucide-react"
+
+import { customersAPI } from "@/lib/api/customers"
+import { vehiclesAPI } from "@/lib/api/vehicles"
+import { ordersAPI } from "@/lib/api/orders"
+import type { CustomerResponse } from "@/lib/types/customers"
+import type { VehicleResponse } from "@/lib/types/vehicles"
+import type { CreateOrderRequest, OrderResponse } from "@/lib/types/orders"
+
+import { Kbd } from "@/components/ui/kbd"
+import { CustomerCreateDialog } from "@/components/customers/customer-create-dialog"
+import { VehicleCreateDialog } from "@/components/vehicles/vehicle-create-dialog"
+import { cn } from "@/lib/utils"
 
 type Props = {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  onCreated?: (order: OrderResponse) => void;
-  initialCustomerId?: string;
-  initialVehicleId?: string;
-};
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onCreated?: (order: OrderResponse) => void
+  initialCustomerId?: string
+  initialVehicleId?: string
+}
 
-export function OrderCreateDialog({ open, onOpenChange, onCreated, initialCustomerId, initialVehicleId }: Props) {
-  const [customerQuery, setCustomerQuery] = React.useState("");
-  const [customerResults, setCustomerResults] = React.useState<CustomerResponse[]>([]);
-  const [customerId, setCustomerId] = React.useState<string>("");
-  const [customerLabel, setCustomerLabel] = React.useState<string>("");
+function customerLabel(c: CustomerResponse) {
+  return (
+    [c.firstName, c.lastName].filter(Boolean).join(" ") ||
+    c.companyName ||
+    c.email ||
+    c.id
+  )
+}
 
-  const [vehicleResults, setVehicleResults] = React.useState<VehicleResponse[]>([]);
-  const [vehicleId, setVehicleId] = React.useState<string>("");
-  const [vehicleLabel, setVehicleLabel] = React.useState<string>("");
+function vehicleLabel(v: VehicleResponse) {
+  return `${v.model?.brand?.name ? v.model.brand.name + " " : ""}${v.model?.name || ""} ${
+    v.licensePlate || v.vin || v.id
+  }`.trim()
+}
 
-  const [mileage, setMileage] = React.useState<string>("");
-  const [description, setDescription] = React.useState<string>("");
-  const [complaints, setComplaints] = React.useState<string>("");
+export function OrderCreateDialog({
+  open,
+  onOpenChange,
+  onCreated,
+  initialCustomerId,
+  initialVehicleId,
+}: Props) {
+  const [customerQuery, setCustomerQuery] = React.useState("")
+  const [customerResults, setCustomerResults] = React.useState<CustomerResponse[]>([])
+  const [customerId, setCustomerId] = React.useState<string>("")
+  const [customerValueLabel, setCustomerValueLabel] = React.useState<string>("")
 
-  const [openCustomerCreate, setOpenCustomerCreate] = React.useState(false);
-  const [openVehicleCreate, setOpenVehicleCreate] = React.useState(false);
+  const [vehicleResults, setVehicleResults] = React.useState<VehicleResponse[]>([])
+  const [vehicleId, setVehicleId] = React.useState<string>("")
+  const [vehicleValueLabel, setVehicleValueLabel] = React.useState<string>("")
 
-  const [submitting, setSubmitting] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [mileage, setMileage] = React.useState<string>("")
+  const [description, setDescription] = React.useState<string>("")
+  const [complaints, setComplaints] = React.useState<string>("")
 
+  const [openCustomerCreate, setOpenCustomerCreate] = React.useState(false)
+  const [openVehicleCreate, setOpenVehicleCreate] = React.useState(false)
+
+  const [submitting, setSubmitting] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const reset = React.useCallback(() => {
+    setCustomerQuery("")
+    setCustomerResults([])
+    setCustomerId("")
+    setCustomerValueLabel("")
+    setVehicleResults([])
+    setVehicleId("")
+    setVehicleValueLabel("")
+    setMileage("")
+    setDescription("")
+    setComplaints("")
+    setError(null)
+    setSubmitting(false)
+  }, [])
+
+  // При закрытии модалки — чистим состояние (чтобы не тащить хвосты)
   React.useEffect(() => {
-    if (!open) return;
-    (async () => {
+    if (!open) reset()
+  }, [open, reset])
+
+  // Prefill при открытии
+  React.useEffect(() => {
+    if (!open) return
+    ;(async () => {
       try {
         if (initialCustomerId) {
-          const c = await customersAPI.getCustomer(initialCustomerId);
-          const label = [c.firstName, c.lastName].filter(Boolean).join(" ") || c.companyName || c.email || c.id;
-          setCustomerId(c.id);
-          setCustomerLabel(label);
+          const c = await customersAPI.getCustomer(initialCustomerId)
+          setCustomerId(c.id)
+          setCustomerValueLabel(customerLabel(c))
         }
+
         if (initialVehicleId) {
-          const v = await vehiclesAPI.getVehicle(initialVehicleId);
-          const vlabel = `${v.model?.brand?.name ? v.model.brand.name + " " : ""}${v.model?.name || ""} ${v.licensePlate || v.vin || v.id}`.trim();
-          setVehicleId(v.id);
-          setVehicleLabel(vlabel);
+          const v = await vehiclesAPI.getVehicle(initialVehicleId)
+          setVehicleId(v.id)
+          setVehicleValueLabel(vehicleLabel(v))
+
+          // если клиент ещё не выбран — подтягиваем из авто
           if (!customerId && v.customer?.id) {
-            setCustomerId(v.customer.id);
-            setCustomerLabel(([v.customer.firstName, v.customer.lastName].filter(Boolean).join(" ")) || v.customer.companyName || v.customer.email || v.customer.id);
+            setCustomerId(v.customer.id)
+            setCustomerValueLabel(
+              [v.customer.firstName, v.customer.lastName].filter(Boolean).join(" ") ||
+                v.customer.companyName ||
+                v.customer.email ||
+                v.customer.id
+            )
           }
         }
       } catch {
         // ignore prefill errors
       }
-    })();
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialCustomerId, initialVehicleId]);
+  }, [open, initialCustomerId, initialVehicleId])
 
+  // Поиск клиентов (debounce)
   React.useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      const q = customerQuery.trim();
+    if (!open) return
+    let cancelled = false
+    const t = window.setTimeout(async () => {
+      const q = customerQuery.trim()
       if (!q) {
-        setCustomerResults([]);
-        return;
+        setCustomerResults([])
+        return
       }
       try {
-        const res = await customersAPI.getCustomers({ search: q, page: 1, limit: 7 });
-        if (!cancelled) setCustomerResults(res.items);
+        const res = await customersAPI.getCustomers({ search: q, page: 1, limit: 7 })
+        if (!cancelled) setCustomerResults(res.items)
       } catch {
-        if (!cancelled) setCustomerResults([]);
+        if (!cancelled) setCustomerResults([])
       }
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [customerQuery, open]);
+    }, 250)
 
-  React.useEffect(() => {
-    if (!open) return;
-    if (!customerId) {
-      setVehicleResults([]);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const list = await vehiclesAPI.getCustomerVehicles(customerId);
-        if (!cancelled) setVehicleResults(list);
-      } catch {
-        if (!cancelled) setVehicleResults([]);
-      }
-    })();
     return () => {
-      cancelled = true;
-    };
-  }, [customerId, open]);
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [customerQuery, open])
+
+  // Загрузка авто клиента
+  React.useEffect(() => {
+    if (!open) return
+    if (!customerId) {
+      setVehicleResults([])
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const list = await vehiclesAPI.getCustomerVehicles(customerId)
+        if (!cancelled) setVehicleResults(list)
+      } catch {
+        if (!cancelled) setVehicleResults([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [customerId, open])
 
   const afterCreateCustomer = (c: CustomerResponse) => {
-    setCustomerId(c.id);
-    const label = [c.firstName, c.lastName].filter(Boolean).join(" ") || c.companyName || c.email || c.id;
-    setCustomerLabel(label);
-    setOpenCustomerCreate(false);
-  };
+    setCustomerId(c.id)
+    setCustomerValueLabel(customerLabel(c))
+    setOpenCustomerCreate(false)
+  }
 
   const afterCreateVehicle = (v: VehicleResponse) => {
-    setVehicleId(v.id);
-    const label = `${v.model?.brand?.name ? v.model.brand.name + " " : ""}${v.model?.name || ""} ${v.licensePlate || v.vin || v.id}`.trim();
-    setVehicleLabel(label);
-    setOpenVehicleCreate(false);
-  };
+    setVehicleId(v.id)
+    setVehicleValueLabel(vehicleLabel(v))
+    setOpenVehicleCreate(false)
+  }
 
+  // Smart paste (оставляем полезную фичу, но без “сверкалок”)
   const onPasteSmart: React.ClipboardEventHandler<HTMLDivElement> = (e) => {
-    const txt = e.clipboardData.getData("text");
-    if (!txt) return;
-    const mileageMatch = txt.match(/(\d{1,7})\s?(км|km)/i)?.[1];
-    const complaintLike = txt.length > 6 && !/^[A-Z0-9-]{6,}$/i.test(txt) ? txt.slice(0, 300) : null;
-    if (mileageMatch) setMileage((v) => v || String(parseInt(mileageMatch, 10)));
-    if (complaintLike) setComplaints((v) => v || complaintLike);
-  };
+    const txt = e.clipboardData.getData("text")
+    if (!txt) return
+    const mileageMatch = txt.match(/(\d{1,7})\s?(км|km)/i)?.[1]
+    const complaintLike = txt.length > 6 && !/^[A-Z0-9-]{6,}$/i.test(txt) ? txt.slice(0, 300) : null
+    if (mileageMatch) setMileage((v) => v || String(parseInt(mileageMatch, 10)))
+    if (complaintLike) setComplaints((v) => v || complaintLike)
+  }
 
   const submit = React.useCallback(async () => {
-    setSubmitting(true);
-    setError(null);
+    setSubmitting(true)
+    setError(null)
     try {
       if (!customerId) {
-        setError("Выберите клиента");
-        setSubmitting(false);
-        return;
+        setError("Выберите клиента")
+        setSubmitting(false)
+        return
       }
       if (!vehicleId) {
-        setError("Выберите автомобиль");
-        setSubmitting(false);
-        return;
+        setError("Выберите автомобиль")
+        setSubmitting(false)
+        return
       }
+
       const payload: CreateOrderRequest = {
         customerId,
         vehicleId,
         mileage: mileage ? parseInt(mileage, 10) : undefined,
         description: description || undefined,
         customerComplaints: complaints || undefined,
-      };
-      const created = await ordersAPI.createOrder(payload);
-      onCreated?.(created);
-      onOpenChange(false);
-      setCustomerId(""); setCustomerLabel(""); setCustomerQuery(""); setCustomerResults([]);
-      setVehicleId(""); setVehicleLabel(""); setVehicleResults([]);
-      setMileage(""); setDescription(""); setComplaints("");
+      }
+
+      const created = await ordersAPI.createOrder(payload)
+      onCreated?.(created)
+      onOpenChange(false)
     } catch (e) {
       try {
-        const parsed = JSON.parse((e as Error).message) as { message?: string };
-        setError(parsed.message || "Ошибка создания заказа");
+        const parsed = JSON.parse((e as Error).message) as { message?: string }
+        setError(parsed.message || "Ошибка создания заказа")
       } catch {
-        setError("Ошибка создания заказа");
+        setError("Ошибка создания заказа")
       }
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
-  }, [customerId, vehicleId, mileage, description, complaints, onCreated, onOpenChange]);
+  }, [customerId, vehicleId, mileage, description, complaints, onCreated, onOpenChange])
 
+  // Горячая клавиша: Cmd/Ctrl + Enter
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (!open) return;
+      if (!open) return
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "enter") {
-        e.preventDefault();
-        void submit();
+        e.preventDefault()
+        void submit()
       }
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, submit]);
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [open, submit])
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent glow className="max-w-2xl" onPaste={onPasteSmart}>
+        <DialogContent className="max-w-2xl" onPaste={onPasteSmart}>
           <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-gradient-primary flex items-center justify-center text-white">
+            <div className="flex items-start gap-md min-w-0">
+              <div className="h-10 w-10 rounded-md bg-surface-2 border flex items-center justify-center text-muted-foreground shrink-0">
                 <ClipboardPaste className="h-5 w-5" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <DialogTitle>Новый заказ</DialogTitle>
-                <DialogDescription className="flex items-center gap-2">
-                  Быстрое создание: вставьте текст с жалобами/пробегом — мы распознаем.
+                <DialogDescription className="mt-xs">
+                  Можно вставить текст с жалобами/пробегом — система попробует распознать.
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-lg">
             {/* Клиент */}
             <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground mb-1">
-                Клиент <span className="text-rose-500">*</span>
-              </div>
               {customerId ? (
-                <div className="flex items-center justify-between rounded-md border border-border/60 p-2">
-                  <div className="inline-flex items-center gap-2 text-sm">
-                    <User className="h-4 w-4" />
-                    <span>{customerLabel}</span>
+                <div className="rounded-md border bg-card p-md flex items-center justify-between gap-md">
+                  <div className="min-w-0">
+                    <div className="text-xs text-muted-foreground">Клиент</div>
+                    <div className="flex items-center gap-sm text-sm font-medium min-w-0 mt-xs">
+                      <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="truncate">{customerValueLabel}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => { setCustomerId(""); setCustomerLabel(""); setVehicleId(""); setVehicleLabel(""); }}>
+
+                  <div className="flex items-center gap-sm shrink-0">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setCustomerId("")
+                        setCustomerValueLabel("")
+                        setCustomerQuery("")
+                        setCustomerResults([])
+                        setVehicleId("")
+                        setVehicleValueLabel("")
+                        setVehicleResults([])
+                      }}
+                    >
                       Сменить
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => setOpenCustomerCreate(true)}>
+                    <Button variant="ghost" size="sm" onClick={() => setOpenCustomerCreate(true)}>
                       Новый клиент
                     </Button>
                   </div>
@@ -229,31 +303,45 @@ export function OrderCreateDialog({ open, onOpenChange, onCreated, initialCustom
               ) : (
                 <div className="relative">
                   <Input
-                    placeholder="Начните вводить имя/компанию/email/телефон"
+                    label="Клиент"
+                    required
                     value={customerQuery}
                     onChange={(e) => setCustomerQuery(e.target.value)}
-                    className="pl-8"
+                    placeholder="Имя / компания / email / телефон"
+                    className="pl-[36px]"
+                    error={error === "Выберите клиента" ? error : undefined}
                   />
-                  <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <User className="absolute left-md top-[42px] h-4 w-4 text-muted-foreground" />
+
                   {customerResults.length > 0 && (
-                    <div className="absolute z-50 mt-1 w-full rounded-md border border-border/50 glass shadow-lg overflow-hidden">
+                    <div
+                      className={cn(
+                        "absolute z-50 mt-xs w-full rounded-md border bg-card shadow-card dark:shadow-dark-card overflow-hidden"
+                      )}
+                      role="listbox"
+                    >
                       {customerResults.map((c) => {
-                        const label = [c.firstName, c.lastName].filter(Boolean).join(" ") || c.companyName || c.email || c.id;
+                        const label = customerLabel(c)
                         return (
                           <button
                             key={c.id}
                             type="button"
-                            onClick={() => { setCustomerId(c.id); setCustomerLabel(label); setCustomerResults([]); }}
-                            className="w-full text-left px-3 py-2 hover:bg-accent/40 text-sm"
+                            onClick={() => {
+                              setCustomerId(c.id)
+                              setCustomerValueLabel(label)
+                              setCustomerResults([])
+                            }}
+                            className="w-full text-left px-md py-sm hover:bg-surface-2 text-sm"
                           >
                             {label}
                           </button>
-                        );
+                        )
                       })}
-                      <div className="border-t border-border/40">
+
+                      <div className="border-t border-border/50">
                         <button
                           type="button"
-                          className="w-full text-left px-3 py-2 text-primary hover:bg-primary/10"
+                          className="w-full text-left px-md py-sm text-sm text-primary hover:bg-primary/10"
                           onClick={() => setOpenCustomerCreate(true)}
                         >
                           + Создать нового клиента
@@ -267,81 +355,101 @@ export function OrderCreateDialog({ open, onOpenChange, onCreated, initialCustom
 
             {/* Автомобиль */}
             <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground mb-1">
-                Автомобиль <span className="text-rose-500">*</span>
-              </div>
-              {customerId ? (
-                vehicleId ? (
-                  <div className="flex items-center justify-between rounded-md border border-border/60 p-2">
-                    <div className="inline-flex items-center gap-2 text-sm">
-                      <Car className="h-4 w-4" />
-                      <span>{vehicleLabel}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => { setVehicleId(""); setVehicleLabel(""); }}>
-                        Сменить
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => setOpenVehicleCreate(true)}>
-                        Новое ТС
-                      </Button>
+              {!customerId ? (
+                <div className="text-sm text-muted-foreground">
+                  Сначала выберите клиента
+                </div>
+              ) : vehicleId ? (
+                <div className="rounded-md border bg-card p-md flex items-center justify-between gap-md">
+                  <div className="min-w-0">
+                    <div className="text-xs text-muted-foreground">Автомобиль</div>
+                    <div className="flex items-center gap-sm text-sm font-medium min-w-0 mt-xs">
+                      <Car className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="truncate">{vehicleValueLabel}</span>
                     </div>
                   </div>
-                ) : (
-                  <div className="rounded-md border border-border/60">
-                    {vehicleResults.length === 0 ? (
-                      <div className="p-3 text-sm text-muted-foreground">
-                        У клиента пока нет автомобилей. Создайте новое ТС.
-                        <div className="mt-2">
-                          <Button variant="outline" size="sm" onClick={() => setOpenVehicleCreate(true)}>
-                            <Plus className="w-4 h-4 mr-1" /> Новое ТС
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="max-h-56 overflow-auto">
-                        {vehicleResults.map((v) => {
-                          const label = `${v.model?.brand?.name ? v.model.brand.name + " " : ""}${v.model?.name || ""} ${v.licensePlate || v.vin || ""}`.trim();
-                          return (
-                            <button
-                              key={v.id}
-                              type="button"
-                              className="w-full text-left px-3 py-2 hover:bg-accent/40 text-sm flex items-center gap-2"
-                              onClick={() => { setVehicleId(v.id); setVehicleLabel(label); }}
-                            >
-                              <Car className="w-4 h-4 text-muted-foreground" />
-                              <span className="font-medium">{label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+
+                  <div className="flex items-center gap-sm shrink-0">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setVehicleId("")
+                        setVehicleValueLabel("")
+                      }}
+                    >
+                      Сменить
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setOpenVehicleCreate(true)}>
+                      Новое ТС
+                    </Button>
                   </div>
-                )
+                </div>
               ) : (
-                <div className="text-xs text-muted-foreground">Сначала выберите клиента</div>
+                <div className="rounded-md border bg-card overflow-hidden">
+                  <div className="px-md py-sm border-b border-border/50 flex items-center justify-between gap-md">
+                    <div className="min-w-0">
+                      <div className="text-xs text-muted-foreground">Автомобиль</div>
+                      <div className="text-sm font-medium mt-xs">Выберите ТС клиента</div>
+                    </div>
+                    <Button variant="secondary" size="sm" onClick={() => setOpenVehicleCreate(true)}>
+                      <Plus className="w-4 h-4 mr-xs" />
+                      Новое ТС
+                    </Button>
+                  </div>
+
+                  {vehicleResults.length === 0 ? (
+                    <div className="p-md text-sm text-muted-foreground">
+                      У клиента пока нет автомобилей.
+                    </div>
+                  ) : (
+                    <div className="max-h-56 overflow-auto divide-y divide-border/50">
+                      {vehicleResults.map((v) => {
+                        const label = vehicleLabel(v)
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            className="w-full text-left px-md py-sm hover:bg-surface-2 text-sm flex items-center gap-sm"
+                            onClick={() => {
+                              setVehicleId(v.id)
+                              setVehicleValueLabel(label)
+                            }}
+                          >
+                            <Car className="w-4 h-4 text-muted-foreground shrink-0" />
+                            <span className="font-medium truncate">{label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
             {/* Доп. поля */}
             <div>
-              <div className="text-xs text-muted-foreground mb-1">Пробег (км)</div>
               <Input
+                label="Пробег (км)"
                 placeholder="Например, 50000"
                 value={mileage}
+                inputMode="numeric"
                 onChange={(e) => setMileage(e.target.value.replace(/[^\d]/g, ""))}
               />
             </div>
+
             <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground mb-1">Жалобы клиента</div>
               <Input
+                label="Жалобы клиента"
                 placeholder="Опишите жалобы клиента"
                 value={complaints}
                 onChange={(e) => setComplaints(e.target.value)}
               />
             </div>
+
             <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground mb-1">Описание заказа</div>
               <Input
+                label="Описание заказа"
                 placeholder="Краткое описание работ"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -349,19 +457,38 @@ export function OrderCreateDialog({ open, onOpenChange, onCreated, initialCustom
             </div>
           </div>
 
-          {error && <div className="mt-2 text-sm text-destructive">{error}</div>}
-
-          <DialogFooter className="mt-4">
-            <div className="hidden sm:flex items-center text-xs text-muted-foreground mr-auto">
-              <span className="mr-2">Горячие клавиши:</span>
-              <Kbd className="ml-2">⌘</Kbd>+<Kbd>Enter</Kbd>
-              <span className="ml-1">— Создать</span>
+          {error && error !== "Выберите клиента" && (
+            <div className="mt-sm rounded-md border border-status-error/20 bg-status-error/10 text-status-error px-md py-sm text-sm inline-flex items-center gap-sm">
+              <AlertTriangle className="w-4 h-4" />
+              {error}
             </div>
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+          )}
+
+          <DialogFooter className="mt-lg">
+            <div className="hidden sm:flex items-center text-xs text-muted-foreground mr-auto">
+              <span>Горячая клавиша:</span>
+              <span className="ml-sm">
+                <Kbd>⌘</Kbd>+<Kbd>Enter</Kbd>
+              </span>
+            </div>
+
+            <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={submitting}>
               Отмена
             </Button>
-            <Button onClick={submit} disabled={submitting || !customerId || !vehicleId}>
-              {submitting ? "Создание..." : (<><Save className="w-4 h-4 mr-2" /> Создать</>)}
+
+            <Button
+              variant="primary"
+              onClick={submit}
+              disabled={submitting || !customerId || !vehicleId}
+            >
+              {submitting ? (
+                "Создание…"
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-xs" />
+                  Создать
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -376,7 +503,8 @@ export function OrderCreateDialog({ open, onOpenChange, onCreated, initialCustom
         open={openVehicleCreate}
         onOpenChange={setOpenVehicleCreate}
         onCreated={afterCreateVehicle}
+        initialCustomerId={customerId || undefined}
       />
     </>
-  );
+  )
 }

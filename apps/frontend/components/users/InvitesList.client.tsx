@@ -1,218 +1,249 @@
 // path: apps/frontend/components/users/InvitesList.client.tsx
-'use client';
+"use client"
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Mail, RefreshCw, Trash2, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import * as React from "react"
+import { Mail, RefreshCw, Trash2, Clock, CheckCircle2, XCircle, AlertCircle, Copy } from "lucide-react"
+import { toast } from "sonner"
 
-import { listInvites, resendInvite, revokeInvite, listAssignableRoles } from '@/lib/api/users';
-import type { UserInvite } from '@/lib/types/user-invites';
-import type { Role } from '@/lib/types/users';
+import type { UserInvite } from "@/lib/types/user-invites"
+import type { Role } from "@/lib/types/users"
+import { resendInvite, revokeInvite } from "@/lib/api/users"
 
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { toast } from 'sonner';
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Card } from "@/components/ui/card"
+import { PageContentCard } from "@/components/app/PageContentCard"
 
-const statusConfig: Record<
-  UserInvite['status'],
-  { label: string; variant: 'default' | 'secondary' | 'outline'; icon: any; color: string }
-> = {
-  pending: { label: 'Ожидает', variant: 'secondary', icon: Clock, color: 'text-amber-500' },
-  accepted: { label: 'Принято', variant: 'default', icon: CheckCircle, color: 'text-green-500' },
-  revoked: { label: 'Отозвано', variant: 'outline', icon: XCircle, color: 'text-gray-500' },
-  expired: { label: 'Истекло', variant: 'outline', icon: AlertCircle, color: 'text-red-500' },
-};
+type Props = {
+  invites: UserInvite[]
+  roles: Role[]
+  loading: boolean
+  onInvite?: () => void
+  onChanged?: () => void
+}
 
-export default function InvitesList() {
-  const [invites, setInvites] = useState<UserInvite[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+function mapInviteStatus(status: UserInvite["status"]): {
+  label: string
+  variant: "pending" | "active" | "draft" | "error"
+  icon: React.ComponentType<{ className?: string }>
+} {
+  switch (status) {
+    case "pending":
+      return { label: "Ожидает", variant: "pending", icon: Clock }
+    case "accepted":
+      return { label: "Принято", variant: "active", icon: CheckCircle2 }
+    case "revoked":
+      return { label: "Отозвано", variant: "draft", icon: XCircle }
+    case "expired":
+      return { label: "Истекло", variant: "error", icon: AlertCircle }
+    default:
+      return { label: "—", variant: "draft", icon: AlertCircle }
+  }
+}
 
-  const roleById = useMemo(() => {
-    const map = new Map<string, string>();
-    roles.forEach((r) => map.set(r.id, r.name));
-    return map;
-  }, [roles]);
+const INVITES_CACHE_KEY = "drivecare_invite_urls_v1"
+type InviteUrlCacheItem = { id: string; inviteUrl: string; createdAt: string }
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [data, rolesList] = await Promise.all([
-        listInvites().catch(() => []),
-        listAssignableRoles().catch(() => []),
-      ]);
-      setInvites(data || []);
-      setRoles(rolesList || []);
-    } finally {
-      setLoading(false);
+function readInviteUrlCache(): Map<string, string> {
+  if (typeof window === "undefined") return new Map()
+  try {
+    const raw = window.localStorage.getItem(INVITES_CACHE_KEY)
+    const parsed = raw ? (JSON.parse(raw) as InviteUrlCacheItem[]) : []
+    const map = new Map<string, string>()
+    ;(Array.isArray(parsed) ? parsed : []).forEach((x) => {
+      if (x?.id && x?.inviteUrl) map.set(x.id, x.inviteUrl)
+    })
+    return map
+  } catch {
+    return new Map()
+  }
+}
+
+function upsertInviteUrlCache(id: string, inviteUrl: string) {
+  if (typeof window === "undefined") return
+  try {
+    const raw = window.localStorage.getItem(INVITES_CACHE_KEY)
+    const prev = raw ? (JSON.parse(raw) as InviteUrlCacheItem[]) : []
+    const next = [{ id, inviteUrl, createdAt: new Date().toISOString() }, ...(Array.isArray(prev) ? prev : []).filter((x) => x.id !== id)].slice(
+      0,
+      50
+    )
+    window.localStorage.setItem(INVITES_CACHE_KEY, JSON.stringify(next))
+  } catch {
+    // ignore
+  }
+}
+
+export default function InvitesList({ invites, roles, loading, onInvite, onChanged }: Props) {
+  const [actionLoading, setActionLoading] = React.useState<string | null>(null)
+  const [urlCacheTick, setUrlCacheTick] = React.useState(0)
+
+  const urlCache = React.useMemo(() => {
+    // tick нужен, чтобы после upsert перечитать cache и отрисовать кнопку “копировать” корректно
+    void urlCacheTick
+    return readInviteUrlCache()
+  }, [urlCacheTick])
+
+  const roleById = React.useMemo(() => {
+    const map = new Map<string, string>()
+    roles.forEach((r) => map.set(r.id, r.name))
+    return map
+  }, [roles])
+
+  async function copyInviteLink(inviteId: string) {
+    // 1) пробуем локальный кэш (без ресенда)
+    const cached = urlCache.get(inviteId)
+    if (cached) {
+      await navigator.clipboard?.writeText(cached).catch(() => {})
+      toast.success("Ссылка приглашения скопирована")
+      return
     }
-  }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  async function handleResend(id: string) {
-    setActionLoading(id);
+    // 2) fallback: просим бэк выдать ссылку (через resend)
+    setActionLoading(inviteId)
     try {
-      const res = await resendInvite(id);
+      const res = await resendInvite(inviteId)
       if (res?.inviteUrl) {
-        await navigator.clipboard?.writeText(res.inviteUrl).catch(() => {});
-        toast.success('Ссылка скопирована в буфер обмена');
+        upsertInviteUrlCache(inviteId, res.inviteUrl)
+        setUrlCacheTick((x) => x + 1)
+
+        await navigator.clipboard?.writeText(res.inviteUrl).catch(() => {})
+        toast.success("Ссылка приглашения получена и скопирована (приглашение отправлено повторно)")
+      } else {
+        toast.error("Не удалось получить ссылку приглашения")
       }
-      toast.success('Приглашение отправлено повторно');
-      await load();
+      onChanged?.()
     } catch {
-      toast.error('Не удалось отправить приглашение');
+      toast.error("Не удалось получить ссылку приглашения")
     } finally {
-      setActionLoading(null);
+      setActionLoading(null)
     }
   }
 
   async function handleRevoke(id: string) {
-    setActionLoading(id);
+    setActionLoading(id)
     try {
-      await revokeInvite(id);
-      toast.success('Приглашение отозвано');
-      await load();
+      await revokeInvite(id)
+      toast.success("Приглашение отозвано")
+      onChanged?.()
     } catch {
-      toast.error('Не удалось отозвать приглашение');
+      toast.error("Не удалось отозвать приглашение")
     } finally {
-      setActionLoading(null);
+      setActionLoading(null)
     }
   }
 
-  const pendingInvites = invites.filter((i) => i.status === 'pending');
-  const otherInvites = invites.filter((i) => i.status !== 'pending');
-
-  if (loading) {
-    return (
-      <Card className="p-6 rounded-3xl border-border/30 glass">
-        <div className="flex items-center justify-center">
-          <div className="flex items-center gap-3">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-            <span className="text-sm text-muted-foreground">Загрузка приглашений...</span>
-          </div>
-        </div>
-      </Card>
-    );
-  }
-
-  if (invites.length === 0) {
-    return (
-      <Card className="p-8 rounded-3xl border-border/30 glass text-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/50">
-            <Mail className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <div>
-            <h4 className="font-semibold">Нет активных приглашений</h4>
-            <p className="text-sm text-muted-foreground">Отправленные приглашения появятся здесь</p>
-          </div>
-        </div>
-      </Card>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      {/* Ожидающие приглашения */}
-      {pendingInvites.length > 0 && (
-        <Card className="overflow-hidden rounded-3xl border-border/30 glass surface-glow">
-          <div className="border-b border-border/30 bg-muted/30 px-6 py-3">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-amber-500" />
-              <h4 className="text-sm font-medium">Ожидают принятия ({pendingInvites.length})</h4>
-            </div>
-          </div>
-          <div className="divide-y divide-border/30">
-            {pendingInvites.map((inv) => {
-              const statusInfo = statusConfig[inv.status];
-              const StatusIcon = statusInfo.icon;
-              const isLoading = actionLoading === inv.id;
+    <Card>
+      <div className="p-xl pb-md flex items-center justify-between gap-md">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-foreground">Приглашения</div>
+          <div className="text-sm text-muted-foreground mt-xs">Ожидающие и история отправленных приглашений</div>
+        </div>
+
+        {onInvite && (
+          <Button variant="secondary" size="sm" onClick={onInvite}>
+            <Mail className="w-4 h-4" />
+            Пригласить
+          </Button>
+        )}
+      </div>
+
+      <div className="px-xl pb-xl pt-0">
+        <PageContentCard
+          loading={loading}
+          empty={invites.length === 0}
+          emptyState={{
+            icon: Mail,
+            title: "Приглашений нет",
+            description: "Отправленные приглашения сотрудников появятся здесь.",
+          }}
+          loadingRows={4}
+        >
+          <div className="divide-y divide-border/50">
+            {invites.map((inv) => {
+              const st = mapInviteStatus(inv.status)
+              const StatusIcon = st.icon
+              const isLoading = actionLoading === inv.id
+              const canCopy = inv.status === "pending"
 
               return (
-                <div key={inv.id} className="px-6 py-4 transition-colors hover:bg-muted/20 group">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20">
-                          <Mail className="h-5 w-5 text-amber-500" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium">{inv.email}</p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            Роль: {roleById.get(inv.roleId) || '—'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          Истекает: {new Date(inv.expiresAt).toLocaleDateString()}
-                        </div>
-                      </div>
+                <div key={inv.id} className="p-md flex items-center justify-between gap-lg min-w-0">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-sm min-w-0">
+                      <StatusIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm font-medium truncate">{inv.email}</span>
+                      <Badge variant={st.variant}>{st.label}</Badge>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="text-xs text-muted-foreground mt-xs truncate">
+                      Роль: {roleById.get(inv.roleId) || "—"} · Истекает:{" "}
+                      {new Date(inv.expiresAt).toLocaleDateString("ru-RU")}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-sm shrink-0">
+                    {canCopy && (
                       <Button
-                        variant="secondary"
-                        size="sm"
-                        className="rounded-2xl"
-                        onClick={() => handleResend(inv.id)}
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => copyInviteLink(inv.id)}
                         disabled={isLoading}
+                        aria-label="Скопировать ссылку приглашения"
+                        title={urlCache.get(inv.id) ? "Скопировать ссылку" : "Получить и скопировать ссылку"}
                       >
                         {isLoading ? (
                           <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                         ) : (
-                          <RefreshCw className="h-4 w-4" />
+                          <Copy className="h-4 w-4" />
                         )}
                       </Button>
+                    )}
+
+                    {inv.status === "pending" && (
                       <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-2xl text-destructive hover:bg-destructive/10"
-                        onClick={() => handleRevoke(inv.id)}
+                        variant="secondary"
+                        size="icon"
+                        onClick={async () => {
+                          // "повторно отправить" отдельно от копирования
+                          setActionLoading(inv.id)
+                          try {
+                            const res = await resendInvite(inv.id)
+                            if (res?.inviteUrl) upsertInviteUrlCache(inv.id, res.inviteUrl)
+                            setUrlCacheTick((x) => x + 1)
+                            toast.success("Приглашение отправлено повторно")
+                            onChanged?.()
+                          } catch {
+                            toast.error("Не удалось отправить приглашение")
+                          } finally {
+                            setActionLoading(null)
+                          }
+                        }}
                         disabled={isLoading}
+                        aria-label="Отправить повторно"
+                        title="Отправить повторно"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <RefreshCw className="h-4 w-4" />
                       </Button>
-                    </div>
+                    )}
+
+                    <Button
+                      variant="danger"
+                      size="icon"
+                      onClick={() => handleRevoke(inv.id)}
+                      disabled={isLoading}
+                      aria-label="Отозвать приглашение"
+                      title="Отозвать приглашение"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
-              );
+              )
             })}
           </div>
-        </Card>
-      )}
-
-      {/* История приглашений */}
-      {otherInvites.length > 0 && (
-        <Card className="overflow-hidden rounded-3xl border-border/30 glass">
-          <div className="border-b border-border/30 bg-muted/30 px-6 py-3">
-            <h4 className="text-sm font-medium text-muted-foreground">История ({otherInvites.length})</h4>
-          </div>
-          <div className="divide-y divide-border/30">
-            {otherInvites.map((inv) => {
-              const statusInfo = statusConfig[inv.status];
-              const StatusIcon = statusInfo.icon;
-
-              return (
-                <div key={inv.id} className="px-6 py-3 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <StatusIcon className={`h-4 w-4 flex-shrink-0 ${statusInfo.color}`} />
-                    <p className="truncate text-sm">{inv.email}</p>
-                  </div>
-                  <Badge variant={statusInfo.variant} className="rounded-xl flex-shrink-0">
-                    {statusInfo.label}
-                  </Badge>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-    </div>
-  );
+        </PageContentCard>
+      </div>
+    </Card>
+  )
 }

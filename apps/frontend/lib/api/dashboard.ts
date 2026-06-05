@@ -15,12 +15,13 @@ interface DashboardStats {
 interface DashboardData {
   stats: DashboardStats;
   recentOrders: Array<{
-    id: string;
-    customerName: string;
-    vehicleInfo: string;
-    status: string;
-    amount: number;
-    createdAt: string;
+    id: string
+    orderNumber?: string
+    customerName: string
+    vehicleInfo: string
+    status: string
+    amount: number
+    createdAt: string
   }>;
   recentActivities: Array<{
     id: string;
@@ -40,13 +41,35 @@ interface DashboardData {
 
 type Paginated<T> = { items: T[]; total: number; page: number; limit: number; totalPages: number };
 type OrderItem = {
-  id: string;
-  status: string;
-  createdAt?: string;
-  totalAmount?: number;
-  customer?: { id: string; name?: string; fullName?: string };
-  vehicle?: { id: string; brand?: string; model?: string; plateNumber?: string };
-};
+  id: string
+  orderNumber?: string
+  status: string
+  createdAt?: string
+
+  totalAmount?: number
+  finalAmount?: number
+
+  customer?: {
+    id: string
+    firstName?: string
+    lastName?: string
+    companyName?: string
+    fullName?: string
+    name?: string
+    email?: string
+    phone?: string
+  }
+
+  vehicle?: {
+    id: string
+    licensePlate?: string
+    plateNumber?: string
+    model?: {
+      name?: string
+      brand?: { name?: string }
+    }
+  }
+}
 
 type BalanceByCurrency = Record<string, { received: number; refunded: number; net: number; pending: number }>;
 
@@ -99,6 +122,29 @@ type LowStockApi =
 function safeNum(v: unknown, fallback = 0): number {
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function safeText(v: unknown): string {
+  if (v === null || v === undefined) return ""
+  if (typeof v === "string") return v
+  if (typeof v === "number") return String(v)
+
+  if (typeof v === "object") {
+    const obj = v as any
+    const candidate =
+      obj.name ?? obj.fullName ?? obj.title ?? obj.label ?? obj.value ?? obj.code ?? obj.id
+    if (typeof candidate === "string" || typeof candidate === "number") return String(candidate)
+  }
+
+  return ""
+}
+
+function joinText(parts: unknown[], sep: string): string {
+  return parts
+    .map(safeText)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(sep)
 }
 
 class DashboardAPI {
@@ -159,20 +205,38 @@ class DashboardAPI {
     };
   }
 
-  async getRecentOrders(): Promise<DashboardData['recentOrders']> {
+  async getRecentOrders(): Promise<DashboardData["recentOrders"]> {
     try {
-      const data = await apiRequest<Paginated<OrderItem>>('/orders?limit=5');
-      return (data.items || []).map((o) => ({
-        id: o.id,
-        customerName: o.customer?.name || o.customer?.fullName || 'Клиент',
-        vehicleInfo:
-          [o.vehicle?.brand, o.vehicle?.model, o.vehicle?.plateNumber].filter(Boolean).join(' • ') || 'ТС',
-        status: o.status,
-        amount: safeNum(o.totalAmount),
-        createdAt: o.createdAt || '',
-      }));
+      const data = await apiRequest<Paginated<OrderItem>>("/orders?limit=5")
+
+      return (data.items || []).map((o) => {
+        const customerName =
+          safeText(o.customer?.companyName) ||
+          joinText([o.customer?.firstName, o.customer?.lastName], " ") ||
+          safeText(o.customer?.fullName) ||
+          safeText(o.customer?.name) ||
+          "Клиент"
+
+        const brandName = safeText(o.vehicle?.model?.brand?.name)
+        const modelName = safeText(o.vehicle?.model?.name)
+        const plate = safeText(o.vehicle?.licensePlate ?? o.vehicle?.plateNumber)
+
+        const vehicleInfo = joinText([brandName, modelName, plate], " • ") || "ТС"
+
+        const amount = safeNum(o.finalAmount ?? o.totalAmount ?? 0)
+
+        return {
+          id: o.id,
+          orderNumber: safeText(o.orderNumber) || undefined,
+          customerName,
+          vehicleInfo,
+          status: safeText(o.status) || "draft",
+          amount,
+          createdAt: (o.createdAt as any) || "",
+        }
+      })
     } catch {
-      return [];
+      return []
     }
   }
 

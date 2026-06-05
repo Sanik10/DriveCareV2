@@ -2,10 +2,13 @@
 import { apiRequest, generateIdempotencyKey } from '@/lib/api/core';
 import type {
   PaginatedServicesResponse,
+  BackendPaginatedServicesResponse,
   ServicesQuery,
   ServiceCatalogueItem,
   CreateServiceRequest,
   UpdateServiceRequest,
+  ServiceCategory,
+  CreateCategoryRequest,
 } from '@/lib/types/services';
 
 function buildQuery(params: Record<string, unknown>) {
@@ -19,67 +22,64 @@ function buildQuery(params: Record<string, unknown>) {
 }
 
 class ServicesAPI {
+  // --- УСЛУГИ ---
   async search(query: ServicesQuery = {}): Promise<PaginatedServicesResponse> {
     const qs = buildQuery(query as Record<string, unknown>);
-    const raw = await apiRequest<unknown>(`/services${qs}`, { method: 'GET' });
+    const raw = await apiRequest<BackendPaginatedServicesResponse | ServiceCatalogueItem[]>(`/services${qs}`, { method: 'GET' });
 
-    // { items: ServiceCatalogueItem[], ... }
-    if (
-      typeof raw === 'object' &&
-      raw !== null &&
-      'items' in raw &&
-      Array.isArray((raw as { items: unknown[] }).items)
-    ) {
-      return raw as PaginatedServicesResponse;
+    if (typeof raw === 'object' && raw !== null && 'data' in raw && 'pagination' in raw) {
+      return {
+        items: raw.data,
+        total: raw.pagination.total,
+        page: raw.pagination.page,
+        limit: raw.pagination.limit,
+        totalPages: raw.pagination.totalPages,
+      };
     }
-
-    // Array<ServiceCatalogueItem>
     if (Array.isArray(raw)) {
       const items = raw as ServiceCatalogueItem[];
       return { items, total: items.length, page: 1, limit: items.length, totalPages: 1 };
     }
-
-    // Flexible normalization: { data/results, total/page/limit/totalPages }
-    const obj = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
-    const items: ServiceCatalogueItem[] = Array.isArray(obj.results)
-      ? (obj.results as ServiceCatalogueItem[])
-      : Array.isArray(obj.data)
-      ? (obj.data as ServiceCatalogueItem[])
-      : [];
-    const total = typeof obj.total === 'number' ? obj.total : items.length;
-    const page = typeof obj.page === 'number' ? obj.page : 1;
-    const limit = typeof obj.limit === 'number' ? obj.limit : items.length;
-    const totalPages =
-      typeof obj.totalPages === 'number' ? obj.totalPages : Math.max(1, Math.ceil((total || 0) / Math.max(1, limit)));
-
-    return { items, total, page, limit, totalPages };
-  }
-
-  async get(id: string): Promise<ServiceCatalogueItem> {
-    return apiRequest<ServiceCatalogueItem>(`/services/${id}`, { method: 'GET' });
+    return { items: [], total: 0, page: 1, limit: 20, totalPages: 1 };
   }
 
   async create(payload: CreateServiceRequest): Promise<ServiceCatalogueItem> {
-    return apiRequest<ServiceCatalogueItem>('/services', {
-      method: 'POST',
-      json: payload,
-      idempotencyKey: generateIdempotencyKey(),
-    });
+    return apiRequest<ServiceCatalogueItem>('/services', { method: 'POST', json: payload, idempotencyKey: generateIdempotencyKey() });
   }
 
   async update(id: string, payload: UpdateServiceRequest): Promise<ServiceCatalogueItem> {
-    return apiRequest<ServiceCatalogueItem>(`/services/${id}`, {
-      method: 'PATCH',
-      json: payload,
-      idempotencyKey: generateIdempotencyKey(),
-    });
+    return apiRequest<ServiceCatalogueItem>(`/services/${id}`, { method: 'PATCH', json: payload, idempotencyKey: generateIdempotencyKey() });
   }
 
   async remove(id: string): Promise<void> {
-    await apiRequest<void>(`/services/${id}`, {
-      method: 'DELETE',
-      idempotencyKey: generateIdempotencyKey(),
-    });
+    await apiRequest<void>(`/services/${id}`, { method: 'DELETE', idempotencyKey: generateIdempotencyKey() });
+  }
+
+  async toggleStatus(id: string): Promise<ServiceCatalogueItem> {
+    return apiRequest<ServiceCatalogueItem>(`/services/${id}/toggle-status`, { method: 'POST', idempotencyKey: generateIdempotencyKey() });
+  }
+
+  // --- КАТЕГОРИИ ---
+  async getCategories(): Promise<ServiceCategory[]> {
+    try {
+      const res = await apiRequest<any>('/services/categories/with-services-count', { method: 'GET' });
+      return Array.isArray(res) ? res : (res.data || res.items || []);
+    } catch (e) {
+      console.error('Не удалось загрузить категории', e);
+      return [];
+    }
+  }
+
+  async createCategory(payload: CreateCategoryRequest): Promise<ServiceCategory> {
+    return apiRequest<ServiceCategory>('/services/categories', { method: 'POST', json: payload, idempotencyKey: generateIdempotencyKey() });
+  }
+
+  async updateCategory(id: string, payload: Partial<CreateCategoryRequest>): Promise<ServiceCategory> {
+    return apiRequest<ServiceCategory>(`/services/categories/${id}`, { method: 'PATCH', json: payload, idempotencyKey: generateIdempotencyKey() });
+  }
+
+  async removeCategory(id: string): Promise<void> {
+    await apiRequest<void>(`/services/categories/${id}`, { method: 'DELETE', idempotencyKey: generateIdempotencyKey() });
   }
 }
 

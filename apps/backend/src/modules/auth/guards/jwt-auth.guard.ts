@@ -1,49 +1,48 @@
 // path: apps/backend/src/modules/auth/guards/jwt-auth.guard.ts
-import { Injectable, ExecutionContext, UnauthorizedException } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { SessionService } from '../services/session.service';
 import { SecurityService } from '../services/security.service';
 
 @Injectable()
-export class JwtAuthGuard extends AuthGuard('jwt') {
+export class JwtAuthGuard implements CanActivate {
   constructor(
     private sessionService: SessionService,
-    private securityService: SecurityService
-  ) {
-    super();
-  }
+    private securityService: SecurityService,
+  ) {}
 
-  // ✅ ИСПРАВЛЕНО #8: дополнительные проверки безопасности
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const result = await super.canActivate(context);
-    if (!result) return false;
-
     const request = context.switchToHttp().getRequest();
-    const user = request.user;
-
-    // ✅ ДОБАВЛЕНО: дополнительная проверка сессии
-    if (user.sessionId) {
-      const isSessionActive = await this.sessionService.isSessionActive(user.sessionId);
-      if (!isSessionActive) {
-        throw new UnauthorizedException('Session expired');
-      }
+    
+    const sid = request.cookies?.sid || this.extractTokenFromHeader(request);
+    if (!sid) {
+      throw new UnauthorizedException('Authentication required');
     }
 
-    // ✅ ДОБАВЛЕНО: проверка подозрительной активности
+    const payload = await this.sessionService.getSessionPayload(sid);
+    if (!payload) {
+      throw new UnauthorizedException('Session expired or invalid');
+    }
+
     const ipAddress = request.ip || '';
-    const isBlocked = await this.securityService.checkFailedLoginAttempts(user.email, ipAddress);
+    const isBlocked = await this.securityService.checkFailedLoginAttempts(payload.email, ipAddress);
     if (isBlocked) {
       throw new UnauthorizedException('Access temporarily blocked');
     }
 
+    request.user = {
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+      companyId: payload.companyId,
+      sessionId: sid,
+      deviceId: payload.deviceId,
+    };
+    
     return true;
   }
 
-  // ✅ ДОБАВЛЕНО: обработка ошибок
-  handleRequest(err: any, user: any, info: any) {
-    if (err || !user) {
-      throw err || new UnauthorizedException('Invalid token');
-    }
-    return user;
+  private extractTokenFromHeader(request: any): string | undefined {
+    const [type, token] = request.headers.authorization?.split(' ') ?? [];
+    return type === 'Bearer' ? token : undefined;
   }
 }

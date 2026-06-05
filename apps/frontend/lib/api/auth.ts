@@ -1,5 +1,5 @@
 // path: apps/frontend/lib/api/auth.ts
-import { apiRequest, setAccessToken, clearAccessToken } from '@/lib/api/core';
+import { apiRequest, notifyAuthChange } from '@/lib/api/core';
 import type {
   LoginRequest,
   LoginResponse,
@@ -22,7 +22,6 @@ interface SessionInfo {
   isActive: boolean;
 }
 
-// Краткоживущий кеш запросов к /auth/me, чтобы не плодить параллельные вызовы
 const requestCache = new Map<string, Promise<unknown>>();
 const CACHE_TIME_MS = 1000;
 
@@ -34,64 +33,48 @@ class AuthAPI {
   private saveDeviceId(deviceId?: string | null) {
     try {
       if (!deviceId) return;
-      // Храним deviceId только в sessionStorage (эпhemeral), чтобы помечать текущее устройство в UI
       if (typeof window !== 'undefined') {
         window.sessionStorage.setItem('deviceId', deviceId);
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   async login(data: LoginRequest): Promise<LoginResponse> {
     const res = await this.request<LoginResponse>('/auth/login', {
       method: 'POST',
       json: data,
-      requireAuth: false,
     });
-    // Сохраняем accessToken в in-memory (без localStorage)
-    setAccessToken(res.accessToken ?? null, { source: 'login' });
-    // Сохраняем deviceId эпемерно
     this.saveDeviceId(res.deviceId);
+    notifyAuthChange('login');
     return res;
   }
 
   async registerCompany(data: RegisterCompanyRequest): Promise<RegisterCompanyResponse> {
-    // Backend возвращает { company, owner, message } — без токенов
-    const res = await this.request<RegisterCompanyResponse>('/auth/register-company', {
+    return this.request<RegisterCompanyResponse>('/auth/register-company', {
       method: 'POST',
       json: data,
-      requireAuth: false,
     });
+  }
+
+  async registerInvite(data: RegisterInviteRequest): Promise<{ message: string }> {
+    const res = await this.request<any>('/auth/register-invite', {
+      method: 'POST',
+      json: data,
+    });
+    notifyAuthChange('login');
     return res;
   }
 
-  // В текущем бэкенде endpoint отключён (404). Оставляем метод для будущей поддержки.
-  async registerInvite(data: RegisterInviteRequest): Promise<{ message: string }> {
-    return this.request<{ message: string }>('/auth/register-invite', {
-      method: 'POST',
-      json: data,
-      requireAuth: false,
-    });
-  }
-
   async refreshToken(): Promise<RefreshTokenResponse> {
-    // Обычно refresh инициируется автоматически в apiRequest при 401,
-    // но метод оставляем для явных вызовов в редких случаях.
-    return this.request<RefreshTokenResponse>('/auth/refresh', { method: 'POST', requireAuth: false });
+    return this.request<RefreshTokenResponse>('/auth/refresh', { method: 'POST' });
   }
 
   async logout(): Promise<LogoutResponse> {
     const res = await this.request<LogoutResponse>('/auth/logout', { method: 'POST' });
-    // Гарантированно очищаем in-memory токен
-    clearAccessToken();
+    notifyAuthChange('logout');
     try {
-      if (typeof window !== 'undefined') {
-        window.sessionStorage.removeItem('deviceId');
-      }
-    } catch {
-      // ignore
-    }
+      if (typeof window !== 'undefined') window.sessionStorage.removeItem('deviceId');
+    } catch {}
     return res;
   }
 
@@ -104,22 +87,16 @@ class AuthAPI {
 
   async logoutAllDevices(): Promise<void> {
     await this.request<void>('/auth/logout-all-devices', { method: 'POST' });
-    clearAccessToken();
+    notifyAuthChange('logout');
     try {
-      if (typeof window !== 'undefined') {
-        window.sessionStorage.removeItem('deviceId');
-      }
-    } catch {
-      // ignore
-    }
+      if (typeof window !== 'undefined') window.sessionStorage.removeItem('deviceId');
+    } catch {}
   }
 
   async getProfile(): Promise<UserInfo> {
     const cacheKey = 'GET:/auth/me';
     const cached = requestCache.get(cacheKey);
-    if (cached) {
-      return (await cached) as UserInfo;
-    }
+    if (cached) return (await cached) as UserInfo;
 
     const p = (async () => {
       const resp = await this.request<{ user: UserInfo }>('/auth/me', { method: 'GET' });

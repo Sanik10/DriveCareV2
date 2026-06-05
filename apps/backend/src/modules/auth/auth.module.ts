@@ -1,5 +1,5 @@
 // path: apps/backend/src/modules/auth/auth.module.ts
-import { Module, Logger, forwardRef } from '@nestjs/common';
+import { Module, Logger, forwardRef, Global } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
@@ -11,7 +11,6 @@ import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 
 import { LocalStrategy } from './strategies/local.strategy';
-import { JwtStrategy } from './strategies/jwt.strategy';
 
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
@@ -29,6 +28,7 @@ import { Role } from '../../database/entities/role.entity';
 import { User } from '../../database/entities/user.entity';
 import { RedisModule } from '../../common/redis/redis.module';
 
+@Global()
 @Module({
   imports: [
     ConfigModule,
@@ -76,7 +76,6 @@ import { RedisModule } from '../../common/redis/redis.module';
     CompanyOnboardingService,
     TwoFAService,
     LocalStrategy,
-    JwtStrategy,
     JwtAuthGuard,
     AuditService,
     Logger,

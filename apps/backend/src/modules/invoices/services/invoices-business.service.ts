@@ -9,6 +9,7 @@ import { INVOICES_CONSTANTS } from '../constants/invoices.constants';
 import { AuditService } from '../../../common/audit/audit.service';
 import { SubscriptionLimitsService } from '../../subscriptions/services/subscription-limits.service';
 import { PaymentStatus } from '../../payments/types/payments.types';
+import { ForbiddenException } from '@nestjs/common';
 
 @Injectable()
 export class InvoicesBusinessService {
@@ -31,13 +32,26 @@ export class InvoicesBusinessService {
     this.logger.log(`Creating invoice for company ${companyId} from order ${data.orderId}`);
 
     // 🔒 ✅ ИСПРАВЛЕНИЕ 2: Используем checkOrderLimit (метод checkInvoiceLimit не существует)
+    this.logger.warn('DEMO MODE: subscription limits disabled src/modules/invoices/services/invoices-business.service.ts');
+    /*
     const currentCount = await this.invoicesDataService.getInvoicesCountForCompany(companyId);
     const limitCheck = await this.subscriptionLimitsService.checkOrderLimit(companyId, currentCount, 1);
     this.logger.debug('Using checkOrderLimit for invoice limits - consider implementing dedicated checkInvoiceLimit');
     
     if (!limitCheck.allowed) {
-      throw new Error(`Превышен лимит счетов: ${currentCount}/${limitCheck.limit}`);
+      if (!limitCheck.allowed) {
+        if (limitCheck.limit === null) {
+          throw new ForbiddenException(
+            'У компании нет активной подписки'
+          );
+        }
+
+        throw new ForbiddenException(
+          `Превышен лимит счетов (${currentCount}/${limitCheck.limit})`
+        );
+      }
     }
+      */
 
     // 🧮 Автоматические расчеты
     const calculatedData = await this.calculateInvoiceAmounts(data);
@@ -86,7 +100,6 @@ export class InvoicesBusinessService {
   }): Promise<Invoice> {
     this.logger.log(`Creating invoice from order ${orderId} for company ${companyId}`);
 
-    // 🔍 Получение заказа через OrderRepository напрямую
     const order = await this.orderRepository.findOne({
       where: { id: orderId, companyId },
       relations: ['orderServices', 'orderParts', 'customer', 'vehicle'],
@@ -96,32 +109,26 @@ export class InvoicesBusinessService {
       throw new Error(`Order ${orderId} not found for company ${companyId}`);
     }
 
-    // Проверка статуса заказа
-    if (order.status !== 'completed') { // TODO: Использовать OrderStatus.COMPLETED когда будет доступен
+    if (order.status !== 'completed') {
       throw new Error(`Cannot create invoice for order ${order.orderNumber} - order must be completed first`);
     }
 
-    // 🔍 Проверка что счет еще не создан
     const existingInvoice = await this.invoicesDataService.findByOrderIdForCompany(orderId, companyId);
     if (existingInvoice) {
       throw new Error(`Invoice ${existingInvoice.invoiceNumber} already exists for order ${order.orderNumber}`);
     }
 
-    // 💰 Интеллектуальный расчет сумм из заказа
     let amount = parseFloat(order.totalAmount.toString());
     
-    // Применение скидки
     if (options?.discountPercent && options.discountPercent > 0) {
       const discountAmount = (amount * options.discountPercent) / 100;
       amount = amount - discountAmount;
     }
 
-    // 📅 Расчет срока оплаты
     const paymentTermsDays = options?.paymentTermsDays || INVOICES_CONSTANTS.DEFAULTS.PAYMENT_TERMS_DAYS;
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + paymentTermsDays);
 
-    // 🎯 Создание данных счета с умными примечаниями
     const smartNotes = options?.notes || this.generateSmartNotes(order, options);
 
     const invoiceData: CreateInvoiceData = {
@@ -132,10 +139,8 @@ export class InvoicesBusinessService {
       notes: smartNotes,
     };
 
-    // 🎯 Создание счета
     const invoice = await this.createInvoiceForCompany(invoiceData, companyId, user);
 
-    // 📊 Дополнительный audit
     await this.auditService.log(INVOICES_CONSTANTS.AUDIT_ACTIONS.AUTO_GENERATED, {
       userId: user.id,
       companyId: user.companyId,

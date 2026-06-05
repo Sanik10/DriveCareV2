@@ -1,11 +1,8 @@
+// path: apps/frontend/tsconfig.json
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "es2022"
-    ],
+    "lib": ["dom", "dom.iterable", "es2022"],
     "allowJs": false,
     "skipLibCheck": true,
     "strict": true,
@@ -17,32 +14,16 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "forceConsistentCasingInFileNames": true,
-    "baseUrl": ".",
+    // "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./*"
-      ],
-      "@app/*": [
-        "./app/*"
-      ],
-      "@shared/*": [
-        "./shared/*"
-      ],
-      "@entities/*": [
-        "./entities/*"
-      ],
-      "@features/*": [
-        "./features/*"
-      ],
-      "@widgets/*": [
-        "./widgets/*"
-      ],
-      "@providers/*": [
-        "./providers/*"
-      ],
-      "@store/*": [
-        "./store/*"
-      ]
+      "@/*": ["./*"],
+      "@app/*": ["./app/*"],
+      "@shared/*": ["./shared/*"],
+      "@entities/*": ["./entities/*"],
+      "@features/*": ["./features/*"],
+      "@widgets/*": ["./widgets/*"],
+      "@providers/*": ["./providers/*"],
+      "@store/*": ["./store/*"]
     },
     "plugins": [
       {
@@ -55,9 +36,8 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    "**/*.d.ts",
     ".next/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }

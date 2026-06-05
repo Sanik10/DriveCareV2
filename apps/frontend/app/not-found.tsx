@@ -1,122 +1,121 @@
 // path: apps/frontend/app/not-found.tsx
 "use client"
 
-import Link from 'next/link'
-import { Home, ArrowLeft, Building2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
+import Link from "next/link"
+import { ArrowLeft, Building2, Home } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-surface-1 relative overflow-hidden">
-      {/* Background Effects */}
-      <div className="absolute inset-0 bg-gradient-surface"></div>
-      <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-primary opacity-10 rounded-full blur-3xl"></div>
-      <div className="absolute bottom-0 left-0 w-64 h-64 bg-secondary/20 rounded-full blur-3xl"></div>
-      
-      {/* Header */}
-      <header className="relative z-10 container mx-auto px-6 py-8">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-primary">
-              <Building2 className="w-6 h-6 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              DriveCare
-            </h1>
-          </Link>
-          <ThemeToggle />
-        </div>
-      </header>
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Лёгкий фон-акцент (единый стиль) */}
+      <div
+        className="pointer-events-none fixed inset-0 -z-10"
+        style={{
+          background:
+            "radial-gradient(900px circle at 20% 0%, hsl(var(--primary) / 0.10), transparent 60%), radial-gradient(700px circle at 90% 30%, hsl(199 89% 48% / 0.10), transparent 55%)",
+        }}
+      />
 
-      {/* Main Content */}
-      <div className="relative z-10 flex items-center justify-center min-h-[80vh] px-6">
-        <div className="max-w-lg mx-auto text-center space-y-8">
-          <Card className="p-8 backdrop-blur-sm bg-card/80 border-border/50 shadow-glass">
-            {/* 404 Animation */}
-            <div className="mb-8">
-              <div className="flex items-center justify-center space-x-2 text-6xl font-bold">
-                <span className="text-primary animate-pulse">4</span>
-                <div className="w-16 h-16 rounded-full border-4 border-secondary/30 border-t-secondary animate-spin"></div>
-                <span className="text-accent animate-pulse">4</span>
+      <header className="border-b border-border/60">
+        <div className="mx-auto w-full max-w-6xl px-xl py-xl">
+          <div className="flex items-center justify-between gap-lg">
+            <Link href="/" className="flex items-center gap-md min-w-0">
+              <div className="grid h-10 w-10 place-items-center rounded-md bg-primary text-primary-foreground">
+                <Building2 className="h-5 w-5" />
               </div>
-            </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold leading-none">DriveCare</div>
+                <div className="text-xs text-muted-foreground">CRM для автосервисов</div>
+              </div>
+            </Link>
 
-            <div className="space-y-4">
-              <h1 className="text-3xl font-bold text-foreground">
-                Страница не найдена
-              </h1>
-              <p className="text-muted-foreground text-lg">
-                Запрашиваемая страница не существует или была перемещена.
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8">
-              <Link href="/">
-                <Button className="group bg-gradient-primary hover:opacity-90 text-white">
-                  <Home className="w-4 h-4 mr-2" />
-                  На главную
-                </Button>
-              </Link>
-              <Button 
-                variant="outline" 
-                onClick={() => window.history.back()}
-                className="group"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
-                Назад
+            <div className="flex items-center gap-sm">
+              <ThemeToggle />
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/login">Войти</Link>
               </Button>
-            </div>
-
-            {/* Quick Links */}
-            <div className="mt-8 pt-6 border-t border-border/50">
-              <p className="text-sm text-muted-foreground mb-4">
-                Возможно, вы искали:
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <Link href="/login">
-                  <Button variant="ghost" size="sm" className="text-sm">
-                    Вход в систему
-                  </Button>
-                </Link>
-                <Link href="/register">
-                  <Button variant="ghost" size="sm" className="text-sm">
-                    Регистрация компании
-                  </Button>
-                </Link>
-                <Link href="/">
-                  <Button variant="ghost" size="sm" className="text-sm">
-                    Главная страница
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </Card>
-
-          {/* Additional Help */}
-          <div className="text-center space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Нужна помощь? Свяжитесь с нашей поддержкой
-            </p>
-            <div className="flex items-center justify-center gap-4 text-sm">
-              <a 
-                href="mailto:support@drivecare.com" 
-                className="text-primary hover:text-secondary transition-colors"
-              >
-                support@drivecare.com
-              </a>
-              <span className="text-muted-foreground">•</span>
-              <a 
-                href="tel:+78001234567" 
-                className="text-primary hover:text-secondary transition-colors"
-              >
-                8 (800) 123-45-67
-              </a>
             </div>
           </div>
         </div>
-      </div>
+      </header>
+
+      <main className="mx-auto flex min-h-[calc(100vh-73px)] w-full max-w-6xl items-center px-xl py-section">
+        <div className="mx-auto w-full max-w-lg">
+          <Card>
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-sm flex items-center justify-center gap-sm text-5xl font-semibold tracking-tight">
+                <span className="text-primary">4</span>
+
+                {/* “0” можно оставить крутиться — но спокойно и строго */}
+                <span className="relative inline-flex h-12 w-12 items-center justify-center">
+                  <span className="absolute inset-0 rounded-full border border-border/70" />
+                  <span className="absolute inset-0 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+                </span>
+
+                <span className="text-primary">4</span>
+              </div>
+
+              <CardTitle>Страница не найдена</CardTitle>
+              <CardDescription>
+                Возможно, ссылка устарела или страница была перемещена.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="grid gap-md">
+              <div className="grid gap-sm">
+                <div className="text-sm text-muted-foreground">Возможно, вы искали:</div>
+                <div className="flex flex-wrap gap-sm">
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href="/dashboard">Дашборд</Link>
+                  </Button>
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href="/login">Вход</Link>
+                  </Button>
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href="/register">Регистрация компании</Link>
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-border/60 bg-card px-md py-sm text-xs text-muted-foreground">
+                Нужна помощь?{" "}
+                <a className="text-foreground hover:underline" href="mailto:support@drivecare.com">
+                  support@drivecare.com
+                </a>
+              </div>
+            </CardContent>
+
+            <CardFooter className="flex-col gap-sm sm:flex-row sm:justify-between">
+              <Button
+                variant="secondary"
+                className="w-full sm:w-auto"
+                onClick={() => window.history.back()}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Назад
+              </Button>
+
+              <Button asChild className="w-full sm:w-auto">
+                <Link href="/">
+                  <Home className="h-4 w-4" />
+                  На главную
+                </Link>
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      </main>
     </div>
   )
 }

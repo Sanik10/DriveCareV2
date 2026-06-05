@@ -1,280 +1,185 @@
 // path: apps/frontend/app/(auth)/register/success/page.tsx
-'use client';
+"use client"
 
-import Link from 'next/link';
-import { CheckCircle, ArrowRight, Building2, Mail, Sparkles, Star, Zap } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import styles from './success.module.css';
+import * as React from "react"
+import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
+import { AlertCircle, ArrowRight, Building2, CheckCircle2, Loader2 } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { TariffPreview } from "@/components/ui/tariff-preview"
+import { tariffsAPI } from "@/lib/api/tariffs"
+import type { Tariff } from "@/lib/types/tariffs"
 
 export default function RegisterSuccessPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const [tariff, setTariff] = React.useState<Tariff | null>(null)
+  const [tariffLoading, setTariffLoading] = React.useState(false)
+  const [tariffError, setTariffError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    const tariffId = searchParams.get("tariffId")
+    if (!tariffId) return
+
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(tariffId)) {
+      setTariffError("Некорректный ID тарифа")
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      setTariffLoading(true)
+      setTariffError(null)
+      try {
+        const t = await tariffsAPI.get(tariffId)
+        if (cancelled) return
+        setTariff(t)
+      } catch {
+        if (cancelled) return
+        setTariffError("Не удалось загрузить информацию о тарифе")
+        setTariff(null)
+      } finally {
+        if (!cancelled) setTariffLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [searchParams])
+
   return (
-    <div className="min-h-screen relative overflow-hidden">
-      {/* Enhanced Success Background */}
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Лёгкий фон-акцент (как на login/register) */}
       <div
-        className="fixed inset-0 -z-10"
+        className="pointer-events-none fixed inset-0 -z-10"
         style={{
-          background: `
-            radial-gradient(ellipse 600px 400px at 30% 20%, rgba(0, 212, 170, 0.25) 0%, transparent 70%),
-            radial-gradient(ellipse 500px 500px at 70% 80%, rgba(99, 102, 241, 0.18) 0%, transparent 70%),
-            radial-gradient(ellipse 400px 300px at 20% 90%, rgba(14, 165, 233, 0.15) 0%, transparent 70%)
-          `,
+          background:
+            "radial-gradient(900px circle at 20% 0%, hsl(var(--primary) / 0.12), transparent 60%), radial-gradient(700px circle at 90% 30%, hsl(199 89% 48% / 0.10), transparent 55%)",
         }}
       />
 
-      {/* Elegant Celebration Orbs */}
-      <div className="fixed inset-0 -z-10 pointer-events-none">
-        {/* Main success aura */}
-        <div
-          className={`absolute rounded-full ${styles.successAura}`}
-          style={{
-            width: '400px',
-            height: '400px',
-            filter: 'blur(60px)',
-            top: '25%',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background:
-              'radial-gradient(circle, rgba(0, 212, 170, 0.15) 0%, rgba(14, 165, 233, 0.08) 50%, transparent 80%)',
-            willChange: 'transform, filter',
-          }}
-        />
-
-        {/* Floating energy orbs */}
-        <div
-          className={`absolute rounded-full ${styles.energyOrb1}`}
-          style={{
-            width: '120px',
-            height: '120px',
-            filter: 'blur(35px)',
-            top: '15%',
-            left: '20%',
-            background: 'radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, transparent 70%)',
-            willChange: 'transform',
-          }}
-        />
-
-        <div
-          className={`absolute rounded-full ${styles.energyOrb2}`}
-          style={{
-            width: '100px',
-            height: '100px',
-            filter: 'blur(30px)',
-            top: '70%',
-            right: '15%',
-            background: 'radial-gradient(circle, rgba(168, 85, 247, 0.10) 0%, transparent 70%)',
-            willChange: 'transform',
-          }}
-        />
-
-        <div
-          className={`absolute rounded-full ${styles.energyOrb3}`}
-          style={{
-            width: '80px',
-            height: '80px',
-            filter: 'blur(25px)',
-            top: '60%',
-            left: '15%',
-            background: 'radial-gradient(circle, rgba(14, 165, 233, 0.08) 0%, transparent 70%)',
-            willChange: 'transform',
-          }}
-        />
-
-        {/* Elegant floating particles */}
-        <div
-          className={`absolute ${styles.particle1}`}
-          style={{
-            width: '8px',
-            height: '8px',
-            top: '30%',
-            left: '25%',
-            background: 'rgba(0, 212, 170, 0.6)',
-            borderRadius: '50%',
-            willChange: 'transform',
-            boxShadow: '0 0 12px rgba(0, 212, 170, 0.4)',
-          }}
-        />
-
-        <div
-          className={`absolute ${styles.particle2}`}
-          style={{
-            width: '6px',
-            height: '6px',
-            top: '45%',
-            right: '30%',
-            background: 'rgba(99, 102, 241, 0.7)',
-            borderRadius: '50%',
-            willChange: 'transform',
-            boxShadow: '0 0 10px rgba(99, 102, 241, 0.5)',
-          }}
-        />
-
-        <div
-          className={`absolute ${styles.particle3}`}
-          style={{
-            width: '5px',
-            height: '5px',
-            top: '75%',
-            left: '35%',
-            background: 'rgba(168, 85, 247, 0.8)',
-            borderRadius: '50%',
-            willChange: 'transform',
-            boxShadow: '0 0 8px rgba(168, 85, 247, 0.6)',
-          }}
-        />
-
-        <div
-          className={`absolute ${styles.particle4}`}
-          style={{
-            width: '4px',
-            height: '4px',
-            top: '20%',
-            right: '20%',
-            background: 'rgba(14, 165, 233, 0.9)',
-            borderRadius: '50%',
-            willChange: 'transform',
-            boxShadow: '0 0 6px rgba(14, 165, 233, 0.7)',
-          }}
-        />
-
-        {/* Success energy waves */}
-        <div
-          className={`absolute ${styles.successWave1}`}
-          style={{
-            width: '300px',
-            height: '300px',
-            border: '2px solid rgba(0, 212, 170, 0.1)',
-            borderRadius: '50%',
-            top: '35%',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            willChange: 'transform, opacity',
-          }}
-        />
-
-        <div
-          className={`absolute ${styles.successWave2}`}
-          style={{
-            width: '400px',
-            height: '400px',
-            border: '1px solid rgba(99, 102, 241, 0.08)',
-            borderRadius: '50%',
-            top: '30%',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            willChange: 'transform, opacity',
-          }}
-        />
+      {/* Top controls */}
+      <div className="fixed right-xl top-xl z-10 flex items-center gap-sm">
+        <ThemeToggle />
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/">На главную</Link>
+        </Button>
       </div>
 
-      <div className="relative flex items-center justify-center min-h-screen p-6">
-        <div className="w-full max-w-md space-y-8">
+      <div className="mx-auto flex min-h-screen w-full max-w-lg items-center px-xl py-section">
+        <div className="w-full grid gap-xl">
           {/* Header */}
-          <div className="text-center space-y-6">
-            <Link href="/" className="inline-block group">
-              <div className="flex items-center justify-center">
-                <div
-                  className={`flex items-center gap-3 p-4 rounded-2xl bg-gradient-primary shadow-glass-lg transition-all duration-300 group-hover:scale-105 group-hover:shadow-xl ${styles.successLogoGlow}`}
-                >
-                  <Building2 className="w-7 h-7 text-white" />
-                </div>
+          <div className="text-center grid gap-sm">
+            <Link href="/" className="mx-auto inline-flex items-center gap-sm">
+              <div className="grid h-10 w-10 place-items-center rounded-md bg-primary text-primary-foreground">
+                <Building2 className="h-5 w-5" />
               </div>
+              <span className="text-sm font-semibold">DriveCare</span>
             </Link>
+
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-md border border-border/60 bg-card">
+              <CheckCircle2 className="h-6 w-6 text-status-active" />
+            </div>
+
+            <h1 className="text-2xl font-semibold tracking-tight">Компания зарегистрирована</h1>
+            <p className="text-sm text-muted-foreground">
+              Аккаунт создан. Теперь вы можете войти и начать работу в DriveCare.
+            </p>
           </div>
 
-          {/* Enhanced Success Card */}
-          <Card
-            className={`p-8 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 rounded-3xl surface-glow text-center space-y-6 ${styles.successCardGlow}`}
-          >
-            {/* Success Icon with elegant celebration */}
-            <div className="flex items-center justify-center relative">
-              <div className="relative">
-                <div
-                  className={`w-24 h-24 rounded-full bg-gradient-to-r from-primary/30 to-secondary/20 flex items-center justify-center relative overflow-hidden ${styles.successIconBg}`}
-                >
-                  <CheckCircle className={`w-12 h-12 text-primary ${styles.successCheckIcon}`} />
+          {/* Optional tariff */}
+          {(tariffLoading || tariffError || tariff) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Тарифный план</CardTitle>
+                <CardDescription>
+                  Если вы выбирали тариф во время регистрации — он отображается здесь.
+                </CardDescription>
+              </CardHeader>
 
-                  {/* Elegant sparkle ring */}
-                  <div className={`absolute inset-0 rounded-full border border-primary/20 ${styles.successRing1}`} />
-                  <div className={`absolute inset-2 rounded-full border border-secondary/15 ${styles.successRing2}`} />
-                </div>
+              <CardContent className="grid gap-md">
+                {tariffLoading && (
+                  <div className="flex items-center gap-sm text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    Загрузка тарифа...
+                  </div>
+                )}
 
-                {/* Floating celebration elements with better positioning */}
-                <div className={`absolute -top-3 -right-2 ${styles.successSparkle1}`}>
-                  <Sparkles className="w-4 h-4 text-secondary" />
-                </div>
-                <div className={`absolute -bottom-2 -left-3 ${styles.successSparkle2}`}>
-                  <Star className="w-4 h-4 text-accent" />
-                </div>
-                <div className={`absolute top-0 -left-5 ${styles.successSparkle3}`}>
-                  <Zap className="w-3 h-3 text-primary" />
-                </div>
-                <div className={`absolute -top-4 left-1 ${styles.successSparkle4}`}>
-                  <Sparkles className="w-3 h-3 text-emerald-400" />
-                </div>
+                {tariffError && (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/10 px-md py-sm text-sm text-destructive">
+                    <div className="flex items-start gap-sm">
+                      <AlertCircle className="mt-[2px] h-4 w-4" />
+                      <div>{tariffError}</div>
+                    </div>
+                  </div>
+                )}
+
+                {tariff && (
+                  <TariffPreview
+                    tariff={tariff}
+                    period="monthly"
+                    onEdit={() => router.push("/tariffs")}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Main card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Что дальше</CardTitle>
+              <CardDescription>Короткий чек‑лист, чтобы быстро начать.</CardDescription>
+            </CardHeader>
+
+            <CardContent className="grid gap-md text-sm">
+              <div className="rounded-md border border-border/60 bg-card px-md py-sm">
+                1) Войдите в систему под email владельца
               </div>
-            </div>
-
-            <div className="space-y-4">
-              <h1 className={`text-3xl font-bold text-gradient-primary ${styles.successTitle}`}>Поздравляем! 🎉</h1>
-              <h2 className="text-xl font-semibold text-foreground">Компания успешно зарегистрирована!</h2>
-              <p className="text-muted-foreground leading-relaxed">
-                Ваш автосервис добавлен в систему DriveCare. Теперь вы можете войти в систему и начать управление.
-              </p>
-            </div>
-
-            {/* Enhanced Next Steps */}
-            <div className={`glass-subtle rounded-2xl p-6 space-y-4 border border-border/20 ${styles.successStepsGlow}`}>
-              <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-primary" />
-                Следующие шаги:
-              </h3>
-
-              <div className="flex items-center gap-3 text-sm group">
-                <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:scale-110">
-                  <Mail className="w-4 h-4 text-primary" />
-                </div>
-                <span className="text-muted-foreground">Проверьте email для подтверждения аккаунта</span>
+              <div className="rounded-md border border-border/60 bg-card px-md py-sm">
+                2) Заполните профиль компании (если нужно)
+              </div>
+              <div className="rounded-md border border-border/60 bg-card px-md py-sm">
+                3) Пригласите сотрудников по ссылке приглашения из кабинета
               </div>
 
-              <div className="flex items-center gap-3 text-sm group">
-                <div className="w-9 h-9 rounded-full bg-secondary/20 flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:scale-110">
-                  <CheckCircle className="w-4 h-4 text-secondary" />
-                </div>
-                <span className="text-muted-foreground">Настройте профиль компании в панели управления</span>
+              <div className="text-xs text-muted-foreground">
+                Поддержка:{" "}
+                <a className="text-foreground hover:underline" href="mailto:support@drivecare.com">
+                  support@drivecare.com
+                </a>
               </div>
-            </div>
+            </CardContent>
 
-            <div className="space-y-4 pt-2">
-              <Link href="/login">
-                <Button
-                  size="lg"
-                  className={`w-full h-14 bg-gradient-primary hover:opacity-90 text-white font-medium group rounded-2xl transition-all duration-300 hover:scale-[1.02] hover:shadow-glass-lg ${styles.successCtaGlow}`}
-                >
-                  <Sparkles className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform duration-300" />
-                  Войти в систему
-                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform duration-300" />
-                </Button>
-              </Link>
+            <CardFooter className="flex-col gap-sm sm:flex-row sm:justify-between">
+              <Button asChild variant="secondary" className="w-full sm:w-auto">
+                <Link href="/">На главную</Link>
+              </Button>
 
-              <div className="text-xs text-muted-foreground space-y-1 leading-relaxed">
-                <p>Не получили письмо? Проверьте папку спам</p>
-                <p>или обратитесь в поддержку: support@drivecare.com</p>
-              </div>
-            </div>
+              <Button asChild className="w-full sm:w-auto">
+                <Link href="/login">
+                  Войти
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </CardFooter>
           </Card>
-
-          {/* Footer */}
-          <div className="text-center">
-            <Link
-              href="/"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300 hover:underline inline-flex items-center gap-2"
-            >
-              ← Вернуться на главную
-            </Link>
-          </div>
         </div>
       </div>
     </div>
-  );
+  )
 }

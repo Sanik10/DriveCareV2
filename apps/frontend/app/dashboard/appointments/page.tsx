@@ -4,40 +4,40 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import {
+  CalendarDays,
+  Plus,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  CheckCircle,
+  Search,
+  Filter,
+  AlertTriangle,
+} from 'lucide-react';
+
+import { AppLayout } from '@/components/app/AppLayout';
+import { NavigationHeader } from '@/components/platform/NavigationHeader';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { AppLayout } from '@/components/app/AppLayout';
-import { PageFeatureBadge } from '@/components/app/PageFeatureBadge';
+
 import { PageFiltersCard, PageFiltersRow } from '@/components/app/PageFiltersCard';
+import { PageContentCard } from '@/components/app/PageContentCard';
 import { StatsCard, StatsGrid } from '@/components/app/StatsCard';
+
 import { useAuth } from '@/lib/hooks/use-auth';
 import { appointmentsAPI } from '@/lib/api/appointments';
 import { workSchedulesAPI } from '@/lib/api/work-schedules';
 import { cn } from '@/lib/utils';
-import type {
-  Appointment,
-  AppointmentStatus,
-  AppointmentsQuery,
-} from '@/lib/types/appointments';
+
+import type { Appointment, AppointmentStatus, AppointmentsQuery } from '@/lib/types/appointments';
 import type { WorkSchedule } from '@/lib/types/work-schedules';
 import { APPOINTMENT_STATUS_LABELS } from '@/lib/types/appointments';
-import { 
-  CalendarDays, 
-  Plus, 
-  RefreshCw, 
-  ChevronLeft, 
-  ChevronRight, 
-  Clock,
-  CheckCircle,
-  Search,
-  Filter,
-  Sparkles,
-  AlertTriangle,
-  TrendingUp,
-} from 'lucide-react';
+
 import { AppointmentCreateDialog } from '@/components/appointments/appointment-create-dialog';
 import { MechanicSelect, type MechanicOption } from '@/components/appointments/selects/MechanicSelect';
 
@@ -45,8 +45,8 @@ type CalendarView = 'day' | 'week' | 'month';
 
 const VIEW_LABELS: Record<CalendarView, string> = {
   day: 'День',
-  week: 'Неделя', 
-  month: 'Месяц'
+  week: 'Неделя',
+  month: 'Месяц',
 };
 
 // Local date to YYYY-MM-DD
@@ -99,19 +99,24 @@ export default function AppointmentsPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // ✅ Все useState
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [items, setItems] = useState<Appointment[]>([]);
   const [view, setView] = useState<CalendarView>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
+
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<AppointmentStatus | ''>('');
   const [mechanic, setMechanic] = useState<MechanicOption | null>(null);
-  const [openCreate, setOpenCreate] = useState(false);
-  const [showAllHours, setShowAllHours] = useState(false);
-  const [scheduleMap, setScheduleMap] = useState<Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }>>({});
 
-  // ✅ Все useMemo (НО БЕЗ loadAppointments - он будет useCallback ниже)
+  const [openCreate, setOpenCreate] = useState(false);
+
+  const [showAllHours, setShowAllHours] = useState(false);
+  const [scheduleMap, setScheduleMap] = useState<
+    Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }>
+  >({});
+
   const canCreate = useMemo(() => {
     const r = user?.role?.name || '';
     return ['company_owner', 'company_admin', 'manager', 'owner', 'admin'].includes(r);
@@ -151,7 +156,7 @@ export default function AppointmentsPage() {
   }, [currentDate, view]);
 
   const filteredAppointments = useMemo(() => {
-    return items.filter(apt => {
+    return items.filter((apt) => {
       if (
         search &&
         !apt.customerName?.toLowerCase().includes(search.toLowerCase()) &&
@@ -171,41 +176,45 @@ export default function AppointmentsPage() {
 
   const stats = useMemo(() => {
     const total = filteredAppointments.length;
-    const inProgress = filteredAppointments.filter(apt => apt.status === 'IN_PROGRESS').length;
-    const urgent = filteredAppointments.filter(apt => apt.priority === 'URGENT').length;
-    const completed = filteredAppointments.filter(apt => apt.status === 'COMPLETED').length;
+    const inProgress = filteredAppointments.filter((apt) => apt.status === 'IN_PROGRESS').length;
+    const urgent = filteredAppointments.filter((apt) => apt.priority === 'URGENT').length;
+    const completed = filteredAppointments.filter((apt) => apt.status === 'COMPLETED').length;
     return { total, inProgress, urgent, completed };
   }, [filteredAppointments]);
 
-  // ✅ useCallback функции (ДО headerActions!)
-  const getDayHourRange = useCallback((date: Date): { min: number; max: number } => {
-    const dow = date.getDay();
-    const conf = scheduleMap[dow];
+  const getDayHourRange = useCallback(
+    (date: Date): { min: number; max: number } => {
+      const dow = date.getDay();
+      const conf = scheduleMap[dow];
 
-    if (conf && conf.minHour >= 0 && conf.maxHour >= 0) {
-      return { min: conf.minHour, max: conf.maxHour };
-    }
-
-    const dateStr = toYMD(date);
-    const hours: number[] = [];
-    filteredAppointments.forEach((apt) => {
-      const aptDate = toYMD(new Date(apt.startTime));
-      if (aptDate === dateStr) {
-        hours.push(new Date(apt.startTime).getHours());
-        hours.push(new Date(apt.endTime).getHours());
+      if (conf && conf.minHour >= 0 && conf.maxHour >= 0) {
+        return { min: conf.minHour, max: conf.maxHour };
       }
-    });
-    if (hours.length > 0) {
-      const min = Math.max(0, Math.min(...hours));
-      const max = Math.min(23, Math.max(...hours));
-      if (max >= min) return { min, max };
-    }
 
-    return getEnvDefaultRange();
-  }, [scheduleMap, filteredAppointments]);
+      const dateStr = toYMD(date);
+      const hours: number[] = [];
+      filteredAppointments.forEach((apt) => {
+        const aptDate = toYMD(new Date(apt.startTime));
+        if (aptDate === dateStr) {
+          hours.push(new Date(apt.startTime).getHours());
+          hours.push(new Date(apt.endTime).getHours());
+        }
+      });
+
+      if (hours.length > 0) {
+        const min = Math.max(0, Math.min(...hours));
+        const max = Math.min(23, Math.max(...hours));
+        if (max >= min) return { min, max };
+      }
+
+      return getEnvDefaultRange();
+    },
+    [scheduleMap, filteredAppointments]
+  );
 
   const loadAppointments = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const query: AppointmentsQuery = {
         search: search.trim() || undefined,
@@ -221,34 +230,41 @@ export default function AppointmentsPage() {
       setItems(res.items || []);
     } catch (e) {
       console.error('Failed to load appointments:', e);
+      setError('Ошибка загрузки записей');
     } finally {
       setLoading(false);
     }
   }, [search, status, mechanic?.id, rangeStartStr, rangeEndStr]);
 
-  const updateAllHours = useCallback((val: boolean) => {
-    setShowAllHours(val);
-    try {
-      localStorage.setItem(LS_KEY_ALL_HOURS, val ? '1' : '0');
-    } catch {}
-    try {
-      const sp = new URLSearchParams(Array.from(searchParams?.entries?.() || []));
-      if (val) sp.set('all', '1');
-      else sp.delete('all');
-      const qs = sp.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    } catch {}
-  }, [pathname, router, searchParams]);
+  const updateAllHours = useCallback(
+    (val: boolean) => {
+      setShowAllHours(val);
+      try {
+        localStorage.setItem(LS_KEY_ALL_HOURS, val ? '1' : '0');
+      } catch {}
 
-  const isWorkingHour = useCallback((date: Date, hour: number): boolean => {
-    const conf = scheduleMap[date.getDay()];
-    if (!conf || conf.intervals.length === 0) {
-      return true;
-    }
-    return conf.intervals.some((itv) => hour >= itv.start && hour < itv.end);
-  }, [scheduleMap]);
+      try {
+        const sp = new URLSearchParams(Array.from(searchParams?.entries?.() || []));
+        if (val) sp.set('all', '1');
+        else sp.delete('all');
+        const qs = sp.toString();
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      } catch {}
+    },
+    [pathname, router, searchParams]
+  );
 
-  // ✅ useMemo которые зависят от useCallback
+  const isWorkingHour = useCallback(
+    (date: Date, hour: number): boolean => {
+      const conf = scheduleMap[date.getDay()];
+      if (!conf || conf.intervals.length === 0) {
+        return true;
+      }
+      return conf.intervals.some((itv) => hour >= itv.start && hour < itv.end);
+    },
+    [scheduleMap]
+  );
+
   const timeSlots = useMemo(() => {
     if (showAllHours) return makeTimeSlots(0, 23);
 
@@ -262,6 +278,7 @@ export default function AppointmentsPage() {
         const dow = startOfWeek.getDay();
         const diff = dow === 0 ? -6 : 1 - dow;
         startOfWeek.setDate(startOfWeek.getDate() + diff);
+
         let min = 23;
         let max = 0;
         for (let i = 0; i < 7; i++) {
@@ -271,10 +288,12 @@ export default function AppointmentsPage() {
           min = Math.min(min, r.min);
           max = Math.max(max, r.max);
         }
+
         if (max < min) {
           const def = getEnvDefaultRange();
           return makeTimeSlots(def.min, def.max);
         }
+
         return makeTimeSlots(min, max);
       }
       case 'month':
@@ -282,30 +301,6 @@ export default function AppointmentsPage() {
     }
   }, [showAllHours, view, currentDate, getDayHourRange]);
 
-  // ✅ headerActions ПОСЛЕ loadAppointments
-  const headerActions = useMemo(() => (
-    <div className="flex items-center gap-2">
-      <Button
-        variant="outline"
-        className="rounded-2xl btn-outline-fixed"
-        onClick={() => loadAppointments()}
-      >
-        <RefreshCw className="w-4 h-4 mr-2" />
-        Обновить
-      </Button>
-      {canCreate && (
-        <Button 
-          className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]"
-          onClick={() => setOpenCreate(true)}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Новая запись
-        </Button>
-      )}
-    </div>
-  ), [canCreate, loadAppointments]);
-
-  // ✅ Все useEffect
   useEffect(() => {
     const urlVal = searchParams?.get('all');
     if (urlVal !== null) {
@@ -318,7 +313,7 @@ export default function AppointmentsPage() {
     if (ls === '1' || ls === '0') {
       setShowAllHours(ls === '1');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -330,7 +325,10 @@ export default function AppointmentsPage() {
         const res = await workSchedulesAPI.getSchedules({ isActive: true, page: 1, limit: 200 });
         const list = (res.items || []) as WorkSchedule[];
 
-        const tmp: Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }> = {};
+        const tmp: Record<
+          number,
+          { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }
+        > = {};
         for (let d = 0; d <= 6; d++) {
           tmp[d] = { intervals: [], minHour: 23, maxHour: 0 };
         }
@@ -358,7 +356,10 @@ export default function AppointmentsPage() {
         if (!cancelled) setScheduleMap(tmp);
       } catch (e) {
         if (!cancelled) {
-          const tmp: Record<number, { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }> = {};
+          const tmp: Record<
+            number,
+            { intervals: Array<{ start: number; end: number }>; minHour: number; maxHour: number }
+          > = {};
           for (let d = 0; d <= 6; d++) {
             tmp[d] = { intervals: [], minHour: -1, maxHour: -1 };
           }
@@ -368,7 +369,9 @@ export default function AppointmentsPage() {
     };
 
     void fetchSchedules();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -377,7 +380,6 @@ export default function AppointmentsPage() {
     }
   }, [isAuthenticated, loadAppointments]);
 
-  // ✅ Обычные функции (не хуки)
   const navigateDate = (direction: 'prev' | 'next' | 'today') => {
     const newDate = new Date(currentDate);
     if (direction === 'today') {
@@ -385,16 +387,22 @@ export default function AppointmentsPage() {
       return;
     }
     switch (view) {
-      case 'day': newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1)); break;
-      case 'week': newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7)); break;
-      case 'month': newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1)); break;
+      case 'day':
+        newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
+        break;
+      case 'week':
+        newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
+        break;
+      case 'month':
+        newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
+        break;
     }
     setCurrentDate(newDate);
   };
 
   const getSlotAppointments = (date: Date, timeSlot?: string) => {
     const dateStr = toYMD(date);
-    return filteredAppointments.filter(apt => {
+    return filteredAppointments.filter((apt) => {
       const aptStart = new Date(apt.startTime);
       const aptEnd = new Date(apt.endTime);
       const aptDate = toYMD(aptStart);
@@ -415,19 +423,20 @@ export default function AppointmentsPage() {
   const getSlotStatus = (date: Date, timeSlot?: string) => {
     const appointments = getSlotAppointments(date, timeSlot);
     if (appointments.length === 0) return 'free';
-    if (appointments.some(apt => apt.status === 'IN_PROGRESS')) return 'busy';
-    if (appointments.some(apt => apt.priority === 'URGENT')) return 'urgent';
+    if (appointments.some((apt) => apt.status === 'IN_PROGRESS')) return 'busy';
+    if (appointments.some((apt) => apt.priority === 'URGENT')) return 'urgent';
     return 'booked';
   };
 
-  const statusColors = {
-    free: 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/30',
-    booked: 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/30 hover:bg-blue-100 dark:hover:bg-blue-950/30',
-    busy: 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/30 hover:bg-amber-100 dark:hover:bg-amber-950/30',
-    urgent: 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/30 hover:bg-red-100 dark:hover:bg-red-950/30 animate-pulse',
+  // Визуальная логика слотов: только системные токены (DS v1.1), без “кислотных” цветов/пульсаций.
+  const slotStatusClasses: Record<'free' | 'booked' | 'busy' | 'urgent', string> = {
+    free: cn('bg-card border-border', 'hover:bg-surface-2'),
+    booked: cn('bg-status-progress/10 border-status-progress/20', 'hover:bg-status-progress/15'),
+    busy: cn('bg-status-pending/10 border-status-pending/20', 'hover:bg-status-pending/15'),
+    urgent: cn('bg-status-error/10 border-status-error/20', 'hover:bg-status-error/15'),
   };
 
-  const nonWorkingClass = 'opacity-60 grayscale-[15%] hover:grayscale-0 border-dashed border-muted/50';
+  const nonWorkingClass = 'opacity-60 border-dashed border-border/50';
 
   const handleSlotClick = () => {
     if (canCreate) {
@@ -449,12 +458,11 @@ export default function AppointmentsPage() {
   const currentHour = now.getHours();
   const nowSlotClass = 'ring-2 ring-primary/50';
 
-  // ✅ Условные return
   if (authLoading) {
     return (
       <AppLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-sm">
             <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
             <span className="text-muted-foreground">Загрузка календаря...</span>
           </div>
@@ -463,123 +471,105 @@ export default function AppointmentsPage() {
     );
   }
 
-  // ✅ Финальный рендер
+  const headerActions = (
+    <div className="flex items-center gap-sm">
+      <Button variant="secondary" size="sm" onClick={() => loadAppointments()}>
+        <RefreshCw className="w-4 h-4 mr-xs" />
+        Обновить
+      </Button>
+
+      {canCreate && (
+        <Button variant="primary" size="sm" onClick={() => setOpenCreate(true)}>
+          <Plus className="w-4 h-4 mr-xs" />
+          Новая запись
+        </Button>
+      )}
+    </div>
+  );
+
   return (
-    <AppLayout 
-      title="Календарь записей" 
-      description="Интерактивная календарная сетка с цветовым кодированием времени"
-      icon={CalendarDays}
-      actions={headerActions}
-    >
-      <div className="container mx-auto px-6 py-6 space-y-6">
-        
-        {/* Feature Badge */}
-        <PageFeatureBadge
-          variant="emerald-green"
-          icon={Sparkles}
-          title="Календарная сетка с динамичными часами"
-          description="Поддержка 24/7 и ночных смен. Нерабочие часы подсвечиваются, но не блокируются — всё рекомендательно."
-          aside={
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Все 24 часа</span>
-                <Switch checked={showAllHours} onCheckedChange={updateAllHours} />
-              </div>
-              <TrendingUp className="w-6 h-6 text-secondary" />
-            </div>
-          }
+    <AppLayout>
+      <div className="container mx-auto px-lg py-xl flex flex-col gap-lg">
+        <NavigationHeader
+          title="Записи"
+          subtitle="Календарь записей и управление загрузкой мастеров"
+          icon={<CalendarDays className="w-5 h-5" />}
+          actions={headerActions}
         />
 
-        {!hasAnySchedule && !showAllHours && (
-          <Card className="p-3 glass border-amber-400/30 bg-amber-500/5 text-amber-600 dark:text-amber-400 rounded-2xl">
-            <div className="flex items-center gap-2 text-sm">
-              <AlertTriangle className="w-4 h-4" />
-              Расписание не задано — показаны дефолтные бизнес‑часы ({getEnvDefaultRange().min}:00–{getEnvDefaultRange().max}:00)
-            </div>
-          </Card>
-        )}
-
-        {/* Stats */}
         <StatsGrid cols={4}>
-          <StatsCard
-            title="Всего записей"
-            value={stats.total}
-            icon={CalendarDays}
-            color="blue"
-          />
-          <StatsCard
-            title="В работе"
-            value={stats.inProgress}
-            icon={Clock}
-            color="amber"
-            highlight={stats.inProgress > 0}
-          />
-          <StatsCard
-            title="Срочные"
-            value={stats.urgent}
-            icon={AlertTriangle}
-            color="red"
-            highlight={stats.urgent > 0}
-          />
-          <StatsCard
-            title="Завершено"
-            value={stats.completed}
-            icon={CheckCircle}
-            color="emerald"
-          />
+          <StatsCard title="Всего записей" value={stats.total} icon={CalendarDays} />
+          <StatsCard title="В работе" value={stats.inProgress} icon={Clock} />
+          <StatsCard title="Срочные" value={stats.urgent} icon={AlertTriangle} />
+          <StatsCard title="Завершено" value={stats.completed} icon={CheckCircle} />
         </StatsGrid>
 
-        {/* Filters */}
         <PageFiltersCard>
           <PageFiltersRow>
-            {/* Navigation */}
-            <div className="flex items-center gap-2">
-              <Button variant="outline" className="rounded-xl btn-outline-fixed" onClick={() => navigateDate('prev')}>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button variant="outline" className="rounded-xl btn-outline-fixed min-w-[120px]" onClick={() => navigateDate('today')}>
-                Сегодня
-              </Button>
-              <Button variant="outline" className="rounded-xl btn-outline-fixed" onClick={() => navigateDate('next')}>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-              <div className="text-lg font-semibold ml-4">{formatDateHeader()}</div>
-            </div>
-
-            {/* View Toggles */}
-            <div className="flex items-center gap-1 bg-surface-1/50 rounded-xl p-1">
-              {(['day', 'week', 'month'] as CalendarView[]).map((v) => (
-                <Button
-                  key={v}
-                  variant={view === v ? 'default' : 'ghost'}
-                  size="sm"
-                  className={cn(
-                    "rounded-lg text-xs transition-all duration-300",
-                    view === v && "bg-gradient-primary text-white shadow-glass"
-                  )}
-                  onClick={() => setView(v)}
-                >
-                  {VIEW_LABELS[v]}
+            {/* Left side: date navigation + view toggle */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-md">
+              <div className="flex items-center gap-sm">
+                <Button variant="secondary" size="icon" onClick={() => navigateDate('prev')} title="Назад">
+                  <ChevronLeft className="w-4 h-4" />
                 </Button>
-              ))}
+
+                <Button variant="secondary" size="sm" onClick={() => navigateDate('today')}>
+                  Сегодня
+                </Button>
+
+                <Button variant="secondary" size="icon" onClick={() => navigateDate('next')} title="Вперёд">
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+
+                <div className="text-sm font-semibold text-foreground sm:ml-sm">{formatDateHeader()}</div>
+              </div>
+
+              {/* View toggle (DS-паттерн как в Orders: segmented) */}
+              <div className="inline-flex items-center rounded-md border bg-card p-xs">
+                {(['day', 'week', 'month'] as CalendarView[]).map((v) => (
+                  <Button
+                    key={v}
+                    variant={view === v ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setView(v)}
+                  >
+                    {VIEW_LABELS[v]}
+                  </Button>
+                ))}
+              </div>
             </div>
 
-            {/* Search & Filters */}
-            <div className="flex items-center gap-2 ml-auto">
-              <div className="relative">
+            {/* Right side: filters */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-md w-full lg:w-auto lg:ml-auto">
+              {/* Search */}
+              <div className="relative w-full sm:w-[280px]">
+                <label htmlFor="appointments-search" className="sr-only">
+                  Поиск записей
+                </label>
                 <Input
+                  id="appointments-search"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Поиск записей..."
-                  className="w-48 h-8 rounded-xl text-sm pl-8"
+                  placeholder="Поиск по клиенту/авто/мастеру..."
+                  className="pl-[36px]"
                 />
-                <Search className="w-4 h-4 absolute left-2.5 top-2 text-muted-foreground" />
+                <Search className="w-4 h-4 absolute left-md top-1/2 -translate-y-1/2 text-muted-foreground" />
               </div>
-              <div className="relative">
+
+              {/* Status */}
+              <div className="relative w-full sm:w-[220px]">
+                <label htmlFor="appointments-status" className="sr-only">
+                  Статус
+                </label>
                 <select
+                  id="appointments-status"
                   value={status}
                   onChange={(e) => setStatus(e.target.value as AppointmentStatus | '')}
-                  className="h-8 rounded-xl border border-border/50 bg-background text-sm px-3 pr-8 appearance-none"
+                  className={cn(
+                    'h-10 w-full rounded-md border border-input bg-background text-sm px-md pr-[36px]',
+                    'text-foreground hover:border-border/80'
+                  )}
                 >
                   <option value="">Все статусы</option>
                   {(Object.keys(APPOINTMENT_STATUS_LABELS) as AppointmentStatus[]).map((s) => (
@@ -588,62 +578,85 @@ export default function AppointmentsPage() {
                     </option>
                   ))}
                 </select>
-                <Filter className="w-3 h-3 absolute right-2.5 top-2.5 text-muted-foreground pointer-events-none" />
+                <Filter className="w-4 h-4 absolute right-md top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               </div>
-              <div className="w-56">
+
+              {/* Mechanic */}
+              <div className="w-full sm:w-[260px]">
                 <MechanicSelect value={mechanic} onChange={setMechanic} placeholder="Фильтр: мастер" />
+              </div>
+
+              {/* 24h toggle */}
+              <div className="flex items-center justify-between sm:justify-start gap-sm rounded-md border bg-card px-md h-10 w-full sm:w-auto">
+                <span className="text-sm text-muted-foreground whitespace-nowrap">Все 24 часа</span>
+                <Switch checked={showAllHours} onCheckedChange={updateAllHours} />
               </div>
             </div>
           </PageFiltersRow>
         </PageFiltersCard>
 
-        {/* Calendar Grid */}
-        <Card className="p-0 glass border-border/30 rounded-3xl surface-glow overflow-hidden">
-          {loading ? (
-            <div className="p-6 text-center">
-              <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-2" />
-              <span className="text-muted-foreground">Загрузка календаря...</span>
+        {!hasAnySchedule && !showAllHours && (
+          <Card className="p-md">
+            <div className="flex items-start gap-sm text-sm">
+              <div className="mt-[2px] p-xs rounded-md border bg-status-pending/10 text-status-pending border-status-pending/20">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="font-medium text-foreground">Расписание не задано</div>
+                <div className="text-muted-foreground mt-xs">
+                  Показаны дефолтные бизнес‑часы ({getEnvDefaultRange().min}:00–{getEnvDefaultRange().max}:00).
+                  Создание записи не блокируется — это рекомендация.
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="p-6">
-              {view === 'month' && <MonthView 
+          </Card>
+        )}
+
+        <PageContentCard loading={loading} error={error} onRetry={loadAppointments} className="overflow-hidden">
+          <div className="p-xl">
+            {view === 'month' && (
+              <MonthView
                 currentDate={currentDate}
                 appointments={filteredAppointments}
                 onSlotClick={handleSlotClick}
                 getSlotStatus={getSlotStatus}
-                statusColors={statusColors}
-              />}
-              
-              {view === 'week' && <WeekView 
+                statusColors={slotStatusClasses}
+              />
+            )}
+
+            {view === 'week' && (
+              <WeekView
                 currentDate={currentDate}
                 appointments={filteredAppointments}
                 onSlotClick={handleSlotClick}
                 getSlotStatus={getSlotStatus}
-                statusColors={statusColors}
+                statusColors={slotStatusClasses}
                 timeSlots={timeSlots}
                 isWorkingHour={isWorkingHour}
                 nonWorkingClass={nonWorkingClass}
                 isTodayCurrent={isTodayCurrent}
                 currentHour={currentHour}
                 nowSlotClass={nowSlotClass}
-              />}
-              
-              {view === 'day' && <DayView 
+              />
+            )}
+
+            {view === 'day' && (
+              <DayView
                 currentDate={currentDate}
                 appointments={filteredAppointments}
                 onSlotClick={handleSlotClick}
                 getSlotStatus={getSlotStatus}
-                statusColors={statusColors}
+                statusColors={slotStatusClasses}
                 timeSlots={timeSlots}
                 isWorkingHour={isWorkingHour}
                 nonWorkingClass={nonWorkingClass}
                 isTodayCurrent={isTodayCurrent}
                 currentHour={currentHour}
                 nowSlotClass={nowSlotClass}
-              />}
-            </div>
-          )}
-        </Card>
+              />
+            )}
+          </div>
+        </PageContentCard>
       </div>
 
       <AppointmentCreateDialog
@@ -665,12 +678,12 @@ type MonthDay = {
 };
 
 // Month View Component
-function MonthView({ 
-  currentDate, 
-  appointments, 
-  onSlotClick, 
-  getSlotStatus, 
-  statusColors 
+function MonthView({
+  currentDate,
+  appointments,
+  onSlotClick,
+  getSlotStatus,
+  statusColors,
 }: {
   currentDate: Date;
   appointments: Appointment[];
@@ -680,7 +693,7 @@ function MonthView({
 }) {
   const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
   const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-  
+
   const startDate = new Date(firstDay);
   const dayOfWeek = startDate.getDay();
   const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -693,18 +706,18 @@ function MonthView({
     const days: MonthDay[] = [];
     for (let day = 0; day < 7; day++) {
       const date = new Date(currentWeekDate);
-      const dayAppointments = appointments.filter(apt => {
+      const dayAppointments = appointments.filter((apt) => {
         const aptDate = new Date(apt.startTime).toDateString();
         return aptDate === date.toDateString();
       });
-      
+
       days.push({
         date: new Date(date),
         appointments: dayAppointments,
         isCurrentMonth: date.getMonth() === currentDate.getMonth(),
         isToday: date.toDateString() === new Date().toDateString(),
       });
-      
+
       currentWeekDate.setDate(currentWeekDate.getDate() + 1);
     }
     weeks.push(days);
@@ -714,60 +727,56 @@ function MonthView({
   const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-7 gap-2 mb-4">
-        {weekdays.map(day => (
-          <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
+    <div className="space-y-md">
+      <div className="grid grid-cols-7 gap-sm">
+        {weekdays.map((day) => (
+          <div key={day} className="text-center text-xs font-medium text-muted-foreground py-sm">
             {day}
           </div>
         ))}
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-sm">
         {weeks.map((week, weekIndex) => (
-          <div key={weekIndex} className="grid grid-cols-7 gap-2">
+          <div key={weekIndex} className="grid grid-cols-7 gap-sm">
             {week.map(({ date, appointments: dayAppointments, isCurrentMonth, isToday }) => {
               const status = getSlotStatus(date);
               return (
                 <div
                   key={date.toISOString()}
                   className={cn(
-                    "min-h-[80px] p-2 rounded-2xl border transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:shadow-glass",
+                    'min-h-[88px] p-sm rounded-md border cursor-pointer transition-colors',
                     statusColors[status],
-                    !isCurrentMonth && "opacity-50",
-                    isToday && "ring-2 ring-primary/50"
+                    !isCurrentMonth && 'opacity-50',
+                    isToday && 'ring-2 ring-primary/50'
                   )}
                   onClick={onSlotClick}
                 >
-                  <div className={cn(
-                    "text-sm font-medium mb-1",
-                    isToday && "text-primary font-bold"
-                  )}>
-                    {date.getDate()}
-                  </div>
-                  
-                  <div className="space-y-1">
+                  <div className={cn('text-sm font-medium mb-xs', isToday && 'text-primary')}>{date.getDate()}</div>
+
+                  <div className="space-y-xs">
                     {dayAppointments.slice(0, 2).map((apt: Appointment) => (
                       <Link
                         key={apt.id}
                         href={`/dashboard/appointments/${apt.id}`}
-                        className="block text-xs p-1 rounded bg-white/60 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 transition-colors"
+                        className={cn(
+                          'block text-xs rounded-md border border-border/50 bg-surface-2 px-sm py-xs',
+                          'hover:bg-surface-1 transition-colors'
+                        )}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="font-medium truncate">{apt.customerName}</div>
-                        <div className="text-muted-foreground truncate">
-                          {new Date(apt.startTime).toLocaleTimeString('ru-RU', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
+                        <div className="font-medium truncate text-foreground">{apt.customerName}</div>
+                        <div className="text-muted-foreground truncate mt-xs">
+                          {new Date(apt.startTime).toLocaleTimeString('ru-RU', {
+                            hour: '2-digit',
+                            minute: '2-digit',
                           })}
                         </div>
                       </Link>
                     ))}
-                    
+
                     {dayAppointments.length > 2 && (
-                      <div className="text-xs text-muted-foreground text-center">
-                        +{dayAppointments.length - 2} еще
-                      </div>
+                      <div className="text-xs text-muted-foreground text-center">+{dayAppointments.length - 2} еще</div>
                     )}
                   </div>
                 </div>
@@ -781,12 +790,12 @@ function MonthView({
 }
 
 // Week View Component
-function WeekView({ 
-  currentDate, 
-  appointments, 
-  onSlotClick, 
-  getSlotStatus, 
-  statusColors, 
+function WeekView({
+  currentDate,
+  appointments,
+  onSlotClick,
+  getSlotStatus,
+  statusColors,
   timeSlots,
   isWorkingHour,
   nonWorkingClass,
@@ -821,39 +830,40 @@ function WeekView({
   const todayStr = new Date().toDateString();
 
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-8 gap-2 mb-4">
-        <div className="text-sm font-medium text-muted-foreground py-2">Время</div>
+    <div className="space-y-md">
+      <div className="grid grid-cols-8 gap-sm">
+        <div className="text-xs font-medium text-muted-foreground py-sm">Время</div>
         {weekDates.map((date, index) => (
           <div key={date.toISOString()} className="text-center">
-            <div className="text-sm font-medium text-muted-foreground">{weekdays[index]}</div>
-            <div className={cn(
-              "text-lg font-bold",
-              date.toDateString() === todayStr && "text-primary"
-            )}>
+            <div className="text-xs font-medium text-muted-foreground">{weekdays[index]}</div>
+            <div className={cn('text-base font-semibold', date.toDateString() === todayStr && 'text-primary')}>
               {date.getDate()}
             </div>
           </div>
         ))}
       </div>
 
-      <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
-        {timeSlots.map(timeSlot => {
+      <div className="space-y-xs max-h-[600px] overflow-y-auto pr-xs">
+        {timeSlots.map((timeSlot) => {
           const slotHour = parseInt(timeSlot.split(':')[0], 10);
+
           return (
-            <div key={timeSlot} className="grid grid-cols-8 gap-2">
-              <div className={cn(
-                "text-sm text-muted-foreground py-2 font-mono rounded-md px-1",
-                isTodayCurrent && slotHour === currentHour && nowSlotClass
-              )}>
+            <div key={timeSlot} className="grid grid-cols-8 gap-sm">
+              <div
+                className={cn(
+                  'text-xs text-muted-foreground py-sm font-mono rounded-md px-sm border',
+                  isTodayCurrent && slotHour === currentHour && nowSlotClass
+                )}
+              >
                 {timeSlot}
               </div>
-              {weekDates.map(date => {
+
+              {weekDates.map((date) => {
                 const status = getSlotStatus(date, timeSlot);
                 const working = isWorkingHour(date, slotHour);
                 const isNow = date.toDateString() === todayStr && slotHour === currentHour;
 
-                const slotAppointments = appointments.filter(apt => {
+                const slotAppointments = appointments.filter((apt) => {
                   const aptStart = new Date(apt.startTime);
                   const aptEnd = new Date(apt.endTime);
                   const slotStart = new Date(date);
@@ -867,22 +877,29 @@ function WeekView({
                   <div
                     key={`${date.toISOString()}-${timeSlot}`}
                     className={cn(
-                      "min-h-[40px] p-1 rounded-xl border cursor-pointer transition-all duration-300 hover:scale-[1.02]",
+                      'min-h-10 p-xs rounded-md border cursor-pointer transition-colors',
                       statusColors[status],
                       !working && nonWorkingClass,
                       isNow && nowSlotClass
                     )}
                     onClick={onSlotClick}
-                    title={!working ? 'Вне рабочего времени (рекомендация). Создание записи не блокируется.' : undefined}
+                    title={
+                      !working
+                        ? 'Вне рабочего времени (рекомендация). Создание записи не блокируется.'
+                        : undefined
+                    }
                   >
-                    {slotAppointments.map(apt => (
+                    {slotAppointments.map((apt) => (
                       <Link
                         key={apt.id}
                         href={`/dashboard/appointments/${apt.id}`}
-                        className="block text-xs p-1 rounded bg-white/60 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 transition-colors"
+                        className={cn(
+                          'block text-xs rounded-md border border-border/50 bg-surface-2 px-sm py-xs',
+                          'hover:bg-surface-1 transition-colors'
+                        )}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="font-medium truncate">{apt.customerName}</div>
+                        <div className="font-medium truncate text-foreground">{apt.customerName}</div>
                       </Link>
                     ))}
                   </div>
@@ -897,12 +914,12 @@ function WeekView({
 }
 
 // Day View Component
-function DayView({ 
-  currentDate, 
-  appointments, 
-  onSlotClick, 
-  getSlotStatus, 
-  statusColors, 
+function DayView({
+  currentDate,
+  appointments,
+  onSlotClick,
+  getSlotStatus,
+  statusColors,
   timeSlots,
   isWorkingHour,
   nonWorkingClass,
@@ -924,30 +941,30 @@ function DayView({
 }) {
   const dayAppointments = useMemo(() => {
     const dateStr = currentDate.toDateString();
-    return appointments.filter(apt => new Date(apt.startTime).toDateString() === dateStr);
+    return appointments.filter((apt) => new Date(apt.startTime).toDateString() === dateStr);
   }, [appointments, currentDate]);
 
   return (
-    <div className="space-y-2">
-      <div className="text-center mb-6">
-        <div className="text-2xl font-bold">
-          {currentDate.toLocaleDateString('ru-RU', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
+    <div className="space-y-md">
+      <div className="text-center">
+        <div className="text-xl font-semibold">
+          {currentDate.toLocaleDateString('ru-RU', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
           })}
         </div>
       </div>
 
-      <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
-        {timeSlots.map(timeSlot => {
+      <div className="space-y-xs max-h-[600px] overflow-y-auto pr-xs">
+        {timeSlots.map((timeSlot) => {
           const slotHour = parseInt(timeSlot.split(':')[0], 10);
           const status = getSlotStatus(currentDate, timeSlot);
           const working = isWorkingHour(currentDate, slotHour);
           const isNow = isTodayCurrent && slotHour === currentHour;
 
-          const slotAppointments = dayAppointments.filter(apt => {
+          const slotAppointments = dayAppointments.filter((apt) => {
             const aptStart = new Date(apt.startTime);
             const aptEnd = new Date(apt.endTime);
             const slotStart = new Date(currentDate);
@@ -961,7 +978,7 @@ function DayView({
             <div
               key={timeSlot}
               className={cn(
-                "flex items-center gap-4 min-h-[60px] p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:scale-[1.01] hover:shadow-glass",
+                'flex items-start gap-lg min-h-[60px] p-lg rounded-md border cursor-pointer transition-colors',
                 statusColors[status],
                 !working && nonWorkingClass,
                 isNow && nowSlotClass
@@ -969,31 +986,41 @@ function DayView({
               onClick={onSlotClick}
               title={!working ? 'Вне рабочего времени (рекомендация). Создание записи не блокируется.' : undefined}
             >
-              <div className="text-lg font-mono font-medium w-20">{timeSlot}</div>
-              <div className="flex-1 space-y-2">
+              <div className="text-sm font-mono font-medium w-20 pt-xs">{timeSlot}</div>
+
+              <div className="flex-1 space-y-sm min-w-0">
                 {slotAppointments.length === 0 ? (
-                  <div className="text-muted-foreground italic">Свободно</div>
+                  <div className="text-sm text-muted-foreground">Свободно</div>
                 ) : (
-                  slotAppointments.map(apt => (
+                  slotAppointments.map((apt) => (
                     <Link
                       key={apt.id}
                       href={`/dashboard/appointments/${apt.id}`}
-                      className="block p-3 rounded-xl bg-white/60 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 transition-colors"
+                      className={cn(
+                        'block p-md rounded-md border border-border/50 bg-surface-2',
+                        'hover:bg-surface-1 transition-colors'
+                      )}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{apt.customerName}</div>
-                          <div className="text-sm text-muted-foreground">{apt.vehicleInfo}</div>
-                          <div className="text-sm text-muted-foreground">{apt.mechanicName}</div>
+                      <div className="flex items-start justify-between gap-md">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-foreground truncate">{apt.customerName}</div>
+                          {apt.vehicleInfo && (
+                            <div className="text-xs text-muted-foreground truncate mt-xs">{apt.vehicleInfo}</div>
+                          )}
+                          {apt.mechanicName && (
+                            <div className="text-xs text-muted-foreground truncate mt-xs">{apt.mechanicName}</div>
+                          )}
                         </div>
-                        <div className="text-right">
+
+                        <div className="shrink-0 text-right">
                           <Badge variant="outline" className="text-xs">
                             {APPOINTMENT_STATUS_LABELS[apt.status]}
                           </Badge>
+
                           {apt.priority === 'URGENT' && (
-                            <Badge variant="destructive" className="text-xs ml-1">
-                              СРОЧНО
+                            <Badge variant="error" className="text-xs ml-xs">
+                              Срочно
                             </Badge>
                           )}
                         </div>

@@ -111,7 +111,10 @@ export const paymentMethodsAPI = {
   },
 
   async testIntegration(id: string): Promise<TestIntegrationResponse> {
-    return apiRequest<TestIntegrationResponse>(`/payment-methods/${id}/test-integration`, { method: 'POST' });
+    return apiRequest<TestIntegrationResponse>(`/payment-methods/${id}/test-integration`, {
+      method: "POST",
+      json: {}, // важно: некоторым бэкам нужен body, иначе 400
+    })
   },
 
   async calculateFee(id: string, amount: number): Promise<CalculateFeeResponse> {

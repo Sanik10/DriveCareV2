@@ -4,6 +4,7 @@ import { ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from './roles.guard';
 import { CompanyOwnershipGuard } from './company-ownership.guard';
+import { JwtAuthGuard } from '../../modules/auth/guards/jwt-auth.guard';
 
 /**
  * Композитный декоратор, объединяющий все необходимые Guards для безопасности:
@@ -19,6 +20,6 @@ import { CompanyOwnershipGuard } from './company-ownership.guard';
  */
 export const AuthWithOwnership = () =>
   applyDecorators(
-    UseGuards(AuthGuard('jwt'), RolesGuard, CompanyOwnershipGuard),
+    UseGuards(JwtAuthGuard, RolesGuard, CompanyOwnershipGuard),
     ApiBearerAuth('JWT-auth'),
   );

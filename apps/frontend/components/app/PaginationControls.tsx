@@ -1,4 +1,4 @@
-// components/app/PaginationControls.tsx
+// path: apps/frontend/components/app/PaginationControls.tsx
 import { Button } from '@/components/ui/button';
 
 interface PaginationControlsProps {
@@ -21,25 +21,30 @@ export function PaginationControls({
   if (totalPages <= 1) return null;
 
   return (
-    <div className="flex items-center justify-between">
+    // Контролы пагинации обычно находятся внизу таблицы/списка. Отступы py-md.
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-md py-md mt-sm border-t border-border/50">
       <div className="text-sm text-muted-foreground">
-        Показано: {showing} из {total} {itemLabel}
+        Показано: <span className="font-medium text-foreground">{showing}</span> из <span className="font-medium text-foreground">{total}</span> {itemLabel}
       </div>
-      <div className="flex items-center gap-2">
+      
+      <div className="flex items-center gap-sm">
         <Button
-          variant="outline"
-          className="rounded-2xl btn-outline-fixed"
+          variant="secondary"
+          size="sm"
           disabled={page <= 1}
           onClick={() => onPageChange(Math.max(1, page - 1))}
         >
           Назад
         </Button>
-        <span className="text-sm px-3 py-1 rounded-xl bg-surface-1/60">
+        
+        {/* Строгий счетчик страниц без лишних фонов */}
+        <div className="text-sm font-medium text-foreground min-w-[3rem] text-center">
           {page} / {totalPages}
-        </span>
+        </div>
+        
         <Button
-          variant="outline"
-          className="rounded-2xl btn-outline-fixed"
+          variant="secondary"
+          size="sm"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
         >

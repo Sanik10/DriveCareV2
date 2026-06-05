@@ -22,6 +22,7 @@ import { VehiclesModule } from './modules/vehicles/vehicles.module';
 import { VehiclesCatalogueModule } from './modules/vehicles-catalogue/vehicles-catalogue.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { WorkSchedulesModule } from './modules/work-schedules/work-schedules.module';
+import { ServicesModule } from './modules/services/services.module';
 
 // 📦 Inventory & Orders
 import { InventoryModule } from './modules/inventory/inventory.module';
@@ -144,6 +145,7 @@ import { AppConfigService } from './config/config.service';
     VehiclesCatalogueModule,
     WorkSchedulesModule,
     AppointmentsModule,
+    ServicesModule,
     InventoryModule,
     OrdersModule,
     InvoicesModule,

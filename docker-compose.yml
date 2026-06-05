@@ -16,7 +16,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    # 🔥 RESOURCE LIMITS: Production security
     deploy:
       resources:
         limits:
@@ -39,7 +38,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    # 🔥 RESOURCE LIMITS: Production security
     deploy:
       resources:
         limits:

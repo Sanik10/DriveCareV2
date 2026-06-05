@@ -1,0 +1,274 @@
+POST	/appointments	create	owner,admin,manager
+GET	/appointments	findAll	(no Roles decorator)
+GET	/appointments/:id	findOne	(no Roles decorator)
+PATCH	/appointments/:id	update	owner,admin,manager
+DELETE	/appointments/:id	remove	owner,admin
+DELETE	/appointments/:id/hard	hardRemove	superadmin
+POST	/appointments/smart-schedule	smartSchedule	owner,admin,manager
+POST	/appointments/check-availability	checkAvailability	(no Roles decorator)
+POST	/appointments/:id/confirm	confirm	owner,admin,manager
+POST	/appointments/:id/complete	complete	owner,admin,manager,mechanic
+POST	/appointments/:id/cancel	cancel	owner,admin,manager
+POST	/appointments/:id/reschedule	reschedule	owner,admin,manager
+GET	/appointments/:id/tracking	getTracking	(no Roles decorator)
+GET	/appointments/customer/:customerId	findByCustomer	(no Roles decorator)
+GET	/appointments/mechanic/:mechanicId	findByMechanic	(no Roles decorator)
+GET	/appointments/stats/dashboard	getStats	owner,admin,manager
+POST	/appointments/:id/rating	addRating	(no Roles decorator)
+POST	/auth/login	login	(no Roles decorator)
+POST	/auth/register-company	🏢 Регистрация новой компании с владельцем	(no Roles decorator)
+POST	/auth/register-invite	📨 Регистрация по приглашению	(no Roles decorator)
+POST	/auth/refresh	Обновление access по refresh (HttpOnly cookie)	(no Roles decorator)
+POST	/auth/logout	Выход из системы (по cookie RT)	(no Roles decorator)
+POST	/auth/logout-device	Выход с конкретного устройства	(no Roles decorator)
+POST	/auth/logout-all-devices	Выход со всех устройств	(no Roles decorator)
+GET	/auth/sessions	Список активных сессий	(no Roles decorator)
+GET	/auth/me	Профиль текущего пользователя	(no Roles decorator)
+POST	/auth/2fa/setup	2FA: подготовка (секрет и otpauth URL)	(no Roles decorator)
+POST	/auth/2fa/enable	2FA: включить	(no Roles decorator)
+POST	/auth/2fa/disable	2FA: отключить	(no Roles decorator)
+GET	/auth/users	getUsers	company_admin,company_owner,superadmin,platform_admin
+POST	/companies	create	AUTH_CONSTANTS.SYSTEM_ROLES.SUPERADMIN,AUTH_CONSTANTS.SYSTEM_ROLES.COMPANY_OWNER
+GET	/companies	findAll	(no Roles decorator)
+GET	/companies/:id	findOne	(no Roles decorator)
+PATCH	/companies/:id	update	AUTH_CONSTANTS.SYSTEM_ROLES.SUPERADMIN,AUTH_CONSTANTS.SYSTEM_ROLES.COMPANY_OWNER
+DELETE	/companies/:id	remove	AUTH_CONSTANTS.SYSTEM_ROLES.SUPERADMIN
+PATCH	/companies/:id/status	setActive	AUTH_CONSTANTS.SYSTEM_ROLES.SUPERADMIN,AUTH_CONSTANTS.SYSTEM_ROLES.COMPANY_OWNER
+POST	/customers	Создание нового клиента	owner,admin,manager
+GET	/customers	Получение списка клиентов	(no Roles decorator)
+GET	/customers/:id	Получение клиента по ID	(no Roles decorator)
+PATCH	/customers/:id	Обновление данных клиента	owner,admin,manager
+DELETE	/customers/:id	Деактивация/мягкое удаление клиента	owner,admin
+DELETE	/customers/:id/hard	Полное удаление клиента (только суперадмин)	superadmin
+PATCH	/customers/:id/status	Изменение статуса активности клиента	owner,admin
+GET	/customers/stats/dashboard	Статистика по клиентам	owner,admin,manager
+GET	/customers/:id/export	Экспорт ПДн клиента (152‑ФЗ)	owner,admin,manager
+POST	/customers/:id/consent/revoke	Отзыв согласия субъекта ПДн	owner,admin,manager
+DELETE	/customers/:id/anonymize	Анонимизация ПДн клиента (152‑ФЗ)	owner,admin,manager
+GET	/inventory/alerts/analytics/stats	getStats	superadmin,company_owner,company_admin,inventory_manager
+GET	/inventory/alerts/critical/list	getCriticalAlerts	superadmin,company_owner,company_admin,inventory_manager
+GET	/inventory/alerts/settings/current	getSettings	superadmin,company_owner,company_admin,inventory_manager
+PATCH	/inventory/alerts/settings/update	updateSettings	company_owner,company_admin
+POST	/inventory/alerts/test/notification	sendTestNotification	company_owner,company_admin
+DELETE	/inventory/alerts/cleanup/expired	cleanupExpiredAlerts	company_owner,company_admin
+POST	/inventory/alerts/batch/dismiss	batchDismissAlerts	company_owner,company_admin,inventory_manager
+GET	/inventory/alerts	findAll	superadmin,company_owner,company_admin,inventory_manager
+GET	/inventory/alerts/:id	findOne	superadmin,company_owner,company_admin,inventory_manager
+DELETE	/inventory/alerts/:id/dismiss	dismissAlert	company_owner,company_admin,inventory_manager
+GET	/inventory	findAll	company_owner,company_admin,inventory_manager
+GET	/inventory/summary/overview	Сводная информация по складу	company_owner,company_admin,inventory_manager
+GET	/inventory/alerts/low-stock	Уведомления о низких остатках	company_owner,company_admin,inventory_manager
+GET	/inventory/availability/:partId	Проверка доступности запчасти	company_owner,company_admin,inventory_manager
+GET	/inventory/reports/turnover	Отчет по оборачиваемости склада	company_owner,company_admin,inventory_manager
+POST	/inventory/reserve	Резервирование запчастей	company_owner,company_admin,inventory_manager
+DELETE	/inventory/reserve/:reservationId	Освобождение резерва	company_owner,company_admin,inventory_manager
+GET	/inventory/:id	Получение позиции на складе	company_owner,company_admin,inventory_manager
+PATCH	/inventory/:id	Обновление информации о складе	company_owner,company_admin,inventory_manager
+GET	/parts/search/:query	search	company_owner,company_admin,inventory_manager
+GET	/parts/category/:categoryId	findByCategory	company_owner,company_admin,inventory_manager
+GET	/parts/popular/list	getPopular	company_owner,company_admin,inventory_manager
+GET	/parts/stats/dashboard	getStats	company_owner,company_admin,inventory_manager
+GET	/parts/analytics/profitability	analyzeProfitability	company_owner,company_admin
+POST	/parts	create	company_owner,company_admin,inventory_manager
+GET	/parts	findAll	company_owner,company_admin,inventory_manager
+GET	/parts/:id	findOne	company_owner,company_admin,inventory_manager
+PATCH	/parts/:id	update	company_owner,company_admin,inventory_manager
+DELETE	/parts/:id	remove	company_owner,company_admin
+PATCH	/parts/:id/status	setActive	company_owner,company_admin,inventory_manager
+PATCH	/parts/bulk/update	bulkUpdate	company_owner,company_admin
+GET	/stock-movements/analytics/summary	getMovementSummary	superadmin,company_owner,company_admin,inventory_manager
+GET	/stock-movements/part/:partId/history	getPartHistory	superadmin,company_owner,company_admin,inventory_manager
+GET	/stock-movements/analytics/data	getAnalyticsData	superadmin,company_owner,company_admin,inventory_manager
+GET	/stock-movements	findAll	superadmin,company_owner,company_admin,inventory_manager
+GET	/stock-movements/:id	findOne	superadmin,company_owner,company_admin,inventory_manager
+POST	/stock-movements	create	company_owner,company_admin,inventory_manager
+PATCH	/stock-movements/:id	update	company_owner,company_admin,inventory_manager
+POST	/stock-movements/bulk	createBulk	company_owner,company_admin,inventory_manager
+POST	/stock-movements/scan	createFromBarcodeScan	company_owner,company_admin,inventory_manager
+POST	/stock-movements/:id/reverse	reverseMovement	company_owner,company_admin,inventory_manager
+POST	/stock-movements/integrations/from-order	createFromOrder	company_owner,company_admin,inventory_manager
+POST	/stock-movements/integrations/from-delivery	createFromDelivery	company_owner,company_admin,inventory_manager
+GET	/suppliers/best-for-part/:partId	findBestSupplierForPart	superadmin,company_owner,company_admin,inventory_manager
+GET	/suppliers/top/performers	getTopPerformers	superadmin,company_owner,company_admin,inventory_manager
+POST	/suppliers/bulk	bulkOperations	company_owner,company_admin
+GET	/suppliers	findAll	superadmin,company_owner,company_admin,inventory_manager
+GET	/suppliers/:id	findOne	superadmin,company_owner,company_admin,inventory_manager
+POST	/suppliers	create	company_owner,company_admin,inventory_manager
+PATCH	/suppliers/:id	update	company_owner,company_admin,inventory_manager
+PATCH	/suppliers/:id/deactivate	deactivate	company_owner,company_admin
+POST	/suppliers/:id/rate	rateSupplier	company_owner,company_admin,inventory_manager
+GET	/suppliers/:id/price-comparison/:partId	comparePartPrices	superadmin,company_owner,company_admin,inventory_manager
+GET	/suppliers/:id/analytics	getSupplierAnalytics	superadmin,company_owner,company_admin,inventory_manager
+POST	/invoices	create	company_owner,company_admin,manager
+POST	/invoices/from-order	createFromOrder	company_owner,company_admin,manager
+GET	/invoices	findAll	company_owner,company_admin,manager,cashier
+GET	/invoices/:id	Получение счета по ID	company_owner,company_admin,manager,cashier
+PATCH	/invoices/:id	update	company_owner,company_admin,manager
+PATCH	/invoices/:id/status	updateStatus	company_owner,company_admin,manager
+DELETE	/invoices/:id	Отмена счета	company_owner,company_admin,manager
+GET	/invoices/stats/dashboard	getStatistics	company_owner,company_admin,manager
+GET	/invoices/overdue/report	Отчет по просроченным счетам	company_owner,company_admin,manager
+GET	/invoices/search/:query	Поиск счетов	company_owner,company_admin,manager,cashier
+GET	/invoices/select/options	getForSelect	company_owner,company_admin,manager,cashier
+POST	/orders/:orderId/parts	addPartToOrder	company_owner,company_admin,manager
+GET	/orders/:orderId/parts	getOrderParts	(no Roles decorator)
+PATCH	/orders/:orderId/parts/:partId	updateOrderPart	company_owner,company_admin,manager
+DELETE	/orders/:orderId/parts/:partId	removePartFromOrder	company_owner,company_admin,manager
+PATCH	/orders/:orderId/parts/:partId/customer-provided	toggleCustomerProvided	company_owner,company_admin,manager
+GET	/orders/:orderId/parts/:partId/availability	checkPartAvailability	(no Roles decorator)
+POST	/orders/:orderId/services	addServiceToOrder	company_owner,company_admin,manager
+GET	/orders/:orderId/services	getOrderServices	(no Roles decorator)
+PATCH	/orders/:orderId/services/:serviceId	Обновление услуги в заказе	company_owner,company_admin,manager
+DELETE	/orders/:orderId/services/:serviceId	Удаление услуги из заказа	company_owner,company_admin,manager
+PATCH	/orders/:orderId/services/:serviceId/status	Изменение статуса выполнения услуги	company_owner,company_admin,manager,mechanic,lead_mechanic
+PATCH	/orders/:orderId/services/:serviceId/mechanic	Назначение механика на услугу	company_owner,company_admin,manager,lead_mechanic
+PATCH	/orders/:orderId/services/:serviceId/start	Начать выполнение услуги	company_owner,company_admin,manager,mechanic,lead_mechanic
+PATCH	/orders/:orderId/services/:serviceId/complete	Завершить выполнение услуги	company_owner,company_admin,manager,mechanic,lead_mechanic
+POST	/orders	Создание нового заказа	company_owner,company_admin,manager
+GET	/orders	Получение списка заказов	...ORDERS_CONSTANTS.ROLES.CAN_VIEW_ALL,ORDERS_CONSTANTS.ROLES.CAN_VIEW_ALL
+GET	/orders/:id	Получение заказа по ID	(no Roles decorator)
+PATCH	/orders/:id	Обновление заказа	company_owner,company_admin,manager
+PATCH	/orders/:id/status	Изменение статуса заказа	company_owner,company_admin,manager,mechanic,lead_mechanic,service_advisor
+PATCH	/orders/:id/assign	Назначение исполнителя заказа	company_owner,company_admin,manager,lead_mechanic
+DELETE	/orders/:id	Отмена заказа (soft)	company_owner,company_admin,manager
+PATCH	/orders/:id/recalculate	Пересчет финансов заказа	company_owner,company_admin,manager
+GET	/payment-methods	Получить способы оплаты компании	(no Roles decorator)
+GET	/payment-methods/stats	Статистика способов оплаты	company_admin,manager,company_owner,superadmin
+GET	/payment-methods/search	Поиск способов оплаты	(no Roles decorator)
+GET	/payment-methods/quick	Активные способы оплаты для быстрого доступа	(no Roles decorator)
+GET	/payment-methods/for-select	Способы оплаты для select/dropdown	(no Roles decorator)
+GET	/payment-methods/type/:type	Получить способы оплаты по типу	(no Roles decorator)
+GET	/payment-methods/:id	Получить способ оплаты по ID	(no Roles decorator)
+GET	/payment-methods/:id/availability	Проверить доступность способа оплаты	(no Roles decorator)
+GET	/payment-methods/:id/limits	Получить лимиты способа оплаты	company_admin,manager,company_owner,superadmin
+POST	/payment-methods	Создать новый способ оплаты	company_owner,company_admin
+POST	/payment-methods/bulk-update	Массовое обновление способов оплаты	company_owner,company_admin
+POST	/payment-methods/:id/test-integration	Тестировать интеграцию способа оплаты	company_owner,company_admin,manager
+POST	/payment-methods/:id/calculate-fee	Рассчитать комиссию за платеж	(no Roles decorator)
+PATCH	/payment-methods/:id	Обновить способ оплаты	company_owner,company_admin
+POST	/payment-methods/:id/toggle-status	Переключить статус активности	company_owner,company_admin
+DELETE	/payment-methods/:id	Удалить способ оплаты (необратимо)	company_owner,company_admin
+POST	/payments/online/init	initOnlinePayment	...PAYMENTS_CONSTANTS.ROLES.CAN_RECORD_PAYMENT,PAYMENTS_CONSTANTS.ROLES.CAN_RECORD_PAYMENT
+POST	/payments	Записать новый платеж	...PAYMENTS_CONSTANTS.ROLES.CAN_RECORD_PAYMENT,PAYMENTS_CONSTANTS.ROLES.CAN_RECORD_PAYMENT
+GET	/payments	Получить список платежей	...PAYMENTS_CONSTANTS.ROLES.CAN_VIEW_PAYMENT_HISTORY,PAYMENTS_CONSTANTS.ROLES.CAN_VIEW_PAYMENT_HISTORY
+GET	/payments/:id	Получить детали платежа	...PAYMENTS_CONSTANTS.ROLES.CAN_VIEW_PAYMENT_HISTORY,PAYMENTS_CONSTANTS.ROLES.CAN_VIEW_PAYMENT_HISTORY
+PUT	/payments/:id	Обновить платеж	...PAYMENTS_CONSTANTS.ROLES.CAN_PROCESS_PAYMENT,PAYMENTS_CONSTANTS.ROLES.CAN_PROCESS_PAYMENT
+POST	/payments/:id/refund	Оформить возврат платежа	...PAYMENTS_CONSTANTS.ROLES.CAN_REFUND_PAYMENT,PAYMENTS_CONSTANTS.ROLES.CAN_REFUND_PAYMENT
+GET	/payments/analytics/statistics	Аналитика платежей	...PAYMENTS_CONSTANTS.ROLES.CAN_VIEW_FINANCIAL_REPORTS,PAYMENTS_CONSTANTS.ROLES.CAN_VIEW_FINANCIAL_REPORTS
+GET	/payments/analytics/balance	Финансовый баланс компании	...PAYMENTS_CONSTANTS.ROLES.CAN_VIEW_COMPANY_BALANCE,PAYMENTS_CONSTANTS.ROLES.CAN_VIEW_COMPANY_BALANCE
+DELETE	/payments/:id	🚨 Удалить платеж (ОПАСНО)	superadmin,company_owner,company_admin
+POST	/payments/system/process-overdue	🤖 Обработать просроченные платежи	superadmin,company_owner,company_admin
+POST	/payments/webhooks/yookassa	handleYooKassa	(no Roles decorator)
+POST	/payments/webhooks/tinkoff	handleTinkoff	(no Roles decorator)
+POST	/service-history	create	owner,admin,manager,mechanic
+GET	/service-history	findAll	(no Roles decorator)
+GET	/service-history/vehicle/:vehicleId	findByVehicle	(no Roles decorator)
+GET	/service-history/stats/dashboard	getStats	owner,admin,manager
+GET	/service-history/:id	findOne	(no Roles decorator)
+PATCH	/service-history/:id	update	owner,admin,manager,mechanic
+DELETE	/service-history/:id	remove	owner,admin
+DELETE	/service-history/:id/hard	hardRemove	superadmin
+GET	/services/categories	Получить список категорий услуг	(no Roles decorator)
+GET	/services/categories/stats	Получить статистику категорий	(no Roles decorator)
+GET	/services/categories/search	Поиск категорий по названию	(no Roles decorator)
+GET	/services/categories/for-select	Получить категории для dropdown/select компонентов	(no Roles decorator)
+GET	/services/categories/with-services-count	Получить категории с количеством услуг	(no Roles decorator)
+GET	/services/categories/grouped	Получить сгруппированные категории (глобальные/компании)	(no Roles decorator)
+GET	/services/categories/:id	Получить категорию по ID	(no Roles decorator)
+POST	/services/categories	Создать новую категорию	owner,admin,manager
+POST	/services/categories/initialize-global	Инициализировать глобальные категории	superadmin
+PATCH	/services/categories/:id	Обновить категорию	owner,admin,manager
+DELETE	/services/categories/:id	Удалить категорию	owner,admin
+GET	/services	Получить список услуг компании	(no Roles decorator)
+GET	/services/stats	Получить статистику услуг компании	(no Roles decorator)
+GET	/services/search	Поиск услуг по названию	(no Roles decorator)
+GET	/services/quick	Получить активные услуги для быстрого доступа	(no Roles decorator)
+GET	/services/for-select	Получить услуги для dropdown/select компонентов	(no Roles decorator)
+GET	/services/category/:categoryId	Получить услуги по категории	(no Roles decorator)
+GET	/services/price-range	Получить услуги в ценовом диапазоне	(no Roles decorator)
+GET	/services/quick-services	Получить быстрые услуги (до указанного времени)	(no Roles decorator)
+GET	/services/:id	Получить услугу по ID	(no Roles decorator)
+GET	/services/:id/availability	Проверить доступность услуги	(no Roles decorator)
+POST	/services	Создать новую услугу	owner,admin,manager
+POST	/services/bulk-update	Массовое обновление услуг	owner,admin
+PATCH	/services/:id	Обновить услугу	owner,admin,manager
+POST	/services/:id/toggle-status	Переключить статус активности услуги	owner,admin,manager
+DELETE	/services/:id	Удалить услугу	owner,admin
+POST	/subscription-billing	create	superadmin,platform_admin,company_owner,company_admin
+POST	/subscription-billing/payment	Оплата подписки	superadmin,platform_admin,company_owner,company_admin
+DELETE	/subscription-billing/:id	Отмена подписки	superadmin,platform_admin,company_owner,company_admin
+GET	/subscription-billing/active	Активная подписка компании	superadmin,platform_admin,company_owner,company_admin,manager,cashier
+GET	/subscription-billing/compliance/report	Compliance-отчёт по РФ требованиям	superadmin,platform_admin,company_owner,company_admin
+POST	/subscription-billing/webhooks/:provider	Webhook платежей	(no Roles decorator)
+POST	/subscriptions	create	superadmin,platform_admin,company_owner,company_admin
+GET	/subscriptions/company/:companyId	findByCompany	(no Roles decorator)
+GET	/subscriptions/company/:companyId/active	findActiveByCompany	(no Roles decorator)
+GET	/subscriptions/:id	Получение подписки по ID	superadmin,platform_admin,company_owner,company_admin,cashier,auditor
+PATCH	/subscriptions/:id	Обновление подписки	superadmin,platform_admin,company_owner
+PATCH	/subscriptions/:id/cancel	cancel	superadmin,platform_admin,company_owner
+POST	/subscriptions/check-expired	checkExpiredSubscriptions	superadmin,platform_admin,system_operator
+POST	/tariffs	create	superadmin,platform_admin
+GET	/tariffs	findAllPublic	(no Roles decorator)
+GET	/tariffs/admin	findAllAdmin	superadmin,platform_admin
+GET	/tariffs/active	Получение активных тарифов (публично)	(no Roles decorator)
+GET	/tariffs/popular	Получение популярных тарифов (публично)	(no Roles decorator)
+GET	/tariffs/compare	Сравнение тарифов (публично)	(no Roles decorator)
+GET	/tariffs/:id	Получение тарифа по ID (публично)	(no Roles decorator)
+PATCH	/tariffs/:id	Обновление тарифа	superadmin,platform_admin
+PATCH	/tariffs/:id/status	Изменение статуса тарифа	superadmin,platform_admin
+DELETE	/tariffs/:id	🚨 Удаление тарифа (платформенные роли)	superadmin,platform_admin
+POST	/users	createUser	company_admin,company_owner,superadmin
+GET	/users	getUsers	company_admin,company_owner,manager,superadmin
+GET	/users/roles	listAssignableRoles	company_owner,company_admin,platform_admin,superadmin
+POST	/users/invitations	createInvite	company_owner,company_admin,superadmin
+GET	/users/invitations	📬 Список приглашений компании	company_owner,company_admin
+GET	/users/':id([0-9a-fA-F-]{36}	getUserById	company_admin,company_owner,manager,superadmin
+GET	/users/':id([0-9a-fA-F-]{36}	listUserSessions	company_owner,company_admin,superadmin
+POST	/users/invitations/:id/resend	🔁 Повторно отправить приглашение	company_owner,company_admin
+DELETE	/users/invitations/:id	🗑️ Отозвать приглашение	company_owner,company_admin
+PATCH	/users/:id/profile	updateUserProfile	company_admin,company_owner,superadmin
+PATCH	/users/:id/role	updateUserRole	company_owner,superadmin
+PATCH	/users/:id/status	updateUserStatus	company_admin,company_owner,superadmin
+PATCH	/users/:id/password	resetUserPassword	company_owner,superadmin
+DELETE	/users/:id	deleteUser	company_owner,superadmin
+POST	/vehicles	create	company_owner,company_admin,manager
+GET	/vehicles	findAll	company_owner,company_admin,manager,mechanic,superadmin
+GET	/vehicles/public	findAllPublic	company_owner,company_admin,manager,mechanic,superadmin
+GET	/vehicles/customer/:customerId	findByCustomer	company_owner,company_admin,manager,mechanic,superadmin
+GET	/vehicles/stats/dashboard	getStats	company_owner,company_admin,manager,superadmin
+GET	/vehicles/public/:id	findOnePublic	company_owner,company_admin,manager,mechanic,superadmin
+GET	/vehicles/:id	findOne	company_owner,company_admin,manager,mechanic,superadmin
+PATCH	/vehicles/:id	update	company_owner,company_admin,manager
+PATCH	/vehicles/:id/mileage	updateMileage	company_owner,company_admin,manager,mechanic
+PATCH	/vehicles/:id/status	setActive	company_owner,company_admin
+DELETE	/vehicles/:id	remove	company_owner,company_admin
+DELETE	/vehicles/:id/hard	hardRemove	superadmin
+POST	/vehicles-catalogue/brands	Создание нового бренда	superadmin,platform_admin,company_owner,company_admin
+GET	/vehicles-catalogue/brands	Получение списка брендов (без кэширования для backoffice)	(no Roles decorator)
+PATCH	/vehicles-catalogue/brands/:id	Обновление бренда	superadmin,platform_admin
+PATCH	/vehicles-catalogue/brands/:id/verify	Подтвердить/снять подтверждение бренда	superadmin,platform_admin
+DELETE	/vehicles-catalogue/brands/:id	Удаление бренда (только суперадмин)	superadmin
+POST	/vehicles-catalogue/brands/:id/merge	Слияние бренда с другим брендом	superadmin,platform_admin
+POST	/vehicles-catalogue/models	Создание новой модели	superadmin,platform_admin,company_owner,company_admin
+GET	/vehicles-catalogue/models	Получение списка моделей (без кэширования для backoffice)	(no Roles decorator)
+PATCH	/vehicles-catalogue/models/:id	Обновление модели	superadmin,platform_admin
+PATCH	/vehicles-catalogue/models/:id/verify	Подтвердить/снять подтверждение модели	superadmin,platform_admin
+DELETE	/vehicles-catalogue/models/:id	Удаление модели (только суперадмин)	superadmin
+POST	/vehicles-catalogue/models/:id/merge	Слияние модели с другой моделью	superadmin,platform_admin
+POST	/vehicles-catalogue/types	Создание нового типа ТС	superadmin,platform_admin,company_owner,company_admin
+GET	/vehicles-catalogue/types	Получение списка типов ТС (без кэширования для backoffice)	(no Roles decorator)
+PATCH	/vehicles-catalogue/types/:id	Обновление типа ТС	superadmin,platform_admin
+PATCH	/vehicles-catalogue/types/:id/verify	Подтвердить/снять подтверждение типа ТС	superadmin,platform_admin
+DELETE	/vehicles-catalogue/types/:id	Удаление типа ТС (только суперадмин)	superadmin
+GET	/vehicles-catalogue/suggest	suggest	(no Roles decorator)
+GET	/vehicles-catalogue/external/brands	Внешние бренды (например, NHTSA)	superadmin,platform_admin
+GET	/vehicles-catalogue/external/models	Внешние модели по бренду (например, NHTSA)	superadmin,platform_admin
+POST	/vehicles-catalogue/import/external	Импорт брендов/моделей из внешнего источника	superadmin,platform_admin
+POST	/work-schedules	create	owner,admin,manager,company_owner,company_admin
+GET	/work-schedules	findAll	owner,admin,manager,mechanic,company_owner,company_admin
+GET	/work-schedules/:id	findOne	(no Roles decorator)
+PATCH	/work-schedules/:id	update	owner,admin,manager,company_owner,company_admin
+DELETE	/work-schedules/:id	remove	owner,admin,company_owner,company_admin
+POST	/work-schedules/exceptions	createException	owner,admin,manager,mechanic,company_owner,company_admin
+PATCH	/work-schedules/exceptions/:id/status	updateExceptionStatus	owner,admin,manager,company_owner,company_admin
+DELETE	/work-schedules/exceptions/:id	deleteException	owner,admin,company_owner,company_admin

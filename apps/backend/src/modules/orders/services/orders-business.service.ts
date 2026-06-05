@@ -191,10 +191,16 @@ export class OrdersBusinessService {
 
     const pricing = computeOrderTotals(order);
 
+    // 🔥 ЗАЩИТА ОТ NaN / undefined / Infinity
+    const safe = (val: any) => {
+      const n = Number(val);
+      return isFinite(n) ? n : 0;
+    };
+
     const updatedOrder = await this.ordersDataService.update(id, {
-      totalAmount: pricing.subtotal,
-      taxAmount: pricing.taxAmount,
-      finalAmount: pricing.finalAmount,
+      totalAmount: safe(pricing.subtotal),
+      taxAmount: safe(pricing.taxAmount),
+      finalAmount: safe(pricing.finalAmount),
       updatedBy: actorUserId,
     });
 
@@ -205,13 +211,13 @@ export class OrdersBusinessService {
       userId: actorUserId,
       metadata: {
         orderNumber: order.orderNumber,
-        servicesTotal: pricing.servicesTotal,
-        partsTotal: pricing.partsTotal,
-        subtotal: pricing.subtotal,
-        discountAmount: pricing.discountAmount,
-        taxAmount: pricing.taxAmount,
-        finalAmount: pricing.finalAmount,
-        taxRate: pricing.rates.taxRate,
+        servicesTotal: safe(pricing.servicesTotal),
+        partsTotal: safe(pricing.partsTotal),
+        subtotal: safe(pricing.subtotal),
+        discountAmount: safe(pricing.discountAmount),
+        taxAmount: safe(pricing.taxAmount),
+        finalAmount: safe(pricing.finalAmount),
+        taxRate: pricing.rates?.taxRate ?? 0,
       },
     });
 

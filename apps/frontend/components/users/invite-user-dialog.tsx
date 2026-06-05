@@ -1,42 +1,98 @@
 // path: apps/frontend/components/users/invite-user-dialog.tsx
-'use client';
+"use client"
 
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { Mail, UserPlus, AlertCircle, Copy, Check, Shield, Users } from 'lucide-react';
+import * as React from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
+import { UserPlus, Copy, Check, Shield } from "lucide-react"
 
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { usersAPI } from '@/lib/api/users';
-import { groupRolesByCategory } from '@/lib/utils/role-labels';
-import type { Role } from '@/lib/types/users';
-import { Kbd } from '@/components/ui/kbd';
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Kbd } from "@/components/ui/kbd"
+import { usersAPI } from "@/lib/api/users"
+import { groupRolesByCategory } from "@/lib/utils/role-labels"
+import type { Role } from "@/lib/types/users"
+import { cn } from "@/lib/utils"
 
 const inviteSchema = z.object({
-  email: z.string().email('Некорректный email').min(1, 'Email обязателен'),
-  roleId: z.string().uuid('Выберите роль'),
+  email: z.string().email("Некорректный email").min(1, "Email обязателен"),
+  roleId: z.string().uuid("Выберите роль"),
   expiresInDays: z.number().int().min(1).max(30).optional(),
-});
+})
 
-type InviteForm = z.infer<typeof inviteSchema>;
+type InviteForm = z.infer<typeof inviteSchema>
 
 interface InviteUserDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSuccess?: () => void;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSuccess?: () => void
+}
+
+function bestEffortError(e: unknown, fallback: string) {
+  try {
+    const parsed = JSON.parse((e as Error).message) as { message?: string; correlationId?: string }
+    const msg = parsed.correlationId
+      ? `${parsed.message || fallback} (corrId: ${parsed.correlationId})`
+      : parsed.message || fallback
+    return msg
+  } catch {
+    return (e as Error)?.message || fallback
+  }
+}
+
+/**
+ * Кэшируем inviteUrl локально, чтобы можно было копировать ссылку после закрытия модалки.
+ * Это не заменяет сервер (инвайт мог создать другой админ), но закрывает UX-проблему "не успел скопировать".
+ */
+const INVITES_CACHE_KEY = "drivecare_invite_urls_v1"
+type InviteUrlCacheItem = { id: string; inviteUrl: string; createdAt: string }
+
+function readInviteUrlCache(): InviteUrlCacheItem[] {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = window.localStorage.getItem(INVITES_CACHE_KEY)
+    const parsed = raw ? (JSON.parse(raw) as InviteUrlCacheItem[]) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeInviteUrlCache(items: InviteUrlCacheItem[]) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(INVITES_CACHE_KEY, JSON.stringify(items))
+  } catch {
+    // ignore
+  }
+}
+
+function upsertInviteUrlCache(item: InviteUrlCacheItem) {
+  const prev = readInviteUrlCache()
+
+  // cleanup: оставим только последние 50
+  const next = [item, ...prev.filter((x) => x.id !== item.id)].slice(0, 50)
+  writeInviteUrlCache(next)
 }
 
 export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDialogProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  
-  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
-  const [rolesLoading, setRolesLoading] = useState(false);
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const [inviteUrl, setInviteUrl] = React.useState<string | null>(null)
+  const [copied, setCopied] = React.useState(false)
+
+  const [availableRoles, setAvailableRoles] = React.useState<Role[]>([])
+  const [rolesLoading, setRolesLoading] = React.useState(false)
 
   const {
     register,
@@ -45,234 +101,242 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
     reset,
   } = useForm<InviteForm>({
     resolver: zodResolver(inviteSchema),
-    defaultValues: {
-      expiresInDays: 7,
-    },
-  });
+    defaultValues: { expiresInDays: 7 },
+  })
 
-  useEffect(() => {
-    if (open) {
-      loadAvailableRoles();
-    }
-  }, [open]);
+  // reset on close (как в customer-create-dialog)
+  React.useEffect(() => {
+    if (open) return
+    reset()
+    setError(null)
+    setInviteUrl(null)
+    setCopied(false)
+    setAvailableRoles([])
+    setRolesLoading(false)
+    setIsLoading(false)
+  }, [open, reset])
 
-  const loadAvailableRoles = async () => {
-    setRolesLoading(true);
-    setError(null);
-    try {
-      const roles = await usersAPI.listAssignableRoles();
-      setAvailableRoles(roles);
-    } catch (err) {
-      setError('Не удалось загрузить список ролей');
-      console.error('Failed to load roles:', err);
-    } finally {
-      setRolesLoading(false);
+  React.useEffect(() => {
+    if (!open) return
+
+    let cancelled = false
+    async function loadRoles() {
+      setRolesLoading(true)
+      setError(null)
+      try {
+        const roles = await usersAPI.listAssignableRoles()
+        if (!cancelled) setAvailableRoles(roles || [])
+      } catch (e) {
+        if (!cancelled) setError(bestEffortError(e, "Не удалось загрузить список ролей"))
+      } finally {
+        if (!cancelled) setRolesLoading(false)
+      }
     }
-  };
+
+    void loadRoles()
+    return () => {
+      cancelled = true
+    }
+  }, [open])
+
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!open) return
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "enter") {
+        e.preventDefault()
+        void handleSubmit(onSubmit)()
+      }
+    }
+
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [open, handleSubmit])
+
+  const groupedRoles = React.useMemo(() => groupRolesByCategory(availableRoles), [availableRoles])
 
   const onSubmit = async (data: InviteForm) => {
-    setIsLoading(true);
-    setError(null);
-    setInviteUrl(null);
+    setIsLoading(true)
+    setError(null)
+    setInviteUrl(null)
+    setCopied(false)
 
     try {
-      const result = await usersAPI.createInvite(data);
-      setInviteUrl(result.inviteUrl || '');
-      setTimeout(() => {
-        reset();
-        onSuccess?.();
-      }, 3000);
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Не удалось создать приглашение';
-      setError(errorMessage);
+      const result = await usersAPI.createInvite(data)
+
+      const url = result?.inviteUrl || null
+      setInviteUrl(url)
+
+      // сохраняем, чтобы можно было скопировать после закрытия модалки (через список приглашений)
+      if (result?.id && url) {
+        upsertInviteUrlCache({ id: result.id, inviteUrl: url, createdAt: new Date().toISOString() })
+      }
+
+      onSuccess?.()
+    } catch (e) {
+      setError(bestEffortError(e, "Не удалось создать приглашение"))
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   const handleCopyUrl = async () => {
-    if (!inviteUrl) return;
+    if (!inviteUrl) return
     try {
-      await navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
+      await navigator.clipboard?.writeText(inviteUrl).catch(() => {})
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // ignore
     }
-  };
-
-  const handleClose = () => {
-    reset();
-    setError(null);
-    setInviteUrl(null);
-    setCopied(false);
-    onOpenChange(false);
-  };
-
-  const groupedRoles = groupRolesByCategory(availableRoles);
+  }
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent glow className="max-w-xl">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-gradient-primary flex items-center justify-center text-white">
+          <div className="flex items-start gap-md min-w-0">
+            <div className="h-10 w-10 rounded-md bg-surface-2 border flex items-center justify-center text-muted-foreground shrink-0">
               <UserPlus className="h-5 w-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <DialogTitle>Пригласить сотрудника</DialogTitle>
-              <DialogDescription>
-                Создайте приглашение для нового сотрудника. Ссылка будет действительна в течение выбранного периода.
+              <DialogDescription className="mt-xs">
+                Создайте приглашение для нового сотрудника. Ссылку можно будет скопировать и позже — в списке приглашений.
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
         {inviteUrl ? (
-          <div className="space-y-4 mt-2">
-            <div className="flex items-center gap-3 p-4 rounded-2xl bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800">
-              <Check className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
-              <p className="text-sm text-green-800 dark:text-green-200 font-medium">
-                ✅ Приглашение успешно создано!
-              </p>
+          <div className="grid gap-lg">
+            <div className="rounded-md border border-status-active/30 bg-status-active/10 p-md text-sm text-foreground">
+              Приглашение создано. Скопируйте ссылку и отправьте сотруднику.
             </div>
 
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">Ссылка для приглашения</div>
-              <div className="flex gap-2">
-                <Input value={inviteUrl} readOnly className="font-mono text-xs" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={handleCopyUrl}
-                  className={`rounded-xl ${copied ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : ''}`}
-                >
-                  {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Отправьте эту ссылку сотруднику для регистрации в системе
-              </p>
-            </div>
+            <Input
+              id="invite-url"
+              label="Ссылка приглашения"
+              value={inviteUrl}
+              readOnly
+              className="font-mono text-xs"
+            />
+
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={onOpenChange.bind(null, false)}>
+                Закрыть
+              </Button>
+
+              <Button type="button" variant="primary" onClick={handleCopyUrl}>
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? "Скопировано" : "Скопировать ссылку"}
+              </Button>
+            </DialogFooter>
           </div>
         ) : (
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
+          <form onSubmit={handleSubmit(onSubmit)} className="grid gap-lg">
             {error && (
-              <div className="flex items-center gap-3 p-3 rounded-2xl bg-destructive/10 border border-destructive/20">
-                <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0" />
-                <p className="text-sm text-destructive">{error}</p>
+              <div className="rounded-md border border-status-error/30 bg-status-error/10 p-md text-sm text-status-error">
+                {error}
               </div>
             )}
 
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">
-                Email сотрудника <span className="text-rose-500">*</span>
-              </div>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                <Input
-                  {...register('email')}
-                  type="email"
-                  placeholder="employee@example.com"
-                  className="pl-10 h-12"
-                  disabled={isLoading || rolesLoading}
-                />
-              </div>
-              {errors.email && <p className="text-sm text-destructive mt-1">{errors.email.message}</p>}
-            </div>
+            <Input
+              id="invite-email"
+              label="Email сотрудника"
+              required
+              type="email"
+              placeholder="employee@example.com"
+              disabled={isLoading || rolesLoading}
+              error={errors.email?.message}
+              {...register("email")}
+            />
 
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">
-                Роль <span className="text-rose-500">*</span>
-              </div>
-              
+            {/* Select по тому же паттерну, что Input: label -> control -> error */}
+            <div className="w-full flex flex-col gap-xs min-w-0">
+              <label
+                htmlFor="invite-role"
+                className={cn("text-sm font-medium leading-none text-foreground")}
+              >
+                Роль{" "}
+                <span className="text-destructive" aria-hidden="true">
+                  *
+                </span>
+              </label>
+
               {rolesLoading ? (
-                <div className="flex items-center gap-2 p-3 rounded-2xl border border-border bg-muted/50">
-                  <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                  <span className="text-sm text-muted-foreground">Загрузка доступных ролей...</span>
-                </div>
-              ) : availableRoles.length === 0 ? (
-                <div className="flex items-center gap-3 p-3 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10">
-                  <Shield className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
-                    Нет доступных ролей для назначения
-                  </p>
+                <div className="h-10 rounded-md border border-input bg-background px-md text-sm text-muted-foreground flex items-center">
+                  Загрузка ролей…
                 </div>
               ) : (
-                <>
-                  <div className="relative">
-                    <Users className="absolute left-3 top-3 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
-                    <select
-                      {...register('roleId')}
-                      className="w-full pl-10 pr-4 py-3 h-12 rounded-2xl border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all appearance-none cursor-pointer hover:border-border"
-                      disabled={isLoading}
-                    >
-                      <option value="">Выберите роль...</option>
-                      {groupedRoles.map((group) => (
-                        <optgroup key={group.category} label={group.label}>
-                          {group.roles.map((role) => (
-                            <option key={role.id} value={role.id}>
-                              {role.label}
-                            </option>
-                          ))}
-                        </optgroup>
+                <select
+                  id="invite-role"
+                  {...register("roleId")}
+                  disabled={isLoading || availableRoles.length === 0}
+                  aria-invalid={!!errors.roleId}
+                  className={cn(
+                    "h-10 w-full min-w-0 rounded-md border border-input bg-background px-md text-sm",
+                    "text-foreground hover:border-border/80",
+                    errors.roleId && "border-destructive"
+                  )}
+                >
+                  <option value="">Выберите роль…</option>
+                  {groupedRoles.map((group) => (
+                    <optgroup key={group.category} label={group.label}>
+                      {group.roles.map((role) => (
+                        <option key={role.id} value={role.id}>
+                          {role.label}
+                        </option>
                       ))}
-                    </select>
-                  </div>
-                  
-                  <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1">
-                    <Shield className="w-3 h-3" />
-                    Отображаются только роли, которые вы можете назначать
-                  </p>
-                </>
+                    </optgroup>
+                  ))}
+                </select>
               )}
-              
-              {errors.roleId && <p className="text-sm text-destructive mt-1">{errors.roleId.message}</p>}
-            </div>
 
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">Срок действия приглашения (дней)</div>
-              <Input
-                {...register('expiresInDays', { valueAsNumber: true })}
-                type="number"
-                min={1}
-                max={30}
-                defaultValue={7}
-                disabled={isLoading || rolesLoading}
-                className="h-12"
-              />
-              {errors.expiresInDays && (
-                <p className="text-sm text-destructive mt-1">{errors.expiresInDays.message}</p>
-              )}
-            </div>
-
-            <DialogFooter className="mt-4">
-              <div className="hidden sm:flex items-center text-xs text-muted-foreground mr-auto">
-                <span className="mr-2">Горячие клавиши:</span>
-                <Kbd>Esc</Kbd>
-                <span className="ml-1">— Закрыть</span>
+              <div className="text-xs text-muted-foreground inline-flex items-center gap-xs">
+                <Shield className="w-3.5 h-3.5" />
+                Отображаются только роли, которые вы можете назначать.
               </div>
-              <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
+
+              {errors.roleId?.message && <p className="text-xs text-destructive">{errors.roleId.message}</p>}
+              {!rolesLoading && availableRoles.length === 0 && (
+                <p className="text-xs text-status-error">Нет доступных ролей для назначения.</p>
+              )}
+            </div>
+
+            <Input
+              id="invite-exp"
+              label="Срок действия (дней)"
+              type="number"
+              min={1}
+              max={30}
+              disabled={isLoading || rolesLoading}
+              error={errors.expiresInDays?.message}
+              {...register("expiresInDays", { valueAsNumber: true })}
+            />
+
+            <DialogFooter>
+              <div className="hidden lg:flex items-center text-xs text-muted-foreground mr-auto gap-sm min-w-0">
+                <Kbd>Esc</Kbd>
+                <span className="text-muted-foreground/60">·</span>
+                <Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd>
+              </div>
+
+              <Button type="button" size="sm" variant="secondary" onClick={() => onOpenChange(false)} disabled={isLoading}>
                 Отмена
               </Button>
-              <Button type="submit" disabled={isLoading || rolesLoading || availableRoles.length === 0}>
-                {isLoading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                    Создание...
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    Создать приглашение
-                  </>
-                )}
+
+              <Button
+                type="submit"
+                size="sm"
+                variant="primary"
+                disabled={isLoading || rolesLoading || availableRoles.length === 0}
+              >
+                {isLoading ? "Создание…" : "Создать приглашение"}
               </Button>
             </DialogFooter>
           </form>
         )}
       </DialogContent>
     </Dialog>
-  );
+  )
 }

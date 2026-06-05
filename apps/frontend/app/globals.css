@@ -4,404 +4,80 @@
 @tailwind utilities;
 
 :root {
-  /* Light theme colors */
-  --background: 216 18% 97%;
-  --foreground: 222 84% 5%;
-  --card: 0 0% 100%;
-  --card-foreground: 222 84% 5%;
+  /* СВЕТЛАЯ ТЕМА (Кристально чистая, строгая) */
+  --background: 0 0% 98%; /* Очень светло-серый фон */
+  --foreground: 240 10% 10%; /* Почти черный текст для контраста */
+  --card: 0 0% 100%; /* Чисто белые карточки */
+  --card-foreground: 240 10% 10%;
   --surface-1: 0 0% 100%;
-  --surface-2: 210 17% 93%;
-  --primary: 168 100% 42%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 199 89% 48%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 210 40% 93%;
-  --muted-foreground: 215 16% 34%;
-  --accent: 245 58% 68%;
-  --accent-foreground: 222 84% 5%;
+  --surface-2: 240 5% 96%; /* Легкая подложка (например, для hover) */
+  --primary: 168 100% 38%; /* Чуть более темный неоновый для читаемости на светлом */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 5% 96%; /* Вторичные элементы серые, не отвлекают */
+  --secondary-foreground: 240 10% 10%;
+  --muted: 240 5% 92%;
+  --muted-foreground: 240 5% 45%;
+  --accent: 240 5% 96%;
+  --accent-foreground: 240 10% 10%;
   --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 168 100% 42%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 240 6% 90%; /* Тонкие аккуратные рамки */
+  --input: 240 6% 90%;
+  --ring: 168 100% 38%;
+
+  /* Помогает Safari/браузеру корректно выбирать нативные цвета для контролов */
+  color-scheme: light;
 }
 
 .dark {
-  /* Dark theme colors matching NeoCarbon v0.3 */
-  --background: 222 47% 4%;  /* #0B0F13 */
-  --foreground: 210 40% 94%; /* #E7ECF3 */
-  --card: 215 28% 9%;        /* #0F141A */
-  --card-foreground: 210 40% 94%;
-  --surface-1: 215 28% 9%;   /* #0F141A */
-  --surface-2: 215 25% 15%;  /* #151E27 */
-  --primary: 168 100% 45%;   /* #00D4AA */
+  /* ТЕМНАЯ ТЕМА (Глубокая, без лишнего "мыла") */
+  --background: 222 20% 6%; /* Глубокий, почти черный фон */
+  --foreground: 0 0% 95%; /* Не чисто белый, чтобы не резало глаза */
+  --card: 222 20% 9%; /* Карточки чуть светлее фона */
+  --card-foreground: 0 0% 95%;
+  --surface-1: 222 20% 9%;
+  --surface-2: 222 20% 14%; /* Подложки и hover */
+  --primary: 168 100% 45%; /* Неоновый акцент */
   --primary-foreground: 222 47% 4%;
-  --secondary: 199 89% 48%;  /* #0EA5E9 */
-  --secondary-foreground: 222 47% 4%;
-  --muted: 217 32% 12%;
-  --muted-foreground: 215 20% 65%; /* #A6B0BF */
-  --accent: 245 58% 68%;     /* #6366F1 */
-  --accent-foreground: 210 40% 94%;
+  --secondary: 222 20% 14%;
+  --secondary-foreground: 0 0% 95%;
+  --muted: 222 20% 14%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 222 20% 14%;
+  --accent-foreground: 0 0% 95%;
   --destructive: 0 63% 51%;
-  --destructive-foreground: 210 40% 94%;
-  --border: 217 32% 20%;     /* #1F2933 */
-  --input: 217 32% 20%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 222 20% 16%; /* Заметный, но не кричащий border */
+  --input: 222 20% 16%;
   --ring: 168 100% 45%;
+
+  color-scheme: dark;
 }
 
-* {
-  border-color: hsl(var(--border));
-}
-
-body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-@layer utilities {
-  /* Background gradients */
-  .bg-gradient-surface {
-    background: radial-gradient(ellipse at center, hsla(var(--primary), 0.03) 0%, transparent 50%);
-  }
-  
-  .bg-gradient-primary {
-    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 50%, hsl(var(--accent)) 100%);
-  }
-  
-  .bg-gradient-primary-subtle {
-    background: linear-gradient(135deg, hsla(var(--primary), 0.1) 0%, hsla(var(--secondary), 0.05) 50%, hsla(var(--accent), 0.1) 100%);
-  }
-
-  /* Glass effects */
-  .glass {
-    backdrop-filter: blur(12px);
-    background: hsla(var(--card), 0.7);
-    border: 1px solid hsla(var(--border), 0.5);
-  }
-  
-  .glass-subtle {
-    backdrop-filter: blur(8px);
-    background: hsla(var(--card), 0.5);
-    border: 1px solid hsla(var(--border), 0.3);
-  }
-
-  /* Enhanced shadows */
-  .shadow-glass {
-    box-shadow: 
-      0 4px 6px -1px hsla(var(--foreground), 0.1),
-      0 2px 4px -1px hsla(var(--foreground), 0.06),
-      0 0 0 1px hsla(var(--primary), 0.05);
-  }
-  
-  .shadow-glass-lg {
-    box-shadow: 
-      0 10px 15px -3px hsla(var(--foreground), 0.1),
-      0 4px 6px -2px hsla(var(--foreground), 0.05),
-      0 0 0 1px hsla(var(--primary), 0.1);
-  }
-
-  /* Surface glow */
-  .surface-glow {
-    position: relative;
-  }
-  
-  .surface-glow::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: radial-gradient(circle at center, hsla(var(--primary), 0.06) 0%, transparent 70%);
-    pointer-events: none;
-  }
-
-  /* Smooth Flowing Color Orbs - только зеленый-синий-фиолетовый */
-  .flowing-orb-1 {
-    background: radial-gradient(circle, 
-      rgba(0, 212, 170, 0.1) 0%, 
-      rgba(20, 184, 166, 0.08) 40%, 
-      rgba(14, 165, 233, 0.06) 80%, 
-      transparent 100%);
-    animation: smoothFlow1 25s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-
-  .flowing-orb-2 {
-    background: radial-gradient(circle, 
-      rgba(14, 165, 233, 0.09) 0%, 
-      rgba(59, 130, 246, 0.07) 40%, 
-      rgba(99, 102, 241, 0.06) 80%, 
-      transparent 100%);
-    animation: smoothFlow2 30s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-
-  .flowing-orb-3 {
-    background: radial-gradient(circle, 
-      rgba(99, 102, 241, 0.08) 0%, 
-      rgba(129, 140, 248, 0.06) 40%, 
-      rgba(0, 212, 170, 0.05) 80%, 
-      transparent 100%);
-    animation: smoothFlow3 28s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-
-  .flowing-orb-4 {
-    background: radial-gradient(circle, 
-      rgba(59, 130, 246, 0.07) 0%, 
-      rgba(14, 165, 233, 0.05) 40%, 
-      rgba(20, 184, 166, 0.04) 80%, 
-      transparent 100%);
-    animation: smoothFlow4 24s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-
-  /* Плавные анимации без перещёлкивания */
-  @keyframes smoothFlow1 {
-    0% {
-      background: radial-gradient(circle, 
-        rgba(0, 212, 170, 0.1) 0%, 
-        rgba(20, 184, 166, 0.08) 40%, 
-        rgba(14, 165, 233, 0.06) 80%, 
-        transparent 100%);
-      transform: translateY(0px) translateX(0px) scale(1);
-    }
-    16.66% {
-      background: radial-gradient(circle, 
-        rgba(10, 200, 180, 0.095) 0%, 
-        rgba(17, 174, 199, 0.075) 40%, 
-        rgba(39, 141, 237, 0.055) 80%, 
-        transparent 100%);
-      transform: translateY(-8px) translateX(5px) scale(1.02);
-    }
-    33.33% {
-      background: radial-gradient(circle, 
-        rgba(20, 184, 166, 0.09) 0%, 
-        rgba(14, 165, 233, 0.07) 40%, 
-        rgba(79, 110, 245, 0.05) 80%, 
-        transparent 100%);
-      transform: translateY(-12px) translateX(8px) scale(1.04);
-    }
-    50% {
-      background: radial-gradient(circle, 
-        rgba(14, 165, 233, 0.085) 0%, 
-        rgba(59, 130, 246, 0.065) 40%, 
-        rgba(99, 102, 241, 0.05) 80%, 
-        transparent 100%);
-      transform: translateY(-8px) translateX(6px) scale(1.02);
-    }
-    66.66% {
-      background: radial-gradient(circle, 
-        rgba(59, 130, 246, 0.08) 0%, 
-        rgba(99, 102, 241, 0.06) 40%, 
-        rgba(20, 184, 166, 0.055) 80%, 
-        transparent 100%);
-      transform: translateY(-4px) translateX(3px) scale(1.01);
-    }
-    83.33% {
-      background: radial-gradient(circle, 
-        rgba(79, 120, 243, 0.09) 0%, 
-        rgba(49, 156, 206, 0.07) 40%, 
-        rgba(10, 200, 180, 0.06) 80%, 
-        transparent 100%);
-      transform: translateY(-2px) translateX(1px) scale(1.005);
-    }
-    100% {
-      background: radial-gradient(circle, 
-        rgba(0, 212, 170, 0.1) 0%, 
-        rgba(20, 184, 166, 0.08) 40%, 
-        rgba(14, 165, 233, 0.06) 80%, 
-        transparent 100%);
-      transform: translateY(0px) translateX(0px) scale(1);
-    }
-  }
-
-  @keyframes smoothFlow2 {
-    0% {
-      background: radial-gradient(circle, 
-        rgba(14, 165, 233, 0.09) 0%, 
-        rgba(59, 130, 246, 0.07) 40%, 
-        rgba(99, 102, 241, 0.06) 80%, 
-        transparent 100%);
-      transform: translateY(0px) translateX(0px) scale(1);
-    }
-    20% {
-      background: radial-gradient(circle, 
-        rgba(36, 148, 239, 0.085) 0%, 
-        rgba(79, 116, 241, 0.065) 40%, 
-        rgba(109, 108, 245, 0.055) 80%, 
-        transparent 100%);
-      transform: translateY(6px) translateX(-4px) scale(1.02);
-    }
-    40% {
-      background: radial-gradient(circle, 
-        rgba(59, 130, 246, 0.08) 0%, 
-        rgba(99, 102, 241, 0.06) 40%, 
-        rgba(0, 212, 170, 0.05) 80%, 
-        transparent 100%);
-      transform: translateY(10px) translateX(-8px) scale(1.04);
-    }
-    60% {
-      background: radial-gradient(circle, 
-        rgba(79, 116, 241, 0.075) 0%, 
-        rgba(59, 146, 206, 0.055) 40%, 
-        rgba(20, 184, 166, 0.045) 80%, 
-        transparent 100%);
-      transform: translateY(8px) translateX(-6px) scale(1.03);
-    }
-    80% {
-      background: radial-gradient(circle, 
-        rgba(39, 141, 237, 0.08) 0%, 
-        rgba(39, 150, 226, 0.06) 40%, 
-        rgba(29, 195, 178, 0.05) 80%, 
-        transparent 100%);
-      transform: translateY(4px) translateX(-2px) scale(1.01);
-    }
-    100% {
-      background: radial-gradient(circle, 
-        rgba(14, 165, 233, 0.09) 0%, 
-        rgba(59, 130, 246, 0.07) 40%, 
-        rgba(99, 102, 241, 0.06) 80%, 
-        transparent 100%);
-      transform: translateY(0px) translateX(0px) scale(1);
-    }
-  }
-
-  @keyframes smoothFlow3 {
-    0% {
-      background: radial-gradient(circle, 
-        rgba(99, 102, 241, 0.08) 0%, 
-        rgba(129, 140, 248, 0.06) 40%, 
-        rgba(0, 212, 170, 0.05) 80%, 
-        transparent 100%);
-      transform: translateY(0px) translateX(0px) scale(1);
-    }
-    25% {
-      background: radial-gradient(circle, 
-        rgba(114, 118, 244, 0.075) 0%, 
-        rgba(79, 160, 219, 0.055) 40%, 
-        rgba(10, 200, 180, 0.045) 80%, 
-        transparent 100%);
-      transform: translateY(-6px) translateX(7px) scale(1.03);
-    }
-    50% {
-      background: radial-gradient(circle, 
-        rgba(129, 140, 248, 0.07) 0%, 
-        rgba(39, 180, 199, 0.05) 40%, 
-        rgba(20, 184, 166, 0.04) 80%, 
-        transparent 100%);
-      transform: translateY(-10px) translateX(12px) scale(1.05);
-    }
-    75% {
-      background: radial-gradient(circle, 
-        rgba(89, 156, 226, 0.075) 0%, 
-        rgba(19, 194, 183, 0.055) 40%, 
-        rgba(39, 141, 237, 0.045) 80%, 
-        transparent 100%);
-      transform: translateY(-6px) translateX(8px) scale(1.025);
-    }
-    100% {
-      background: radial-gradient(circle, 
-        rgba(99, 102, 241, 0.08) 0%, 
-        rgba(129, 140, 248, 0.06) 40%, 
-        rgba(0, 212, 170, 0.05) 80%, 
-        transparent 100%);
-      transform: translateY(0px) translateX(0px) scale(1);
-    }
-  }
-
-  @keyframes smoothFlow4 {
-    0% {
-      background: radial-gradient(circle, 
-        rgba(59, 130, 246, 0.07) 0%, 
-        rgba(14, 165, 233, 0.05) 40%, 
-        rgba(20, 184, 166, 0.04) 80%, 
-        transparent 100%);
-      transform: translateY(0px) translateX(0px) scale(1);
-    }
-    30% {
-      background: radial-gradient(circle, 
-        rgba(49, 147, 239, 0.065) 0%, 
-        rgba(17, 174, 199, 0.045) 40%, 
-        rgba(25, 190, 172, 0.035) 80%, 
-        transparent 100%);
-      transform: translateY(5px) translateX(-6px) scale(1.02);
-    }
-    70% {
-      background: radial-gradient(circle, 
-        rgba(39, 165, 233, 0.06) 0%, 
-        rgba(20, 184, 199, 0.04) 40%, 
-        rgba(30, 196, 178, 0.03) 80%, 
-        transparent 100%);
-      transform: translateY(8px) translateX(-10px) scale(1.04);
-    }
-    100% {
-      background: radial-gradient(circle, 
-        rgba(59, 130, 246, 0.07) 0%, 
-        rgba(14, 165, 233, 0.05) 40%, 
-        rgba(20, 184, 166, 0.04) 80%, 
-        transparent 100%);
-      transform: translateY(0px) translateX(0px) scale(1);
-    }
-  }
-
-  /* Text gradients */
-  .text-gradient-primary {
-    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  /* Button hover fixes */
-  .btn-ghost-fixed {
-    color: hsl(var(--foreground));
-    background: transparent;
-    border: 1px solid hsla(var(--border), 0.5);
-    transition: all 0.3s ease;
-  }
-
-  .btn-ghost-fixed:hover {
-    background: hsla(var(--surface-1), 0.8);
-    border-color: hsla(var(--border), 0.8);
-    color: hsl(var(--foreground));
-  }
-
-  .btn-outline-fixed {
-    color: hsl(var(--foreground));
-    background: hsla(var(--card), 0.5);
-    border: 1px solid hsla(var(--border), 0.5);
-    backdrop-filter: blur(8px);
-    transition: all 0.3s ease;
-  }
-
-  .btn-outline-fixed:hover {
-    background: hsla(var(--surface-1), 0.9);
-    border-color: hsla(var(--primary), 0.3);
-    color: hsl(var(--foreground));
-    transform: translateY(-1px);
-    box-shadow: 
-      0 4px 6px -1px hsla(var(--foreground), 0.1),
-      0 2px 4px -1px hsla(var(--foreground), 0.06),
-      0 0 0 1px hsla(var(--primary), 0.1);
-  }
-}
-
-/* Smooth transitions for reduced motion */
-@media (prefers-reduced-motion: reduce) {
+@layer base {
   * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    border-color: hsl(var(--border));
   }
-  
-  .flowing-orb-1, .flowing-orb-2, .flowing-orb-3, .flowing-orb-4 {
-    animation: none !important;
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Строгий фокус для доступности */
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
   }
 }
 
-/* Enhanced focus styles */
-*:focus-visible {
-  outline: 2px solid hsl(var(--primary));
-  outline-offset: 2px;
-  border-radius: 24px;
-}
+/* УБРАНЫ: .glass, .flowing-orb-* (В соответствии с правилом "не использовать стеклянность ради стеклянности") */

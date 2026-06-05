@@ -1,395 +1,349 @@
 // path: apps/frontend/app/(auth)/login/page.tsx
-'use client';
+"use client"
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { Eye, EyeOff, ArrowRight, Building2, AlertCircle, Clock, Lock, Mail, Shield } from 'lucide-react';
-import Link from 'next/link';
+import * as React from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
+import {
+  AlertCircle,
+  ArrowRight,
+  Building2,
+  Clock,
+  Eye,
+  EyeOff,
+  Shield,
+} from "lucide-react"
 
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { authAPI } from '@/lib/api/auth';
-import { useAuth } from '@/lib/hooks/use-auth';
-import { EMAIL_REGEX, PASSWORD_REGEX, TWO_FA_REGEX } from '@/lib/types/auth';
-import styles from './login.module.css';
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { authAPI } from "@/lib/api/auth"
+import { useAuth } from "@/lib/hooks/use-auth"
+import { EMAIL_REGEX, PASSWORD_REGEX, TWO_FA_REGEX } from "@/lib/types/auth"
 
 const loginSchema = z.object({
-  email: z.string().min(1, 'Email обязателен').regex(EMAIL_REGEX, 'Некорректный email'),
+  email: z.string().min(1, "Email обязателен").regex(EMAIL_REGEX, "Некорректный email"),
   password: z
     .string()
-    .min(8, 'Минимум 8 символов')
-    .regex(PASSWORD_REGEX, 'Пароль должен содержать строчные и заглавные буквы, цифры и спецсимволы'),
+    .min(8, "Минимум 8 символов")
+    .regex(PASSWORD_REGEX, "Пароль должен содержать строчные и заглавные буквы, цифры и спецсимволы"),
   twoFactorCode: z
     .string()
     .optional()
     .refine((val) => !val || TWO_FA_REGEX.test(val), {
-      message: 'Код 2FA должен состоять из 6 цифр',
+      message: "Код 2FA должен состоять из 6 цифр",
     }),
-});
+})
 
-type LoginForm = z.infer<typeof loginSchema>;
+type LoginForm = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [isThrottled, setIsThrottled] = useState(false);
-  const [throttleTimeLeft, setThrottleTimeLeft] = useState(0);
-  const router = useRouter();
-  const { setAuthUser } = useAuth();
+  const router = useRouter()
+  const { setAuthUser } = useAuth()
 
-  const loginAttemptRef = useRef(false);
+  const [showPassword, setShowPassword] = React.useState(false)
+  const [showTwoFactor, setShowTwoFactor] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [apiError, setApiError] = React.useState<string | null>(null)
+
+  const [isThrottled, setIsThrottled] = React.useState(false)
+  const [throttleTimeLeft, setThrottleTimeLeft] = React.useState(0)
+
+  const loginAttemptRef = React.useRef(false)
 
   const {
     register,
     handleSubmit,
-    formState: { errors },
     setError,
+    formState: { errors },
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
-  });
+  })
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+  React.useEffect(() => {
+    if (errors.twoFactorCode?.message) setShowTwoFactor(true)
+  }, [errors.twoFactorCode?.message])
+
+  React.useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null
 
     if (isThrottled && throttleTimeLeft > 0) {
       interval = setInterval(() => {
         setThrottleTimeLeft((prev) => {
           if (prev <= 1) {
-            setIsThrottled(false);
-            return 0;
+            setIsThrottled(false)
+            return 0
           }
-          return prev - 1;
-        });
-      }, 1000);
+          return prev - 1
+        })
+      }, 1000)
     }
 
     return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isThrottled, throttleTimeLeft]);
+      if (interval) clearInterval(interval)
+    }
+  }, [isThrottled, throttleTimeLeft])
 
   const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
+  }
 
   const onSubmit = async (data: LoginForm) => {
-    if (isThrottled || isLoading || loginAttemptRef.current) {
-      return;
-    }
+    if (isThrottled || isLoading || loginAttemptRef.current) return
 
-    loginAttemptRef.current = true;
-    setIsLoading(true);
-    setApiError(null);
+    loginAttemptRef.current = true
+    setIsLoading(true)
+    setApiError(null)
 
     try {
-      const response = await authAPI.login(data);
+      const response = await authAPI.login(data)
 
       if (!response.user || !response.user.email) {
-        setApiError('Ошибка входа: получены некорректные данные пользователя');
-        return;
+        setApiError("Ошибка входа: получены некорректные данные пользователя")
+        return
       }
 
-      // Access/refresh токены уже установлены в in-memory и HttpOnly cookie внутри authAPI.login
-      // Здесь просто фиксируем пользователя в глобальном состоянии
-      setAuthUser(response.user);
-      router.push('/dashboard');
+      setAuthUser(response.user)
+      router.push("/dashboard")
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+      const message = error instanceof Error ? error.message : "Неизвестная ошибка"
 
       try {
-        const errorData = JSON.parse(message);
+        const errorData = JSON.parse(message)
 
         if (errorData.statusCode === 429) {
-          setIsThrottled(true);
-          setThrottleTimeLeft(15 * 60);
-          setApiError('Превышен лимит попыток входа. Попробуйте позже.');
+          setIsThrottled(true)
+          setThrottleTimeLeft(15 * 60)
+          setApiError("Превышен лимит попыток входа. Попробуйте позже.")
         } else if (errorData.statusCode === 401) {
-          setApiError('Неверный email или пароль');
+          setApiError("Неверный email или пароль")
         } else if (errorData.statusCode === 400) {
-          setApiError('Некорректные данные для входа');
+          setApiError("Некорректные данные для входа")
         } else {
-          setApiError('Ошибка сервера. Попробуйте позже.');
+          setApiError("Ошибка сервера. Попробуйте позже.")
         }
       } catch {
-        if (message.toLowerCase().includes('2fa')) {
-          setError('twoFactorCode', { message: 'Неверный код 2FA' });
-        } else if (message.toLowerCase().includes('email') || message.toLowerCase().includes('парол')) {
-          setApiError(message);
+        const lower = message.toLowerCase()
+
+        if (lower.includes("2fa")) {
+          setShowTwoFactor(true)
+          setError("twoFactorCode", { message: "Неверный код 2FA" })
+        } else if (lower.includes("email") || lower.includes("парол")) {
+          setApiError(message)
         } else {
-          setApiError('Ошибка входа. Проверьте данные и попробуйте снова.');
+          setApiError("Ошибка входа. Проверьте данные и попробуйте снова.")
         }
       }
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
       setTimeout(() => {
-        loginAttemptRef.current = false;
-      }, 1000);
+        loginAttemptRef.current = false
+      }, 1000)
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
-      {/* Background */}
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Статичный, лёгкий фон-акцент (без стекла/орбов/фигур) */}
       <div
-        className="fixed inset-0 -z-10"
+        className="pointer-events-none fixed inset-0 -z-10"
         style={{
-          background: `
-            radial-gradient(ellipse 600px 400px at 80% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
-            radial-gradient(ellipse 500px 500px at 20% 80%, rgba(14, 165, 233, 0.12) 0%, transparent 50%),
-            radial-gradient(ellipse 700px 300px at 60% 60%, rgba(168, 85, 247, 0.08) 0%, transparent 50%)
-          `,
+          background:
+            "radial-gradient(900px circle at 20% 0%, hsl(var(--primary) / 0.10), transparent 60%), radial-gradient(700px circle at 90% 30%, hsl(199 89% 48% / 0.10), transparent 55%)",
         }}
       />
 
-      {/* Floating Geometric Shapes */}
-      <div className="fixed inset-0 -z-10 pointer-events-none">
-        <div
-          className={`absolute ${styles.shape1}`}
-          style={{
-            width: '60px',
-            height: '60px',
-            top: '15%',
-            left: '10%',
-            clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-            background: 'linear-gradient(45deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.08))',
-            filter: 'blur(1px)',
-          }}
-        />
-        <div
-          className={`absolute ${styles.shape2}`}
-          style={{
-            width: '80px',
-            height: '80px',
-            top: '25%',
-            right: '15%',
-            borderRadius: '50%',
-            background: 'linear-gradient(45deg, rgba(14, 165, 233, 0.12), rgba(99, 102, 241, 0.1))',
-            filter: 'blur(2px)',
-          }}
-        />
-        <div
-          className={`absolute ${styles.shape3}`}
-          style={{
-            width: '50px',
-            height: '50px',
-            bottom: '20%',
-            left: '20%',
-            background: 'linear-gradient(45deg, rgba(168, 85, 247, 0.1), rgba(14, 165, 233, 0.08))',
-            transform: 'rotate(45deg)',
-            filter: 'blur(1px)',
-          }}
-        />
-        <div
-          className={`absolute ${styles.shape4}`}
-          style={{
-            width: '70px',
-            height: '70px',
-            bottom: '30%',
-            right: '10%',
-            clipPath: 'polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%)',
-            background: 'linear-gradient(45deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.06))',
-            filter: 'blur(2px)',
-          }}
-        />
-        <div
-          className={`absolute ${styles.shape5}`}
-          style={{
-            width: '30px',
-            height: '30px',
-            top: '60%',
-            left: '5%',
-            borderRadius: '50%',
-            background: 'rgba(14, 165, 233, 0.1)',
-            filter: 'blur(1px)',
-          }}
-        />
-        <div
-          className={`absolute ${styles.shape6}`}
-          style={{
-            width: '40px',
-            height: '40px',
-            top: '10%',
-            right: '5%',
-            background: 'rgba(168, 85, 247, 0.08)',
-            transform: 'rotate(30deg)',
-            filter: 'blur(1px)',
-          }}
-        />
+      {/* Top controls */}
+      <div className="fixed right-xl top-xl z-10 flex items-center gap-sm">
+        <ThemeToggle />
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/">На главную</Link>
+        </Button>
       </div>
 
-      <div className="flex items-center justify-center min-h-screen p-6 relative z-10">
-        <div className="w-full max-w-md space-y-8">
+      <div className="mx-auto flex min-h-screen w-full max-w-md items-center px-xl py-section">
+        <div className="w-full grid gap-xl">
           {/* Header */}
-          <div className="text-center space-y-6">
-            <Link href="/" className="inline-block group">
-              <div className="flex items-center justify-center">
-                <div className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-primary shadow-glass-lg transition-all duration-300 group-hover:scale-105 group-hover:shadow-xl">
-                  <Building2 className="w-7 h-7 text-white" />
-                </div>
+          <div className="text-center grid gap-sm">
+            <Link href="/" className="mx-auto inline-flex items-center gap-sm">
+              <div className="grid h-10 w-10 place-items-center rounded-md bg-primary text-primary-foreground">
+                <Building2 className="h-5 w-5" />
               </div>
+              <span className="text-sm font-semibold">DriveCare</span>
             </Link>
-            <div className="space-y-3">
-              <h1 className="text-4xl font-bold text-gradient-primary">Вход в систему</h1>
-              <p className="text-lg text-muted-foreground">Добро пожаловать в DriveCare</p>
-              <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-primary" />
-                  <span>Безопасно</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-secondary" />
-                  <span>Защищено</span>
-                </div>
-              </div>
-            </div>
+
+            <h1 className="text-2xl font-semibold tracking-tight">Вход</h1>
+            <p className="text-sm text-muted-foreground">Войдите, чтобы открыть рабочее пространство</p>
           </div>
 
-          {/* Login Form */}
-          <Card className="p-8 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 rounded-3xl">
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-              {apiError && (
-                <div className="flex items-center gap-3 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 animate-in slide-in-from-top-2 duration-300">
-                  <AlertCircle className="w-5 h-5 text-destructive" />
-                  <p className="text-sm text-destructive">{apiError}</p>
-                </div>
-              )}
+          {/* Form */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-sm">
+                <Shield className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base">Доступ к аккаунту</CardTitle>
+              </div>
+              <CardDescription>Введите email и пароль. Если включена 2FA — добавьте код.</CardDescription>
+            </CardHeader>
 
-              {isThrottled && (
-                <div className="flex items-center gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 animate-in slide-in-from-top-2 duration-300">
-                  <Clock className="w-5 h-5 text-amber-600" />
-                  <div className="text-sm text-amber-600">
-                    <p className="font-medium">Временная блокировка</p>
-                    <p>Попробуйте снова через {formatTime(throttleTimeLeft)}</p>
+            <CardContent>
+              <form onSubmit={handleSubmit(onSubmit)} className="grid gap-lg">
+                {(apiError || isThrottled) && (
+                  <div
+                    className={[
+                      "rounded-md border px-md py-sm text-sm",
+                      apiError ? "border-destructive/30 bg-destructive/10 text-destructive" : "",
+                      isThrottled ? "border-status-pending/30 bg-status-pending/10 text-status-pending" : "",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-start gap-sm">
+                      {isThrottled ? (
+                        <Clock className="mt-[2px] h-4 w-4" />
+                      ) : (
+                        <AlertCircle className="mt-[2px] h-4 w-4" />
+                      )}
+
+                      <div className="grid gap-xs">
+                        {apiError && <div>{apiError}</div>}
+                        {isThrottled && (
+                          <div>
+                            Попробуйте снова через <span className="font-medium">{formatTime(throttleTimeLeft)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div className="space-y-5">
-                <div className="relative group">
-                  <Mail className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
-                  <Input
-                    {...register('email')}
-                    type="email"
-                    placeholder="Email"
-                    autoComplete="email"
-                    disabled={isLoading || isThrottled}
-                    error={errors.email?.message}
-                    className="pl-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
-                  />
-                </div>
+                <Input
+                  {...register("email")}
+                  label="Email"
+                  required
+                  type="email"
+                  placeholder="name@company.com"
+                  autoComplete="email"
+                  disabled={isLoading || isThrottled}
+                  error={errors.email?.message}
+                />
 
-                <div className="relative group">
-                  <Lock className="absolute left-3 top-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+                <div className="grid gap-sm">
                   <Input
-                    {...register('password')}
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Пароль"
+                    {...register("password")}
+                    label="Пароль"
+                    required
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Введите пароль"
                     autoComplete="current-password"
                     disabled={isLoading || isThrottled}
                     error={errors.password?.message}
-                    className="pl-12 pr-12 h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
                   />
-                  <button
+
+                  <Button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-all duration-200 hover:scale-110"
+                    variant="ghost"
+                    size="sm"
+                    className="justify-start px-0"
+                    onClick={() => setShowPassword((v) => !v)}
                     disabled={isLoading || isThrottled}
                   >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? "Скрыть пароль" : "Показать пароль"}
+                  </Button>
                 </div>
 
-                <Input
-                  {...register('twoFactorCode')}
-                  type="text"
-                  placeholder="Код 2FA (если включен)"
-                  autoComplete="one-time-code"
-                  disabled={isLoading || isThrottled}
-                  error={errors.twoFactorCode?.message}
-                  maxLength={6}
-                  className="h-12 rounded-2xl border-border/50 focus:border-primary/50 transition-all duration-300"
-                />
-              </div>
-
-              <Button
-                type="submit"
-                size="lg"
-                className="w-full h-14 bg-gradient-primary hover:opacity-90 text-white font-medium group rounded-2xl transition-all duration-300 hover:scale-[1.02] hover:shadow-glass-lg"
-                disabled={isLoading || isThrottled || loginAttemptRef.current}
-              >
-                {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    Вход в систему...
+                <div className="grid gap-sm">
+                  <div className="flex items-center justify-between gap-md">
+                    <div className="text-sm text-muted-foreground">Двухфакторная защита</div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowTwoFactor((v) => !v)}
+                      disabled={isLoading || isThrottled}
+                    >
+                      {showTwoFactor ? "Скрыть" : "У меня включена 2FA"}
+                    </Button>
                   </div>
-                ) : isThrottled ? (
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-5 h-5" />
-                    Заблокировано ({formatTime(throttleTimeLeft)})
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    Войти в DriveCare
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
-                  </div>
-                )}
-              </Button>
 
-              <div className="text-center space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Нет аккаунта компании?{' '}
-                  <Link href="/register" className="text-primary hover:text-secondary transition-colors font-medium hover:underline">
-                    Зарегистрировать автосервис
-                  </Link>
-                </p>
-
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p>Используя DriveCare, вы соглашаетесь с</p>
-                  <p>
-                    <Link href="/terms" className="hover:text-foreground transition-colors hover:underline">
-                      Условиями использования
-                    </Link>
-                    {' и '}
-                    <Link href="/privacy" className="hover:text-foreground transition-colors hover:underline">
-                      Политикой конфиденциальности
-                    </Link>
-                  </p>
+                  {showTwoFactor && (
+                    <Input
+                      {...register("twoFactorCode")}
+                      label="Код 2FA"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="6 цифр"
+                      autoComplete="one-time-code"
+                      disabled={isLoading || isThrottled}
+                      error={errors.twoFactorCode?.message}
+                      maxLength={6}
+                    />
+                  )}
                 </div>
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full"
+                  disabled={isLoading || isThrottled || loginAttemptRef.current}
+                >
+                  {isLoading ? "Вход..." : isThrottled ? `Заблокировано (${formatTime(throttleTimeLeft)})` : (
+                    <>
+                      Войти
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+
+            <CardFooter className="justify-between gap-md flex-wrap">
+              <div className="text-sm text-muted-foreground">
+                Нет аккаунта компании?{" "}
+                <Link href="/register" className="text-foreground hover:underline">
+                  Зарегистрировать автосервис
+                </Link>
               </div>
-            </form>
+            </CardFooter>
           </Card>
 
-          {/* Back to Home */}
-          <div className="text-center">
-            <Link
-              href="/"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300 hover:underline inline-flex items-center gap-2"
-            >
-              ← Вернуться на главную
+          <div className="text-center text-xs text-muted-foreground leading-relaxed">
+            Используя DriveCare, вы соглашаетесь с{" "}
+            <Link href="/terms" className="hover:text-foreground hover:underline">
+              условиями
+            </Link>{" "}
+            и{" "}
+            <Link href="/privacy" className="hover:text-foreground hover:underline">
+              политикой конфиденциальности
             </Link>
+            .
           </div>
 
           {/* Security Notice */}
           {isThrottled && (
-            <Card className="p-6 glass border-border/30 rounded-2xl animate-in slide-in-from-bottom-2 duration-500">
-              <div className="text-center space-y-3">
-                <Shield className="w-6 h-6 text-primary mx-auto" />
-                <h4 className="text-sm font-semibold text-muted-foreground">Система защиты от атак</h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Система защиты от атак</CardTitle>
+                <CardDescription>
                   Для безопасности количество попыток входа ограничено. Лимит: 5 попыток в 15 минут.
-                </p>
-              </div>
+                </CardDescription>
+              </CardHeader>
             </Card>
           )}
         </div>
       </div>
     </div>
-  );
+  )
 }

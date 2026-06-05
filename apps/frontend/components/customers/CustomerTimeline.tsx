@@ -1,8 +1,9 @@
 // path: apps/frontend/components/customers/CustomerTimeline.tsx
-'use client'
+"use client"
 
-import { useState, useMemo } from 'react'
-import { 
+import * as React from "react"
+import Link from "next/link"
+import {
   Calendar,
   Wrench,
   Car,
@@ -12,19 +13,16 @@ import {
   FileText,
   CreditCard,
   MessageSquare,
-  CheckCircle,
   Clock,
-  AlertTriangle,
-  TrendingUp,
   ChevronDown,
-  ChevronRight
-} from 'lucide-react'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
-import Link from 'next/link'
-import type { TimelineEvent, TimelineEventStatus, TimelineEventType } from '@/lib/types/customers'
+  ChevronRight,
+} from "lucide-react"
+
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
+import type { TimelineEvent, TimelineEventStatus, TimelineEventType } from "@/lib/types/customers"
 
 interface TimelineGroup {
   monthKey: string
@@ -32,29 +30,37 @@ interface TimelineGroup {
   events: TimelineEvent[]
 }
 
-const EVENT_CONFIG: Record<
-  TimelineEventType,
-  { icon: React.ComponentType<{ className?: string }>; bgColor: string; iconColor: string; borderColor: string }
-> = {
-  order:      { icon: Wrench,   bgColor: 'bg-primary/10',      iconColor: 'text-primary',      borderColor: 'border-primary/20' },
-  vehicle:    { icon: Car,      bgColor: 'bg-emerald-500/10',  iconColor: 'text-emerald-500',  borderColor: 'border-emerald-500/20' },
-  profile:    { icon: Edit3,    bgColor: 'bg-secondary/10',    iconColor: 'text-secondary',    borderColor: 'border-secondary/20' },
-  call:       { icon: Phone,    bgColor: 'bg-accent/10',       iconColor: 'text-accent',       borderColor: 'border-accent/20' },
-  email:      { icon: Mail,     bgColor: 'bg-blue-500/10',     iconColor: 'text-blue-500',     borderColor: 'border-blue-500/20' },
-  payment:    { icon: CreditCard,bgColor:'bg-green-500/10',    iconColor: 'text-green-500',    borderColor: 'border-green-500/20' },
-  invoice:    { icon: FileText, bgColor: 'bg-purple-500/10',   iconColor: 'text-purple-500',   borderColor: 'border-purple-500/20' },
-  note:       { icon: MessageSquare, bgColor:'bg-muted/50',    iconColor: 'text-muted-foreground', borderColor: 'border-border' },
-  appointment:{ icon: Calendar, bgColor: 'bg-amber-500/10',    iconColor: 'text-amber-500',    borderColor: 'border-amber-500/20' },
+const EVENT_ICONS: Record<TimelineEventType, React.ComponentType<{ className?: string }>> = {
+  order: Wrench,
+  vehicle: Car,
+  profile: Edit3,
+  call: Phone,
+  email: Mail,
+  payment: CreditCard,
+  invoice: FileText,
+  note: MessageSquare,
+  appointment: Calendar,
 }
 
-const STATUS_CONFIG: Record<
-  TimelineEventStatus,
-  { icon: React.ComponentType<{ className?: string }>; color: string }
-> = {
-  success: { icon: CheckCircle,  color: 'text-emerald-500' },
-  warning: { icon: AlertTriangle,color: 'text-amber-500' },
-  error:   { icon: AlertTriangle,color: 'text-destructive' },
-  info:    { icon: TrendingUp,   color: 'text-blue-500' }
+// Привязка к 5 системным статус-цветам DS v1.1:
+// active (green), pending (yellow), progress (blue), error (red), draft (gray)
+const STATUS_STYLES: Record<TimelineEventStatus, { label: string; className: string }> = {
+  success: {
+    label: "Успешно",
+    className: "bg-status-active/10 text-status-active border-status-active/20",
+  },
+  warning: {
+    label: "Ожидание",
+    className: "bg-status-pending/10 text-status-pending border-status-pending/20",
+  },
+  info: {
+    label: "В работе",
+    className: "bg-status-progress/10 text-status-progress border-status-progress/20",
+  },
+  error: {
+    label: "Ошибка",
+    className: "bg-status-error/10 text-status-error border-status-error/20",
+  },
 }
 
 interface CustomerTimelineProps {
@@ -64,29 +70,27 @@ interface CustomerTimelineProps {
 }
 
 export function CustomerTimeline({ events, loading, className }: CustomerTimelineProps) {
-  const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(new Set())
+  const [collapsedMonths, setCollapsedMonths] = React.useState<Set<string>>(new Set())
 
-  const groupedEvents = useMemo(() => {
+  const groupedEvents = React.useMemo(() => {
     const groups: Record<string, TimelineGroup> = {}
-    
+
     ;(events || [])
       .slice()
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .forEach(event => {
+      .forEach((event) => {
         const date = new Date(event.date)
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-        const monthLabel = date.toLocaleDateString('ru-RU', { 
-          year: 'numeric', 
-          month: 'long' 
-        })
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+        const monthLabel = date.toLocaleDateString("ru-RU", { year: "numeric", month: "long" })
 
         if (!groups[monthKey]) {
           groups[monthKey] = {
             monthKey,
             monthLabel: monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1),
-            events: []
+            events: [],
           }
         }
+
         groups[monthKey].events.push(event)
       })
 
@@ -94,236 +98,211 @@ export function CustomerTimeline({ events, loading, className }: CustomerTimelin
   }, [events])
 
   const toggleMonth = (monthKey: string) => {
-    const newCollapsed = new Set(collapsedMonths)
-    if (newCollapsed.has(monthKey)) newCollapsed.delete(monthKey)
-    else newCollapsed.add(monthKey)
-    setCollapsedMonths(newCollapsed)
+    setCollapsedMonths((prev) => {
+      const next = new Set(prev)
+      if (next.has(monthKey)) next.delete(monthKey)
+      else next.add(monthKey)
+      return next
+    })
   }
 
   if (loading) {
     return (
-      <div className={cn("space-y-4", className)}>
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="space-y-3">
-            <div className="h-6 bg-surface-1/40 rounded-xl animate-pulse w-32" />
-            <div className="space-y-2">
-              {[...Array(2)].map((_, j) => (
-                <div key={j} className="flex gap-3">
-                  <div className="w-10 h-10 bg-surface-1/40 rounded-full animate-pulse" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 bg-surface-1/40 rounded animate-pulse" />
-                    <div className="h-3 bg-surface-1/40 rounded animate-pulse w-3/4" />
-                  </div>
-                </div>
-              ))}
+      <Card className={cn("p-lg", className)}>
+        <div className="flex items-center justify-between gap-md">
+          <div className="flex items-center gap-sm">
+            <div className="w-10 h-10 rounded-md bg-surface-2 border flex items-center justify-center">
+              <Calendar className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-foreground">История</div>
+              <div className="text-xs text-muted-foreground mt-xs">События по клиенту</div>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+
+        <div className="mt-lg space-y-md">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-start gap-md">
+              <Skeleton className="w-10 h-10 rounded-md" />
+              <div className="flex-1 min-w-0">
+                <Skeleton className="h-4 w-[260px] max-w-full" />
+                <Skeleton className="h-3 w-[420px] max-w-full mt-sm" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
     )
   }
 
   if (!events || events.length === 0) {
     return (
-      <Card className={cn("p-8 text-center glass border-border/30 rounded-3xl", className)}>
-        <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-        <h3 className="font-semibold mb-2">История пуста</h3>
-        <p className="text-sm text-muted-foreground">
-          Здесь будут отображаться все взаимодействия с клиентом
+      <Card className={cn("p-section text-center", className)}>
+        <div className="mx-auto mb-md w-10 h-10 rounded-md bg-surface-2 border flex items-center justify-center">
+          <Calendar className="w-4 h-4 text-muted-foreground" />
+        </div>
+        <h3 className="text-sm font-semibold text-foreground mb-xs">История пуста</h3>
+        <p className="text-sm text-muted-foreground max-w-md mx-auto">
+          Здесь будут отображаться заказы, записи, счета и другие взаимодействия с клиентом.
         </p>
       </Card>
     )
   }
 
   return (
-    <div className={cn("space-y-6", className)}>
-      {/* Timeline Feature Badge */}
-      <Card className="p-4 glass border-accent/20 bg-gradient-to-r from-accent/5 to-primary/5 rounded-3xl">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-gradient-to-r from-accent to-primary">
-            <Calendar className="w-5 h-5 text-white" />
+    <Card className={cn("overflow-hidden", className)}>
+      {/* Header */}
+      <div className="p-lg border-b border-border">
+        <div className="flex items-center justify-between gap-md min-w-0">
+          <div className="flex items-center gap-sm min-w-0">
+            <div className="w-10 h-10 rounded-md bg-surface-2 border flex items-center justify-center shrink-0">
+              <Calendar className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-foreground">История</div>
+              <div className="text-xs text-muted-foreground mt-xs truncate">Все события по клиенту</div>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold text-accent">Интерактивная временная шкала</h3>
-            <p className="text-sm text-muted-foreground">
-              Полная история взаимодействий с клиентом. Кликните для перехода к деталям.
-            </p>
-          </div>
-          <div className="ml-auto">
-            <TrendingUp className="w-6 h-6 text-primary" />
-          </div>
-        </div>
-      </Card>
 
-      {/* Timeline */}
-      <div className="relative">
-        {/* Main timeline line */}
-        <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary/40 via-secondary/30 to-accent/20" />
-
-        <div className="space-y-8">
-          {groupedEvents.map((group) => {
-            const isCollapsed = collapsedMonths.has(group.monthKey)
-            const visibleEvents = isCollapsed ? group.events.slice(0, 2) : group.events
-            
-            return (
-              <div key={group.monthKey} className="relative">
-                {/* Month header */}
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center relative z-10 shadow-glass">
-                    <Calendar className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1 flex items-center justify-between">
-                    <h3 className="font-semibold text-lg">{group.monthLabel}</h3>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleMonth(group.monthKey)}
-                      className="gap-2 text-muted-foreground hover:text-foreground"
-                    >
-                      {isCollapsed ? (
-                        <>Показать все ({group.events.length}) <ChevronDown className="w-4 h-4" /></>
-                      ) : (
-                        <>Свернуть <ChevronRight className="w-4 h-4" /></>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Events */}
-                <div className="space-y-4 ml-2">
-                  {visibleEvents.map((event) => {
-                    const config = EVENT_CONFIG[event.type]
-                    const Icon = config.icon
-                    const StatusIcon = event.status ? STATUS_CONFIG[event.status as TimelineEventStatus].icon : null
-                    
-                    return (
-                      <div key={event.id} className="relative flex gap-4 group">
-                        {/* Event icon */}
-                        <div className={cn(
-                          "w-8 h-8 rounded-full border-2 flex items-center justify-center relative z-10 transition-all duration-300",
-                          config.bgColor,
-                          config.borderColor,
-                          "group-hover:scale-110 group-hover:shadow-lg"
-                        )}>
-                          <Icon className={cn("w-4 h-4", config.iconColor)} />
-                        </div>
-
-                        {/* Event content */}
-                        <Card className={cn(
-                          "flex-1 p-4 glass border-border/30 rounded-2xl transition-all duration-300",
-                          "group-hover:shadow-glass-lg group-hover:-translate-y-0.5",
-                          event.relatedId && "cursor-pointer"
-                        )}>
-                          <EventContent event={event} StatusIcon={StatusIcon} />
-                        </Card>
-                      </div>
-                    )
-                  })}
-
-                  {/* Show more indicator */}
-                  {isCollapsed && group.events.length > 2 && (
-                    <div className="relative flex gap-4">
-                      <div className="w-8 h-8 rounded-full border-2 border-dashed border-muted/50 flex items-center justify-center">
-                        <div className="w-2 h-2 bg-muted/50 rounded-full" />
-                      </div>
-                      <div className="flex-1 text-sm text-muted-foreground py-2">
-                        Ещё {group.events.length - 2} событий...
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+          <div className="text-xs text-muted-foreground shrink-0">{events.length} событий</div>
         </div>
       </div>
-    </div>
+
+      {/* Groups */}
+      <div className="divide-y divide-border/50">
+        {groupedEvents.map((group) => {
+          const isCollapsed = collapsedMonths.has(group.monthKey)
+          const visibleCount = 4
+          const visibleEvents = isCollapsed ? group.events.slice(0, visibleCount) : group.events
+          const hiddenCount = Math.max(0, group.events.length - visibleEvents.length)
+
+          return (
+            <div key={group.monthKey} className="p-lg">
+              <div className="flex items-center justify-between gap-md min-w-0">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground truncate">{group.monthLabel}</div>
+                  <div className="text-xs text-muted-foreground mt-xs">{group.events.length} событий</div>
+                </div>
+
+                {group.events.length > visibleCount && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-sm"
+                    onClick={() => toggleMonth(group.monthKey)}
+                  >
+                    {isCollapsed ? (
+                      <>
+                        Показать все <ChevronDown className="w-4 h-4" />
+                      </>
+                    ) : (
+                      <>
+                        Свернуть <ChevronRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+
+              <div className="mt-md divide-y divide-border/50 rounded-md border border-border overflow-hidden">
+                {visibleEvents.map((event) => (
+                  <TimelineEventRow key={event.id} event={event} />
+                ))}
+
+                {hiddenCount > 0 && isCollapsed && (
+                  <div className="px-md py-sm text-xs text-muted-foreground bg-surface-2">
+                    Скрыто событий: {hiddenCount}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Card>
   )
 }
 
-function EventContent({ 
-  event, 
-  StatusIcon 
-}: { 
-  event: TimelineEvent
-  StatusIcon?: React.ComponentType<{ className?: string }> | null
-}) {
-  const eventContentJSX = (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <h4 className="font-medium truncate">{event.title}</h4>
-          {StatusIcon && (
-            <StatusIcon className={cn(
-              "w-4 h-4",
-              event.status ? STATUS_CONFIG[event.status].color : 'text-muted-foreground'
-            )} />
-          )}
-        </div>
-        
-        {event.description && (
-          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-            {event.description}
-          </p>
-        )}
+function TimelineEventRow({ event }: { event: TimelineEvent }) {
+  const Icon = EVENT_ICONS[event.type]
+  const hasLink = Boolean(event.relatedId)
 
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {new Date(event.date).toLocaleDateString('ru-RU', {
-              day: 'numeric',
-              month: 'short',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-          </span>
-          
-          {typeof event.amount === 'number' && (
-            <Badge variant="outline" className="text-xs px-2 py-0.5">
-              {event.amount.toLocaleString('ru-RU')} ₽
-            </Badge>
+  const status = event.status as TimelineEventStatus | undefined
+  const statusStyle = status ? STATUS_STYLES[status] : null
+
+  const content = (
+    <div className="px-md py-md flex items-start justify-between gap-md min-w-0 transition-colors hover:bg-surface-2">
+      <div className="flex items-start gap-md min-w-0 flex-1">
+        <div className="w-10 h-10 rounded-md bg-surface-2 border flex items-center justify-center shrink-0">
+          <Icon className="w-4 h-4 text-muted-foreground" />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-sm min-w-0">
+            <div className="text-sm font-medium text-foreground truncate">{event.title}</div>
+
+            {statusStyle && (
+              <span
+                className={cn(
+                  "shrink-0 inline-flex items-center rounded-md border px-sm py-[2px] text-[11px] font-medium",
+                  statusStyle.className
+                )}
+              >
+                {statusStyle.label}
+              </span>
+            )}
+
+            {typeof event.amount === "number" && (
+              <span className="shrink-0 inline-flex items-center rounded-md border border-border px-sm py-[2px] text-[11px] text-muted-foreground tabular-nums">
+                {event.amount.toLocaleString("ru-RU")} ₽
+              </span>
+            )}
+          </div>
+
+          {event.description && (
+            <div className="text-xs text-muted-foreground mt-xs line-clamp-2">{event.description}</div>
           )}
+
+          <div className="mt-sm inline-flex items-center gap-xs text-xs text-muted-foreground">
+            <Clock className="w-3.5 h-3.5" />
+            {new Date(event.date).toLocaleDateString("ru-RU", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </div>
         </div>
       </div>
 
-      {event.relatedId && (
-        <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Badge variant="outline" className="text-xs">
-            Открыть
-          </Badge>
-        </div>
-      )}
+      {hasLink && <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-[2px]" />}
     </div>
   )
 
-  if (event.relatedId) {
-    return (
-      <Link href={getEventLink(event)} className="block">
-        {eventContentJSX}
-      </Link>
-    )
-  }
+  if (!hasLink) return content
 
   return (
-    <div className="block">
-      {eventContentJSX}
-    </div>
+    <Link href={getEventLink(event)} className="block">
+      {content}
+    </Link>
   )
 }
 
 function getEventLink(event: TimelineEvent): string {
   switch (event.type) {
-    case 'order':
+    case "order":
       return `/dashboard/orders/${event.relatedId}`
-    case 'vehicle':
+    case "vehicle":
       return `/dashboard/vehicles/${event.relatedId}`
-    case 'invoice':
+    case "invoice":
       return `/dashboard/invoices/${event.relatedId}`
-    case 'payment':
+    case "payment":
       return `/dashboard/payments/${event.relatedId}`
-    case 'appointment':
+    case "appointment":
       return `/dashboard/appointments/${event.relatedId}`
     default:
-      return '#'
+      return "#"
   }
 }

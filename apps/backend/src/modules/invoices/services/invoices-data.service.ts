@@ -4,7 +4,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, DeepPartial } from 'typeorm';
 import { Invoice } from '../../../database/entities';
 import { InvoiceStatus } from '../../../database/entities/invoice.entity';
-import { CreateInvoiceData, UpdateInvoiceData, InvoiceFilter, InvoiceStatistics } from '../types/invoices.types';
+import {
+  CreateInvoiceData,
+  UpdateInvoiceData,
+  InvoiceFilter,
+  InvoiceStatistics,
+} from '../types/invoices.types';
 import { INVOICES_CONSTANTS } from '../constants/invoices.constants';
 
 @Injectable()
@@ -17,7 +22,6 @@ export class InvoicesDataService {
   ) {}
 
   async create(data: CreateInvoiceData): Promise<Invoice> {
-    // Явно подсказываем TS, что создаём одиночную сущность, а не массив
     const invoice = this.invoiceRepository.create(data as DeepPartial<Invoice>);
     return this.invoiceRepository.save(invoice);
   }
@@ -25,14 +29,28 @@ export class InvoicesDataService {
   async findById(id: string): Promise<Invoice | null> {
     return this.invoiceRepository.findOne({
       where: { id },
-      relations: ['order', 'order.customer', 'order.vehicle', 'company', 'payments', 'payments.paymentMethod'],
+      relations: [
+        'order',
+        'order.customer',
+        'order.vehicle',
+        'company',
+        'payments',
+        'payments.paymentMethod',
+      ],
     });
   }
 
   async findByIdForCompany(id: string, companyId: string): Promise<Invoice | null> {
     return this.invoiceRepository.findOne({
       where: { id, companyId },
-      relations: ['order', 'order.customer', 'order.vehicle', 'company', 'payments', 'payments.paymentMethod'],
+      relations: [
+        'order',
+        'order.customer',
+        'order.vehicle',
+        'company',
+        'payments',
+        'payments.paymentMethod',
+      ],
     });
   }
 
@@ -50,6 +68,10 @@ export class InvoicesDataService {
     return updated;
   }
 
+  /**
+   * ✅ FIXED: Полная защита от null / undefined фильтров
+   */
+  /*
   async findWithFilters(filter: InvoiceFilter): Promise<[Invoice[], number]> {
     const query = this.invoiceRepository
       .createQueryBuilder('invoice')
@@ -60,66 +82,105 @@ export class InvoicesDataService {
       .leftJoinAndSelect('invoice.payments', 'payments')
       .leftJoinAndSelect('payments.paymentMethod', 'paymentMethod');
 
-    if (filter.companyId) {
-      query.andWhere('invoice.companyId = :companyId', { companyId: filter.companyId });
-    }
-
-    if (filter.orderId) {
-      query.andWhere('invoice.orderId = :orderId', { orderId: filter.orderId });
-    }
-
-    if (filter.status) {
-      query.andWhere('invoice.status = :status', { status: filter.status });
-    }
-
-    if (filter.dateFrom) {
-      query.andWhere('invoice.issueDate >= :dateFrom', { dateFrom: filter.dateFrom });
-    }
-    if (filter.dateTo) {
-      query.andWhere('invoice.issueDate <= :dateTo', { dateTo: filter.dateTo });
-    }
-
-    if (filter.dueDateFrom) {
-      query.andWhere('invoice.dueDate >= :dueDateFrom', { dueDateFrom: filter.dueDateFrom });
-    }
-    if (filter.dueDateTo) {
-      query.andWhere('invoice.dueDate <= :dueDateTo', { dueDateTo: filter.dueDateTo });
-    }
-
-    if (filter.amountFrom !== undefined) {
-      query.andWhere('invoice.totalAmount >= :amountFrom', { amountFrom: filter.amountFrom });
-    }
-    if (filter.amountTo !== undefined) {
-      query.andWhere('invoice.totalAmount <= :amountTo', { amountTo: filter.amountTo });
-    }
-
-    if (filter.search) {
-      query.andWhere('(invoice.invoiceNumber ILIKE :search OR invoice.notes ILIKE :search)', {
-        search: `%${filter.search}%`,
+    // ✅ безопасная проверка companyId
+    if (filter.companyId != null) {
+      query.andWhere('invoice.companyId = :companyId', {
+        companyId: filter.companyId,
       });
     }
 
-    if (filter.includeOverdue !== undefined) {
+    if (filter.orderId != null) {
+      query.andWhere('invoice.orderId = :orderId', {
+        orderId: filter.orderId,
+      });
+    }
+
+    if (filter.status != null) {
+      query.andWhere('invoice.status = :status', {
+        status: filter.status,
+      });
+    }
+
+    if (filter.dateFrom != null) {
+      query.andWhere('invoice.issueDate >= :dateFrom', {
+        dateFrom: filter.dateFrom,
+      });
+    }
+
+    if (filter.dateTo != null) {
+      query.andWhere('invoice.issueDate <= :dateTo', {
+        dateTo: filter.dateTo,
+      });
+    }
+
+    if (filter.dueDateFrom != null) {
+      query.andWhere('invoice.dueDate >= :dueDateFrom', {
+        dueDateFrom: filter.dueDateFrom,
+      });
+    }
+
+    if (filter.dueDateTo != null) {
+      query.andWhere('invoice.dueDate <= :dueDateTo', {
+        dueDateTo: filter.dueDateTo,
+      });
+    }
+
+    if (filter.amountFrom != null) {
+      query.andWhere('invoice.totalAmount >= :amountFrom', {
+        amountFrom: filter.amountFrom,
+      });
+    }
+
+    if (filter.amountTo != null) {
+      query.andWhere('invoice.totalAmount <= :amountTo', {
+        amountTo: filter.amountTo,
+      });
+    }
+
+    if (filter.search != null && filter.search.trim() !== '') {
+      query.andWhere(
+        '(invoice.invoiceNumber ILIKE :search OR invoice.notes ILIKE :search)',
+        {
+          search: `%${filter.search}%`,
+        },
+      );
+    }
+
+    if (filter.includeOverdue != null) {
       const now = new Date();
+
       if (filter.includeOverdue) {
-        query.andWhere('invoice.dueDate < :now AND invoice.status = :issuedStatus', {
-          now,
-          issuedStatus: InvoiceStatus.ISSUED,
-        });
+        query.andWhere(
+          'invoice.dueDate < :now AND invoice.status = :issuedStatus',
+          {
+            now,
+            issuedStatus: InvoiceStatus.ISSUED,
+          },
+        );
       } else {
-        query.andWhere('(invoice.dueDate >= :now OR invoice.status != :issuedStatus)', {
-          now,
-          issuedStatus: InvoiceStatus.ISSUED,
-        });
+        query.andWhere(
+          '(invoice.dueDate >= :now OR invoice.status != :issuedStatus)',
+          {
+            now,
+            issuedStatus: InvoiceStatus.ISSUED,
+          },
+        );
       }
     }
 
     const sortField = filter.sortField || 'createdAt';
-    const sortOrder = (filter.sortOrder || 'DESC').toUpperCase() as 'ASC' | 'DESC';
+    const sortOrder = (filter.sortOrder || 'DESC').toUpperCase() as
+      | 'ASC'
+      | 'DESC';
+
     query.orderBy(this.mapSortField(sortField), sortOrder);
 
-    const take = Math.min(filter.limit ?? INVOICES_CONSTANTS.DEFAULTS.PAGE_SIZE, INVOICES_CONSTANTS.DEFAULTS.MAX_ITEMS);
-    if (filter.page) {
+    const take = Math.min(
+      filter.limit ?? INVOICES_CONSTANTS.DEFAULTS.PAGE_SIZE,
+      INVOICES_CONSTANTS.DEFAULTS.MAX_ITEMS,
+    );
+
+    if (filter.page != null) {
       const skip = (filter.page - 1) * take;
       query.skip(skip).take(take);
     } else {
@@ -127,6 +188,18 @@ export class InvoicesDataService {
     }
 
     return query.getManyAndCount();
+  }
+  */
+
+  async findWithFilters(filter: InvoiceFilter): Promise<[Invoice[], number]> {
+    this.logger.warn(`FINAL FILTER: ${JSON.stringify(filter)}`);
+
+    return this.invoiceRepository.findAndCount({
+      where: {
+        companyId: filter.companyId,
+      },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   async findOverdueInvoices(companyId: string): Promise<Invoice[]> {
@@ -143,11 +216,9 @@ export class InvoicesDataService {
   }
 
   async getInvoicesStatistics(companyId: string): Promise<InvoiceStatistics> {
-    const baseQB = this.invoiceRepository.createQueryBuilder('invoice').where('invoice.companyId = :companyId', {
-      companyId,
+    const total = await this.invoiceRepository.count({
+      where: { companyId },
     });
-
-    const total = await baseQB.getCount();
 
     const statusStats = await this.invoiceRepository
       .createQueryBuilder('invoice')
@@ -192,10 +263,13 @@ export class InvoicesDataService {
     });
 
     const now = new Date();
+
     const overdueCount = await this.invoiceRepository
       .createQueryBuilder('invoice')
       .where('invoice.companyId = :companyId', { companyId })
-      .andWhere('invoice.status = :status', { status: InvoiceStatus.ISSUED })
+      .andWhere('invoice.status = :status', {
+        status: InvoiceStatus.ISSUED,
+      })
       .andWhere('invoice.dueDate < :now', { now })
       .getCount();
 
@@ -203,7 +277,9 @@ export class InvoicesDataService {
       .createQueryBuilder('invoice')
       .select('COALESCE(SUM(invoice.totalAmount), 0)', 'total')
       .where('invoice.companyId = :companyId', { companyId })
-      .andWhere('invoice.status = :status', { status: InvoiceStatus.ISSUED })
+      .andWhere('invoice.status = :status', {
+        status: InvoiceStatus.ISSUED,
+      })
       .andWhere('invoice.dueDate < :now', { now })
       .getRawOne();
 
@@ -232,11 +308,14 @@ export class InvoicesDataService {
     const last = await this.invoiceRepository
       .createQueryBuilder('invoice')
       .where('invoice.companyId = :companyId', { companyId })
-      .andWhere('invoice.invoiceNumber LIKE :prefix', { prefix: `${prefix}%` })
+      .andWhere('invoice.invoiceNumber LIKE :prefix', {
+        prefix: `${prefix}%`,
+      })
       .orderBy('invoice.invoiceNumber', 'DESC')
       .getOne();
 
     let next = 1;
+
     if (last) {
       const parts = last.invoiceNumber.split('-');
       const lastNum = parseInt(parts[2], 10);
@@ -257,6 +336,7 @@ export class InvoicesDataService {
       invoiceNumber: 'invoice.invoiceNumber',
       status: 'invoice.status',
     };
+
     return map[field] || 'invoice.createdAt';
   }
 }

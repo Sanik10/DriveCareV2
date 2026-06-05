@@ -1,112 +1,95 @@
-// components/app/StatsCard.tsx
-import { LucideIcon } from 'lucide-react';
-import { Card } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
+// path: apps/frontend/components/app/StatsCard.tsx
+import type { LucideIcon } from "lucide-react"
+import * as React from "react"
 
-export type StatsCardColor = 'default' | 'blue' | 'emerald' | 'amber' | 'red' | 'purple' | 'cyan';
-
-const COLOR_STYLES: Record<StatsCardColor, {
-  bg: string;
-  border: string;
-  text: string;
-  iconBg: string;
-}> = {
-  default: {
-    bg: 'from-surface-1/40 to-surface-2/40',
-    border: 'border-border/30',
-    text: 'text-muted-foreground',
-    iconBg: 'bg-surface-1/40',
-  },
-  blue: {
-    bg: 'from-blue-500/10 to-blue-600/5',
-    border: 'border-blue-500/20',
-    text: 'text-blue-600 dark:text-blue-400',
-    iconBg: 'bg-blue-500/20',
-  },
-  emerald: {
-    bg: 'from-emerald-500/10 to-emerald-600/5',
-    border: 'border-emerald-500/20',
-    text: 'text-emerald-600 dark:text-emerald-400',
-    iconBg: 'bg-emerald-500/20',
-  },
-  amber: {
-    bg: 'from-amber-500/10 to-amber-600/5',
-    border: 'border-amber-500/20',
-    text: 'text-amber-600 dark:text-amber-400',
-    iconBg: 'bg-amber-500/20',
-  },
-  red: {
-    bg: 'from-red-500/10 to-red-600/5',
-    border: 'border-red-500/20',
-    text: 'text-red-600 dark:text-red-400',
-    iconBg: 'bg-red-500/20',
-  },
-  purple: {
-    bg: 'from-purple-500/10 to-purple-600/5',
-    border: 'border-purple-500/20',
-    text: 'text-purple-600 dark:text-purple-400',
-    iconBg: 'bg-purple-500/20',
-  },
-  cyan: {
-    bg: 'from-cyan-500/10 to-cyan-600/5',
-    border: 'border-cyan-500/20',
-    text: 'text-cyan-600 dark:text-cyan-400',
-    iconBg: 'bg-cyan-500/20',
-  },
-};
+import { Card } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 
 interface StatsCardProps {
-  title: string;
-  value: number | string;
-  icon: LucideIcon;
-  color?: StatsCardColor;
-  highlight?: boolean;
-  suffix?: string;
+  title: string
+  value: number | string
+  icon: LucideIcon
+  trend?: { value: number; label: string }
+  suffix?: string
+  meta?: React.ReactNode
+  className?: string
 }
 
 export function StatsCard({
   title,
   value,
   icon: Icon,
-  color = 'default',
-  highlight = false,
+  trend,
   suffix,
+  meta,
+  className,
 }: StatsCardProps) {
-  const styles = COLOR_STYLES[color];
-
   return (
-    <Card className={cn(
-      'p-4 glass border rounded-2xl bg-gradient-to-br transition-all duration-300 hover:scale-[1.02]',
-      styles.bg,
-      styles.border,
-      highlight && 'animate-pulse'
-    )}>
-      <div className="flex items-center gap-3">
-        <div className={cn('p-2 rounded-xl', styles.iconBg)}>
-          <Icon className={cn('w-4 h-4', styles.text)} />
+    <Card className={cn("h-[124px] w-full p-lg", className)}>
+      <div className="flex h-full flex-col min-w-0">
+        <div className="flex items-center justify-between gap-md min-w-0">
+          <span className="text-sm font-medium text-muted-foreground truncate">{title}</span>
+          <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
         </div>
-        <div>
-          <div className="text-xs text-muted-foreground">{title}</div>
-          <div className="text-lg font-bold">
-            {value}
-            {suffix && <span className="text-sm ml-1">{suffix}</span>}
+
+        <div className="mt-auto min-w-0">
+          <div className="flex items-baseline gap-xs text-2xl font-bold tracking-tight text-foreground tabular-nums min-w-0">
+            <span className="truncate">{value}</span>
+            {suffix && (
+              <span className="text-sm font-medium text-muted-foreground shrink-0">{suffix}</span>
+            )}
+          </div>
+
+          {/* meta row reserved ALWAYS */}
+          <div className="mt-xs min-h-4 flex items-center justify-between gap-md text-xs min-w-0">
+            <div className="flex items-center gap-xs min-w-0">
+              {trend ? (
+                <>
+                  <span
+                    className={cn(
+                      "font-medium tabular-nums shrink-0",
+                      trend.value >= 0 ? "text-status-active" : "text-status-error"
+                    )}
+                  >
+                    {trend.value >= 0 ? "+" : ""}
+                    {trend.value}%
+                  </span>
+                  <span className="text-muted-foreground truncate">{trend.label}</span>
+                </>
+              ) : (
+                <span className="text-muted-foreground">&nbsp;</span>
+              )}
+            </div>
+
+            {meta ? (
+              <div className="text-muted-foreground truncate max-w-[55%]">{meta}</div>
+            ) : (
+              <span className="text-muted-foreground">&nbsp;</span>
+            )}
           </div>
         </div>
       </div>
     </Card>
-  );
+  )
 }
 
-// Обёртка для grid stats
-export function StatsGrid({ children, cols = 4 }: { children: React.ReactNode; cols?: 2 | 4 | 6 }) {
+export function StatsGrid({
+  children,
+  cols = 4,
+}: {
+  children: React.ReactNode
+  cols?: 2 | 4 | 6
+}) {
   return (
-    <div className={cn(
-      'grid gap-4',
-      cols === 2 && 'grid-cols-1 md:grid-cols-2',
-      cols === 4 && 'grid-cols-2 md:grid-cols-4',
-      cols === 6 && 'grid-cols-2 md:grid-cols-6'
-    )}>
+    <div
+      className={cn(
+        "grid gap-lg mb-xl w-full",
+        cols === 2 && "grid-cols-1 md:grid-cols-2",
+        cols === 4 && "grid-cols-2 md:grid-cols-4",
+        cols === 6 && "grid-cols-2 md:grid-cols-3 lg:grid-cols-6"
+      )}
+    >
       {children}
     </div>
-  );
+  )
 }

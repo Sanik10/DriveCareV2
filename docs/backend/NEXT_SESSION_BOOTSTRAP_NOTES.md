@@ -99,7 +99,7 @@ NEW_FEATURE_FLAG=true
 - TS/JS/TSX/JSX/Go/C#: // path: apps/backend/src/...
 - CSS/SCSS/Less: /* path: apps/backend/src/... */
 - HTML/XML/SVG/MD: <!-- path: apps/backend/src/... -->
-- Shell/YAML/ENV/INI/TOML/Python/Ruby/SQL: # или -- в SQL
+- Shell/YAML/ENV/INI/TOML/ц/Ruby/SQL: # или -- в SQL
 - Для форматов без комментариев (JSON/YAML/ENV) — внутренний комментарий не использовать.
 P.S. писать любые сообщения и комменатрии между блоками, а может и вопросы задавать после блоков кода - можно и даже нужно! Скрипт сам выберет код из сообщения
 Расширенный чек‑лист по РФ (комплаенс, безопасность, качество)

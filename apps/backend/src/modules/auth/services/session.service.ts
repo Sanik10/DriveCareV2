@@ -1,123 +1,80 @@
 // path: apps/backend/src/modules/auth/services/session.service.ts
 import { Injectable, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not, MoreThan } from 'typeorm';
+import { Repository, MoreThan } from 'typeorm';
 import Redis from 'ioredis';
 import { UserSession } from '../../../database/entities/user-session.entity';
 import { User } from '../../../database/entities/user.entity';
 import { SessionDevice } from '../interfaces/device.interface';
-import { AUTH_CONSTANTS } from '../constants/auth.constants';
 import { DeviceService } from './device.service';
 import { TokenService } from './token.service';
 import { EntityNotFoundException } from '../../../common/exceptions/custom-exceptions';
-import { createHmac, randomUUID } from 'crypto';
-import * as argon2 from 'argon2';
-import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class SessionService {
   constructor(
-    @InjectRepository(UserSession)
-    private userSessionRepo: Repository<UserSession>,
-    @Inject('REDIS_CLIENT')
-    private readonly redis: Redis,
+    @InjectRepository(UserSession) private userSessionRepo: Repository<UserSession>,
+    @Inject('REDIS_CLIENT') private readonly redis: Redis,
     private deviceService: DeviceService,
     private tokenService: TokenService,
-    private config: ConfigService,
   ) {}
 
-  private rtHmac(token: string): string {
-    const secret = this.config.get<string>('RT_HMAC_SECRET', 'dev-rt-hmac');
-    return createHmac('sha256', secret).update(token).digest('hex');
-  }
-
-  /**
-   * Создаём новую сессию.
-   * - Перед созданием деактивируем все активные сессии для того же (userId + deviceId) — исключаем дубли.
-   * - В Redis перезаписываем HMAC RT для пары (userId, deviceId).
-   * - Фильтруем по expiresAt при проверках/выдаче списков.
-   */
-  async createSession(
-    user: User,
-    userAgent: string,
-    ipAddress: string,
-  ): Promise<{
-    session: UserSession;
-    tokens: {
-      accessToken: string;
-      refreshToken: string;
-      refreshJti: string;
-      expiresIn: string | number;
-      deviceId: string;
-    };
-  }> {
+  async createSession(user: User, userAgent: string, ipAddress: string) {
     const deviceId = this.deviceService.generateDeviceId({ userId: user.id, userAgent, ipAddress });
     const deviceName = this.deviceService.generateDeviceName(userAgent);
-    const expiresInSecs = this.tokenService.getTokenExpirationTime(); // refresh TTL (sec)
+    const expiresInSecs = this.tokenService.getSessionExpirationTime();
     const expiresAt = new Date(Date.now() + expiresInSecs * 1000);
 
-    // 0) Удаляем активные дубли для этого устройства
     await this.userSessionRepo.update(
       { userId: user.id, deviceId, isActive: true },
-      { isActive: false, lastUsedAt: new Date() },
+      { isActive: false }
     );
 
-    // 1) Очистим старый ключ в Redis (на всякий)
-    const redisKey = AUTH_CONSTANTS.REDIS_KEYS.REFRESH_TOKEN(user.id, deviceId);
-    await this.redis.del(redisKey);
-
-    // 2) Генерируем sessionId заранее
-    const sessionId = randomUUID();
-
-    // 3) Генерируем пару токенов с этим sessionId
-    const tokens = await this.tokenService.createTokenPair(user, deviceId, sessionId);
-
-    // 4) Хешируем RT и сохраняем запись
-    const pepper = this.config.get<string>('RT_PEPPER', 'dev-rt-pepper');
-    const rtHash = await argon2.hash(tokens.refreshToken + pepper);
+    const sessionId = this.tokenService.generateOpaqueToken();
 
     const session = this.userSessionRepo.create({
-      id: sessionId,
+      // id: sessionId,
       userId: user.id,
       deviceId,
       deviceName,
       userAgent,
       ipAddress,
-      refreshTokenHash: rtHash,
-      jti: tokens.refreshJti,
+      refreshTokenHash: 'opaque-session',
+      jti: sessionId,
       ipSubnet: this.getIpSubnet(ipAddress),
       expiresAt,
       isActive: true,
-      lastUsedAt: null,
       deviceFingerprint: this.deviceService.createDeviceFingerprint(userAgent, ipAddress),
-      compromisedAt: null,
     });
 
     const savedSession = await this.userSessionRepo.save(session);
 
-    // 5) Кладём HMAC RT в Redis
-    await this.redis.set(redisKey, this.rtHmac(tokens.refreshToken), 'EX', expiresInSecs);
-
-    return { session: savedSession, tokens };
-  }
-
-  async isSessionActive(sessionId: string): Promise<boolean> {
-    if (!sessionId) return false;
-    const session = await this.userSessionRepo.findOne({
-      where: { id: sessionId, isActive: true, expiresAt: MoreThan(new Date()) },
+    const redisPayload = JSON.stringify({
+      sub: user.id,
+      email: user.email,
+      role: user.role.name,
+      companyId: user.company_id,
+      deviceId,
     });
-    return !!session;
+
+    const pipeline = this.redis.pipeline();
+    pipeline.set(`session:${sessionId}`, redisPayload, 'EX', expiresInSecs);
+    pipeline.sadd(`user:${user.id}:sessions`, sessionId);
+    pipeline.expire(`user:${user.id}:sessions`, expiresInSecs);
+    await pipeline.exec();
+
+    return { session: savedSession, sessionId, deviceId, expiresInSecs };
   }
 
-  async findActiveSessionByJti(userId: string, jti: string, deviceId?: string): Promise<UserSession | null> {
-    const where: any = { userId, jti, isActive: true, expiresAt: MoreThan(new Date()) };
-    if (deviceId) where.deviceId = deviceId;
-    return this.userSessionRepo.findOne({ where });
-  }
-
-  async verifyRtAgainstSession(session: UserSession, refreshToken: string): Promise<boolean> {
-    const pepper = this.config.get<string>('RT_PEPPER', 'dev-rt-pepper');
-    return argon2.verify(session.refreshTokenHash, refreshToken + pepper);
+  async getSessionPayload(sessionId: string): Promise<any | null> {
+    if (!sessionId) return null;
+    const data = await this.redis.get(`session:${sessionId}`);
+    if (!data) return null;
+    
+    const expiresInSecs = this.tokenService.getSessionExpirationTime();
+    await this.redis.expire(`session:${sessionId}`, expiresInSecs);
+    
+    return JSON.parse(data);
   }
 
   async getUserSessions(userId: string): Promise<SessionDevice[]> {
@@ -126,6 +83,7 @@ export class SessionService {
       select: ['id', 'deviceId', 'deviceName', 'userAgent', 'ipAddress', 'createdAt', 'updatedAt'],
       order: { updatedAt: 'DESC' },
     });
+    
     return sessions.map((s) => ({
       id: s.id,
       deviceId: s.deviceId,
@@ -137,54 +95,51 @@ export class SessionService {
     }));
   }
 
-  async removeSessionByJti(userId: string, deviceId: string, jti: string): Promise<void> {
-    const session = await this.userSessionRepo.findOne({ where: { userId, deviceId, jti, isActive: true } });
-    if (session) {
-      session.isActive = false;
-      await this.userSessionRepo.save(session);
-      const redisKey = AUTH_CONSTANTS.REDIS_KEYS.REFRESH_TOKEN(userId, deviceId);
-      await this.redis.del(redisKey);
+  async removeSession(sessionId: string): Promise<void> {
+    const data = await this.redis.get(`session:${sessionId}`);
+    if (data) {
+      const payload = JSON.parse(data);
+      await this.redis.srem(`user:${payload.sub}:sessions`, sessionId);
     }
+    await this.redis.del(`session:${sessionId}`);
+    await this.userSessionRepo.update({ jti: sessionId }, { isActive: false });
   }
 
   async removeDeviceSessions(userId: string, deviceId: string): Promise<number> {
     const sessions = await this.userSessionRepo.find({ where: { userId, deviceId, isActive: true } });
-    if (sessions.length === 0) throw new EntityNotFoundException('Сессия устройства не найдена');
+    if (sessions.length === 0) throw new EntityNotFoundException('Сессия не найдена');
 
+    const pipeline = this.redis.pipeline();
     for (const s of sessions) {
       s.isActive = false;
-      await this.userSessionRepo.save(s);
-      const redisKey = AUTH_CONSTANTS.REDIS_KEYS.REFRESH_TOKEN(userId, deviceId);
-      await this.redis.del(redisKey);
+      pipeline.del(`session:${s.jti}`);
+      pipeline.srem(`user:${userId}:sessions`, s.jti);
     }
+    await pipeline.exec();
+    await this.userSessionRepo.save(sessions);
+    
     return sessions.length;
   }
 
-  async removeAllUserSessions(userId: string, excludeDeviceId?: string): Promise<number> {
-    const where: any = { userId, isActive: true };
-    if (excludeDeviceId) where.deviceId = Not(excludeDeviceId);
-    const sessions = await this.userSessionRepo.find({ where });
-    for (const s of sessions) {
-      s.isActive = false;
-      await this.userSessionRepo.save(s);
-      const redisKey = AUTH_CONSTANTS.REDIS_KEYS.REFRESH_TOKEN(userId, s.deviceId);
-      await this.redis.del(redisKey);
+  async removeAllUserSessions(userId: string, excludeSessionId?: string): Promise<number> {
+    const sessionIds = await this.redis.smembers(`user:${userId}:sessions`);
+    const pipeline = this.redis.pipeline();
+    let deactivatedCount = 0;
+
+    for (const sid of sessionIds) {
+      if (sid !== excludeSessionId) {
+        pipeline.del(`session:${sid}`);
+        pipeline.srem(`user:${userId}:sessions`, sid);
+        deactivatedCount++;
+      }
     }
-    return sessions.length;
-  }
+    await pipeline.exec();
 
-  async validateRefreshTokenInRedis(userId: string, deviceId: string, refreshToken: string): Promise<boolean> {
-    const redisKey = AUTH_CONSTANTS.REDIS_KEYS.REFRESH_TOKEN(userId, deviceId);
-    const stored = await this.redis.get(redisKey);
-    return stored === this.rtHmac(refreshToken);
-  }
+    const qb = this.userSessionRepo.createQueryBuilder().update(UserSession).set({ isActive: false }).where("userId = :userId", { userId });
+    if (excludeSessionId) qb.andWhere("jti != :exclude", { exclude: excludeSessionId });
+    await qb.execute();
 
-  async updateSessionActivity(sessionId: string): Promise<void> {
-    await this.userSessionRepo.update({ id: sessionId }, { updatedAt: new Date(), lastUsedAt: new Date() });
-  }
-
-  async findSessionById(sessionId: string): Promise<UserSession | null> {
-    return this.userSessionRepo.findOne({ where: { id: sessionId, isActive: true } });
+    return deactivatedCount;
   }
 
   private getIpSubnet(ipAddress: string): string {

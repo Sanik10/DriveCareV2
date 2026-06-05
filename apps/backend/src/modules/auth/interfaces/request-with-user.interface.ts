@@ -8,6 +8,7 @@ export interface RequestWithUser extends Request {
     role: AuthRole;
     companyId: string | null; // null для superadmin
     deviceId?: string;
+    sessionId?: string;
     firstName?: string;
     lastName?: string;
   };

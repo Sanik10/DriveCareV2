@@ -1,32 +1,46 @@
 // path: apps/frontend/components/security/two-factor-auth-card.tsx
 "use client"
 
-import { useState } from 'react'
-import { Shield, AlertTriangle, CheckCircle, Key, Copy } from 'lucide-react'
-import { toast } from 'sonner'
+import * as React from "react"
+import { Shield, AlertTriangle, CheckCircle, Copy, QrCode } from "lucide-react"
+import { toast } from "sonner"
 
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { securityAPI } from '@/lib/api/security'
-import type { TwoFASetupResponse } from '@/lib/types/security'
-import { QRCodeDialog } from './qr-code-dialog'
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { securityAPI } from "@/lib/api/security"
+import type { TwoFASetupResponse } from "@/lib/types/security"
+import { QRCodeDialog } from "./qr-code-dialog"
+import { cn } from "@/lib/utils"
 
 interface TwoFactorAuthCardProps {
   enabled: boolean
   onStatusChange: (enabled: boolean) => void
 }
 
-interface ApiError {
-  message: string
-  statusCode?: number
+type ApiErrorShape = { message?: string; statusCode?: number; correlationId?: string }
+
+function parseApiError(e: unknown, fallback: string) {
+  const plain = (e as Error)?.message || ""
+  if (!plain) return fallback
+
+  try {
+    const parsed = JSON.parse(plain) as ApiErrorShape
+    const msg = parsed.correlationId
+      ? `${parsed.message || fallback} (corrId: ${parsed.correlationId})`
+      : parsed.message || fallback
+    return msg
+  } catch {
+    return plain || fallback
+  }
 }
 
 export function TwoFactorAuthCard({ enabled, onStatusChange }: TwoFactorAuthCardProps) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [setupData, setSetupData] = useState<TwoFASetupResponse | null>(null)
-  const [verificationCode, setVerificationCode] = useState('')
-  const [showQRDialog, setShowQRDialog] = useState(false)
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [setupData, setSetupData] = React.useState<TwoFASetupResponse | null>(null)
+  const [verificationCode, setVerificationCode] = React.useState("")
+  const [showQRDialog, setShowQRDialog] = React.useState(false)
 
   const handleSetup = async () => {
     try {
@@ -34,232 +48,188 @@ export function TwoFactorAuthCard({ enabled, onStatusChange }: TwoFactorAuthCard
       const data = await securityAPI.setup2FA()
       setSetupData(data)
       setShowQRDialog(true)
-    } catch (error: unknown) {
-      console.error('Ошибка настройки 2FA:', error)
-      try {
-        const errorData = JSON.parse((error as Error).message) as ApiError
-        toast.error(errorData.message || 'Ошибка настройки 2FA')
-      } catch {
-        toast.error('Ошибка настройки 2FA')
-      }
+    } catch (e: unknown) {
+      console.error("Ошибка настройки 2FA:", e)
+      toast.error(parseApiError(e, "Ошибка настройки 2FA"))
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleEnable = async () => {
-    if (!setupData || !verificationCode) {
-      toast.error('Введите код подтверждения')
+    if (!setupData || verificationCode.length !== 6) {
+      toast.error("Введите 6-значный код подтверждения")
       return
     }
 
     try {
       setIsLoading(true)
-      await securityAPI.enable2FA({
-        code: verificationCode,
-        secret: setupData.secret
-      })
-      
+      await securityAPI.enable2FA({ code: verificationCode, secret: setupData.secret })
+
       onStatusChange(true)
       setSetupData(null)
-      setVerificationCode('')
+      setVerificationCode("")
       setShowQRDialog(false)
-      toast.success('Двухфакторная аутентификация включена')
-    } catch (error: unknown) {
-      console.error('Ошибка включения 2FA:', error)
-      try {
-        const errorData = JSON.parse((error as Error).message) as ApiError
-        toast.error(errorData.message || 'Неверный код подтверждения')
-      } catch {
-        toast.error('Неверный код подтверждения')
-      }
+
+      toast.success("2FA включена")
+    } catch (e: unknown) {
+      console.error("Ошибка включения 2FA:", e)
+      toast.error(parseApiError(e, "Неверный код подтверждения"))
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleDisable = async () => {
-    if (!verificationCode) {
-      toast.error('Введите код подтверждения')
+    if (verificationCode.length !== 6) {
+      toast.error("Введите 6-значный код подтверждения")
       return
     }
 
     try {
       setIsLoading(true)
       await securityAPI.disable2FA({ code: verificationCode })
-      
+
       onStatusChange(false)
-      setVerificationCode('')
-      toast.success('Двухфакторная аутентификация отключена')
-    } catch (error: unknown) {
-      console.error('Ошибка отключения 2FA:', error)
-      try {
-        const errorData = JSON.parse((error as Error).message) as ApiError
-        toast.error(errorData.message || 'Неверный код подтверждения')
-      } catch {
-        toast.error('Неверный код подтверждения')
-      }
+      setVerificationCode("")
+
+      toast.success("2FA отключена")
+    } catch (e: unknown) {
+      console.error("Ошибка отключения 2FA:", e)
+      toast.error(parseApiError(e, "Неверный код подтверждения"))
     } finally {
       setIsLoading(false)
     }
   }
 
   const copySecret = () => {
-    if (setupData?.secret) {
-      navigator.clipboard.writeText(setupData.secret)
-      toast.success('Секретный ключ скопирован')
-    }
+    if (!setupData?.secret) return
+    navigator.clipboard.writeText(setupData.secret)
+    toast.success("Секретный ключ скопирован")
   }
 
   return (
     <>
-      <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50">
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Shield className="w-5 h-5 text-primary" />
-                Двухфакторная аутентификация
-              </h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Дополнительный уровень защиты вашего аккаунта
+      <Card className="p-lg">
+        <div className="flex flex-col gap-lg">
+          <div className="flex items-start justify-between gap-lg">
+            <div className="min-w-0">
+              <div className="flex items-center gap-sm">
+                <div className="h-9 w-9 rounded-md bg-surface-2 border border-border flex items-center justify-center text-muted-foreground">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">Двухфакторная аутентификация</h3>
+              </div>
+              <p className="text-sm text-muted-foreground mt-xs">
+                Дополнительный уровень защиты аккаунта.
               </p>
             </div>
-            
-            <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-              enabled 
-                ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' 
-                : 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
-            }`}>
+
+            <Badge variant={enabled ? "active" : "pending"} className="shrink-0">
               {enabled ? (
-                <span className="flex items-center gap-1">
-                  <CheckCircle className="w-4 h-4" />
+                <>
+                  <CheckCircle className="w-3.5 h-3.5 mr-xs" />
                   Включена
-                </span>
+                </>
               ) : (
-                <span className="flex items-center gap-1">
-                  <AlertTriangle className="w-4 h-4" />
+                <>
+                  <AlertTriangle className="w-3.5 h-3.5 mr-xs" />
                   Отключена
-                </span>
+                </>
               )}
-            </div>
+            </Badge>
           </div>
 
-          {/* Setup Flow */}
-          {!enabled && setupData && (
-            <div className="space-y-4 p-4 rounded-lg bg-surface-1/50 border border-border/30">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-primary" />
-                <h4 className="font-medium">Настройка 2FA</h4>
-              </div>
-              
-              <div className="text-sm text-muted-foreground space-y-2">
-                <p>1. Откройте приложение аутентификатора (Google Authenticator, Authy)</p>
-                <p>2. Отсканируйте QR-код или введите секретный ключ вручную</p>
-                <p>3. Введите 6-значный код из приложения для подтверждения</p>
-              </div>
+          {!enabled ? (
+            setupData ? (
+              <div className="flex flex-col gap-md">
+                <div className="p-md rounded-md bg-surface-2 border border-border">
+                  <div className="text-sm font-medium text-foreground mb-sm">Настройка</div>
+                  <ol className="text-sm text-muted-foreground space-y-xs list-decimal pl-lg">
+                    <li>Откройте приложение-аутентификатор.</li>
+                    <li>Добавьте новый аккаунт (QR-код или ключ вручную).</li>
+                    <li>Введите 6‑значный код для подтверждения.</li>
+                  </ol>
 
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowQRDialog(true)}
-                  className="flex-1"
-                >
-                  <Shield className="w-4 h-4 mr-2" />
-                  Показать QR-код
-                </Button>
-                
-                <Button 
-                  variant="outline" 
-                  onClick={copySecret}
-                  className="flex-1"
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  Копировать ключ
+                  <div className="flex flex-col sm:flex-row gap-sm mt-md">
+                    <Button variant="secondary" onClick={() => setShowQRDialog(true)} className="sm:w-auto">
+                      <QrCode className="w-4 h-4 mr-xs" />
+                      Показать QR
+                    </Button>
+
+                    <Button variant="secondary" onClick={copySecret} className="sm:w-auto">
+                      <Copy className="w-4 h-4 mr-xs" />
+                      Копировать ключ
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-sm items-start sm:items-end">
+                  <div className="w-full">
+                    <label htmlFor="twofa-enable-code" className="text-sm font-medium text-foreground">
+                      Код подтверждения
+                    </label>
+                    <Input
+                      id="twofa-enable-code"
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="6 цифр"
+                      inputMode="numeric"
+                      className="mt-xs"
+                    />
+                  </div>
+
+                  <Button
+                    variant="primary"
+                    onClick={handleEnable}
+                    disabled={isLoading || verificationCode.length !== 6}
+                    className={cn("w-full sm:w-auto", "sm:shrink-0")}
+                  >
+                    Включить 2FA
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-lg flex-wrap">
+                <div className="text-sm text-muted-foreground">
+                  Рекомендуется включить 2FA для защиты от компрометации пароля.
+                </div>
+
+                <Button variant="primary" onClick={handleSetup} disabled={isLoading}>
+                  <Shield className="w-4 h-4 mr-xs" />
+                  Настроить 2FA
                 </Button>
               </div>
-
-              <div className="flex gap-2">
+            )
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-sm items-start sm:items-end">
+              <div className="w-full">
+                <label htmlFor="twofa-disable-code" className="text-sm font-medium text-foreground">
+                  Код из приложения (для отключения)
+                </label>
                 <Input
-                  type="text"
-                  placeholder="Введите 6-значный код"
+                  id="twofa-disable-code"
                   value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  maxLength={6}
-                  className="flex-1"
+                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="6 цифр"
+                  inputMode="numeric"
+                  className="mt-xs"
                 />
-                <Button 
-                  onClick={handleEnable}
-                  disabled={isLoading || verificationCode.length !== 6}
-                >
-                  Включить
-                </Button>
               </div>
+
+              <Button
+                variant="danger"
+                onClick={handleDisable}
+                disabled={isLoading || verificationCode.length !== 6}
+                className="w-full sm:w-auto sm:shrink-0"
+              >
+                Отключить 2FA
+              </Button>
             </div>
           )}
-
-          {/* Enable/Disable Actions */}
-          <div className="flex gap-3">
-            {!enabled ? (
-              <Button
-                onClick={handleSetup}
-                disabled={isLoading}
-                className="bg-gradient-primary hover:opacity-90"
-              >
-                <Shield className="w-4 h-4 mr-2" />
-                Настроить 2FA
-              </Button>
-            ) : (
-              <div className="flex gap-2 w-full">
-                <Input
-                  type="text"
-                  placeholder="Код из приложения для отключения"
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  maxLength={6}
-                  className="flex-1"
-                />
-                <Button
-                  variant="destructive"
-                  onClick={handleDisable}
-                  disabled={isLoading || verificationCode.length !== 6}
-                >
-                  Отключить
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Benefits */}
-          <div className="grid md:grid-cols-3 gap-4 text-sm">
-            <div className="flex items-start gap-2">
-              <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5" />
-              <div>
-                <div className="font-medium">Защита от взлома</div>
-                <div className="text-muted-foreground">Даже если пароль скомпрометирован</div>
-              </div>
-            </div>
-            
-            <div className="flex items-start gap-2">
-              <Key className="w-4 h-4 text-blue-500 mt-0.5" />
-              <div>
-                <div className="font-medium">Локальная генерация</div>
-                <div className="text-muted-foreground">Коды создаются на вашем устройстве</div>
-              </div>
-            </div>
-            
-            <div className="flex items-start gap-2">
-              <Shield className="w-4 h-4 text-purple-500 mt-0.5" />
-              <div>
-                <div className="font-medium">Стандарт TOTP</div>
-                <div className="text-muted-foreground">Совместимость с любыми приложениями</div>
-              </div>
-            </div>
-          </div>
         </div>
       </Card>
 
-      {/* QR Code Dialog */}
       {setupData && (
         <QRCodeDialog
           isOpen={showQRDialog}

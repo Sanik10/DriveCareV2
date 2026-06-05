@@ -1,13 +1,36 @@
 // path: apps/frontend/app/page.tsx
 "use client"
 
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Building2, ArrowRight, Check, Zap, Shield, BarChart3, LogOut, Sparkles, Users, Calendar, DollarSign } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { useAuth } from '@/lib/hooks/use-auth'
+import * as React from "react"
+import Image from "next/image"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import {
+  ArrowRight,
+  BarChart3,
+  Building2,
+  Calendar,
+  Check,
+  DollarSign,
+  Keyboard,
+  Layers,
+  LogOut,
+  Shield,
+  Users,
+  Wrench,
+  Zap,
+} from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { useAuth } from "@/lib/hooks/use-auth"
 
 export default function HomePage() {
   const router = useRouter()
@@ -15,399 +38,492 @@ export default function HomePage() {
 
   const handleLogout = async () => {
     await logout()
-    router.push('/login')
+    router.push("/login")
   }
 
+  const primaryCtaHref = isAuthenticated ? "/dashboard" : "/register"
+  const primaryCtaLabel = isAuthenticated ? "Перейти в кабинет" : "Начать бесплатно"
+
   return (
-    <div className="min-h-screen relative overflow-hidden">
-      {/* Enhanced Flowing Background */}
-      <div 
-        className="fixed inset-0 -z-10"
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Лёгкий фон-акцент (без стекла/орбов) */}
+      <div
+        className="pointer-events-none fixed inset-0 -z-10"
         style={{
-          background: `
-            radial-gradient(ellipse 700px 450px at 30% 0%, rgba(0, 212, 170, 0.22) 0%, transparent 65%),
-            radial-gradient(ellipse 600px 600px at 85% 40%, rgba(14, 165, 233, 0.16) 0%, transparent 65%),
-            radial-gradient(ellipse 650px 400px at 20% 100%, rgba(99, 102, 241, 0.18) 0%, transparent 65%)
-          `
+          background:
+            "radial-gradient(900px circle at 20% 0%, hsl(var(--primary) / 0.10), transparent 60%), radial-gradient(700px circle at 90% 30%, hsl(199 89% 48% / 0.10), transparent 55%)",
         }}
       />
-      
-      {/* Smooth Flowing Color Orbs */}
-      <div className="fixed inset-0 -z-10 pointer-events-none">
-        {/* Primary Green to Blue Orb */}
-        <div 
-          className="absolute rounded-full flowing-orb-1"
-          style={{
-            width: '420px',
-            height: '420px',
-            filter: 'blur(80px)',
-            top: '8%',
-            left: '18%',
-          }}
-        />
-        
-        {/* Secondary Blue to Purple Orb */}
-        <div 
-          className="absolute rounded-full flowing-orb-2"
-          style={{
-            width: '480px',
-            height: '480px',
-            filter: 'blur(85px)',
-            top: '38%',
-            right: '12%',
-          }}
-        />
-        
-        {/* Accent Purple to Green Orb */}
-        <div 
-          className="absolute rounded-full flowing-orb-3"
-          style={{
-            width: '450px',
-            height: '450px',
-            filter: 'blur(82px)',
-            bottom: '18%',
-            left: '28%',
-          }}
-        />
-        
-        {/* Supporting Blue Orb */}
-        <div 
-          className="absolute rounded-full flowing-orb-4"
-          style={{
-            width: '360px',
-            height: '360px',
-            filter: 'blur(75px)',
-            bottom: '40%',
-            right: '22%',
-          }}
-        />
-      </div>
-      
-      {/* Header */}
-      <header className="relative z-10 container mx-auto px-6 py-8">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3 p-3 rounded-2xl bg-gradient-primary shadow-glass-lg">
-              <Building2 className="w-7 h-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gradient-primary">
-                DriveCare
-              </h1>
-              <p className="text-xs text-muted-foreground">CRM для автосервисов</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-            {isAuthenticated && user ? (
-              <div className="flex items-center gap-3">
-                <Link href="/dashboard">
-                  <Button className="rounded-2xl bg-gradient-primary hover:opacity-90 shadow-glass transition-all duration-300">
-                    В кабинет
-                  </Button>
-                </Link>
-                <Button 
-                  onClick={handleLogout} 
-                  className="rounded-2xl btn-ghost-fixed"
-                  title="Выйти"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Выйти
-                </Button>
+
+      <header className="sticky top-0 z-20 border-b border-border/60 bg-background">
+        <div className="mx-auto w-full max-w-6xl px-xl py-xl">
+          <div className="flex items-center justify-between gap-lg">
+            <div className="flex items-center gap-md min-w-0">
+              <div className="grid h-10 w-10 place-items-center rounded-md bg-primary text-primary-foreground">
+                <Building2 className="h-5 w-5" />
               </div>
-            ) : (
-              <div className="flex items-center gap-3">
-                <Link href="/login">
-                  <Button 
-                    disabled={isLoading}
-                    className="rounded-2xl btn-ghost-fixed"
-                  >
-                    Войти
-                  </Button>
-                </Link>
-                <Link href="/register">
-                  <Button 
-                    disabled={isLoading}
-                    className="rounded-2xl bg-gradient-primary hover:opacity-90 shadow-glass transition-all duration-300"
-                  >
-                    Попробовать бесплатно
-                  </Button>
-                </Link>
+
+              <div className="min-w-0">
+                <div className="text-sm font-semibold leading-none">DriveCare</div>
+                <div className="text-xs text-muted-foreground">CRM для автосервисов</div>
               </div>
-            )}
+            </div>
+
+            <div className="hidden md:flex items-center gap-lg text-sm text-muted-foreground">
+              <a href="#features" className="hover:text-foreground transition-colors">
+                Возможности
+              </a>
+              <a href="#how" className="hover:text-foreground transition-colors">
+                Как работает
+              </a>
+              <a href="#faq" className="hover:text-foreground transition-colors">
+                FAQ
+              </a>
+            </div>
+
+            <div className="flex items-center gap-sm">
+              <ThemeToggle />
+
+              {isAuthenticated && user ? (
+                <>
+                  <Button asChild variant="secondary" disabled={isLoading}>
+                    <Link href="/dashboard">В кабинет</Link>
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    onClick={handleLogout}
+                    disabled={isLoading}
+                    title="Выйти"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Выйти
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button asChild variant="ghost" disabled={isLoading}>
+                    <Link href="/login">Войти</Link>
+                  </Button>
+
+                  <Button asChild variant="secondary" disabled={isLoading}>
+                    <Link href="/register">Попробовать бесплатно</Link>
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <main className="relative z-10 container mx-auto px-6 py-20">
-        <div className="max-w-5xl mx-auto text-center space-y-12">
-          {/* Hero Content */}
-          <div className="space-y-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-subtle border text-sm transition-all duration-300 hover:shadow-glass">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <span>Новое поколение CRM систем</span>
+      <main className="mx-auto w-full max-w-6xl px-xl py-section">
+        {/* HERO */}
+        <section className="grid gap-xxl lg:grid-cols-2 lg:items-center">
+          <div className="grid gap-lg">
+            <div className="inline-flex items-center gap-sm rounded-md border border-border/60 bg-card px-md py-sm text-sm text-muted-foreground w-fit">
+              <Zap className="h-4 w-4 text-primary" />
+              Открытая регистрация • CRM для автосервисов
             </div>
-            
-            <div className="space-y-6">
-              <h2 className="text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
-                CRM для автосервисов
-                <span className="block text-gradient-primary mt-2">
-                  будущего
-                </span>
-              </h2>
-              <p className="text-xl lg:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-                Управляйте заказами, клиентами, складом и финансами в одной системе. 
-                Современный интерфейс, мощная аналитика, полная автоматизация.
+
+            <div className="grid gap-md">
+              <h1 className="text-4xl md:text-6xl font-semibold tracking-tight leading-tight">
+                Порядок в заказах.
+                <span className="block text-primary">Контроль над бизнесом.</span>
+              </h1>
+
+              <p className="max-w-2xl text-base md:text-lg text-muted-foreground">
+                DriveCare помогает вести заказы, клиентов, склад и финансы без перегруза.
+                Быстро. Чётко. Современно.
               </p>
             </div>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-              <Link href="/register">
-                <Button size="lg" className="group rounded-2xl bg-gradient-primary hover:opacity-90 shadow-glass-lg px-8 py-6 text-lg transition-all duration-300">
-                  Начать бесплатно
-                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform duration-300" />
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-sm pt-md">
+              <Button asChild size="lg" disabled={isLoading}>
+                <Link href={primaryCtaHref}>
+                  {primaryCtaLabel}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+
+              {!isAuthenticated ? (
+                <Button asChild size="lg" variant="secondary" disabled={isLoading}>
+                  <Link href="/login">Войти в аккаунт</Link>
                 </Button>
-              </Link>
-              {!isAuthenticated && (
-                <Link href="/login">
-                  <Button size="lg" className="rounded-2xl btn-outline-fixed px-8 py-6 text-lg">
-                    Войти в аккаунт
-                  </Button>
-                </Link>
-              )}
-              {isAuthenticated && (
-                <Link href="/dashboard">
-                  <Button size="lg" className="rounded-2xl btn-outline-fixed px-8 py-6 text-lg">
-                    Перейти в кабинет
-                  </Button>
-                </Link>
+              ) : (
+                <Button asChild size="lg" variant="secondary" disabled={isLoading}>
+                  <Link href="/dashboard/orders">Открыть заказы</Link>
+                </Button>
               )}
             </div>
-          </div>
 
-          {/* Features Grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mt-20">
-            <Card className="group p-8 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 hover:-translate-y-2 surface-glow rounded-3xl">
-              <div className="space-y-6">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glass transition-transform duration-300 group-hover:scale-110">
-                  <Zap className="w-8 h-8 text-white" />
-                </div>
-                <div className="space-y-3">
-                  <h3 className="text-xl font-semibold">Быстрый старт</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    Настройка за 5 минут. Импорт данных из Excel. Интуитивный интерфейс.
-                  </p>
-                </div>
+            <p className="text-xs text-muted-foreground">
+              Компания регистрируется свободно. Приглашения нужны только для подключения сотрудников к
+              уже созданной компании.
+            </p>
+
+            <div className="grid gap-sm pt-md text-sm text-muted-foreground">
+              <div className="flex items-center gap-sm">
+                <Check className="h-4 w-4 text-primary" />
+                Импорт из Excel и быстрый старт
               </div>
-            </Card>
-
-            <Card className="group p-8 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 hover:-translate-y-2 surface-glow rounded-3xl">
-              <div className="space-y-6">
-                <div className="w-16 h-16 rounded-2xl bg-secondary/20 border border-secondary/30 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                  <Shield className="w-8 h-8 text-secondary" />
-                </div>
-                <div className="space-y-3">
-                  <h3 className="text-xl font-semibold">Безопасность</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    Шифрование данных. Роли и права доступа. Резервное копирование.
-                  </p>
-                </div>
+              <div className="flex items-center gap-sm">
+                <Check className="h-4 w-4 text-primary" />
+                Роли и права доступа, контроль сессий
               </div>
-            </Card>
-
-            <Card className="group p-8 glass border-border/30 hover:shadow-glass-lg transition-all duration-500 hover:-translate-y-2 surface-glow rounded-3xl">
-              <div className="space-y-6">
-                <div className="w-16 h-16 rounded-2xl bg-accent/20 border border-accent/30 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                  <BarChart3 className="w-8 h-8 text-accent" />
-                </div>
-                <div className="space-y-3">
-                  <h3 className="text-xl font-semibold">Аналитика</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    Отчеты в реальном времени. Прогнозы продаж. Умная аналитика.
-                  </p>
-                </div>
+              <div className="flex items-center gap-sm">
+                <Check className="h-4 w-4 text-primary" />
+                Современный интерфейс без лишних элементов
               </div>
-            </Card>
-          </div>
-
-          {/* Benefits Section */}
-          <div className="mt-28 space-y-16">
-            <div className="text-center space-y-4">
-              <h3 className="text-4xl lg:text-5xl font-bold">
-                Что получает ваш 
-                <span className="text-gradient-primary"> автосервис</span>
-              </h3>
-              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-                Все необходимые инструменты для успешного ведения бизнеса
-              </p>
-            </div>
-            
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {/* Customer Management */}
-              <Card className="p-6 glass border-border/30 hover:shadow-glass transition-all duration-400 rounded-3xl group">
-                <div className="space-y-4">
-                  <div className="w-12 h-12 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                    <Users className="w-6 h-6 text-primary" />
-                  </div>
-                  <div className="space-y-3">
-                    <h4 className="font-semibold">Клиенты</h4>
-                    <div className="space-y-2 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary" />
-                        <span>История обслуживания</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary" />
-                        <span>Напоминания о ТО</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary" />
-                        <span>База автомобилей</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Scheduling */}
-              <Card className="p-6 glass border-border/30 hover:shadow-glass transition-all duration-400 rounded-3xl group">
-                <div className="space-y-4">
-                  <div className="w-12 h-12 rounded-xl bg-secondary/20 border border-secondary/30 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                    <Calendar className="w-6 h-6 text-secondary" />
-                  </div>
-                  <div className="space-y-3">
-                    <h4 className="font-semibold">Планирование</h4>
-                    <div className="space-y-2 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary" />
-                        <span>Календарь записи</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary" />
-                        <span>Загрузка мастеров</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary" />
-                        <span>Планирование работ</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Inventory */}
-              <Card className="p-6 glass border-border/30 hover:shadow-glass transition-all duration-400 rounded-3xl group">
-                <div className="space-y-4">
-                  <div className="w-12 h-12 rounded-xl bg-accent/20 border border-accent/30 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                    <BarChart3 className="w-6 h-6 text-accent" />
-                  </div>
-                  <div className="space-y-3">
-                    <h4 className="font-semibold">Склад</h4>
-                    <div className="space-y-2 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary" />
-                        <span>Контроль остатков</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary" />
-                        <span>Автозаказ запчастей</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary" />
-                        <span>Учет движения</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Finance */}
-              <Card className="p-6 glass border-border/30 hover:shadow-glass transition-all duration-400 rounded-3xl group">
-                <div className="space-y-4">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                    <DollarSign className="w-6 h-6 text-emerald-500" />
-                  </div>
-                  <div className="space-y-3">
-                    <h4 className="font-semibold">Финансы</h4>
-                    <div className="space-y-2 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary" />
-                        <span>Счета и платежи</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary" />
-                        <span>Отчетность</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary" />
-                        <span>Интеграция с 1С</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
             </div>
           </div>
 
-          {/* Final CTA */}
-          <div className="mt-28 text-center space-y-8">
-            <Card className="p-12 glass border-border/30 rounded-3xl surface-glow max-w-4xl mx-auto transition-all duration-500 hover:shadow-glass-lg">
-              <div className="space-y-6">
-                <h3 className="text-3xl lg:text-4xl font-bold">
-                  Готовы модернизировать 
-                  <span className="text-gradient-primary"> ваш автосервис?</span>
-                </h3>
-                <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Присоединяйтесь к сотням автосервисов, которые уже используют DriveCare для роста своего бизнеса
-                </p>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-                  <Link href="/register">
-                    <Button size="lg" className="group rounded-2xl bg-gradient-primary hover:opacity-90 shadow-glass-lg px-8 py-6 text-lg transition-all duration-300">
-                      Начать бесплатно
-                      <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform duration-300" />
-                    </Button>
+          {/* PREVIEW (реальные скриншоты) */}
+          <ProductPreview />
+        </section>
+
+        {/* FEATURES (3) */}
+        <section id="features" className="mt-section">
+          <div className="grid gap-lg md:grid-cols-3">
+            <Card className="transition-shadow hover:shadow-card-hover">
+              <CardHeader>
+                <div className="grid h-10 w-10 place-items-center rounded-md border border-border/60 bg-surface-2">
+                  <Zap className="h-5 w-5 text-primary" />
+                </div>
+                <CardTitle className="text-base">Быстрый старт</CardTitle>
+                <CardDescription>
+                  Настройка за 5 минут, импорт из Excel и понятный интерфейс без перегруза.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card className="transition-shadow hover:shadow-card-hover">
+              <CardHeader>
+                <div className="grid h-10 w-10 place-items-center rounded-md border border-border/60 bg-surface-2">
+                  <Shield className="h-5 w-5 text-status-progress" />
+                </div>
+                <CardTitle className="text-base">Безопасность</CardTitle>
+                <CardDescription>
+                  Роли и права, шифрование, контроль сессий и понятная модель доступа.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card className="transition-shadow hover:shadow-card-hover">
+              <CardHeader>
+                <div className="grid h-10 w-10 place-items-center rounded-md border border-border/60 bg-surface-2">
+                  <BarChart3 className="h-5 w-5 text-status-active" />
+                </div>
+                <CardTitle className="text-base">Аналитика</CardTitle>
+                <CardDescription>
+                  Метрики бизнеса и отчёты — без “магии”, только данные и контроль.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
+        </section>
+
+        {/* HOW IT WORKS */}
+        <section id="how" className="mt-section grid gap-xl">
+          <div className="grid gap-sm text-center">
+            <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">Как это работает</h2>
+            <p className="text-muted-foreground">
+              3 шага, чтобы навести порядок и начать управлять процессом.
+            </p>
+          </div>
+
+          <div className="grid gap-lg md:grid-cols-3">
+            <StepCard
+              icon={<Layers className="h-5 w-5 text-primary" />}
+              title="Создайте заказ"
+              text="Клиент, автомобиль, работы и запчасти — всё в одной структуре."
+            />
+            <StepCard
+              icon={<Wrench className="h-5 w-5 text-status-progress" />}
+              title="Ведите выполнение"
+              text="Статусы, планирование, контроль мастеров и сроков без хаоса."
+            />
+            <StepCard
+              icon={<DollarSign className="h-5 w-5 text-status-pending" />}
+              title="Закройте и посчитайте"
+              text="Финальный чек, оплаты, отчётность — прозрачно и быстро."
+            />
+          </div>
+        </section>
+
+        {/* BENEFITS */}
+        <section className="mt-section grid gap-xl">
+          <div className="grid gap-sm text-center">
+            <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">
+              Что получает ваш автосервис
+            </h2>
+            <p className="text-muted-foreground">
+              Инструменты, которые помогают работать с данными — без декоративного шума.
+            </p>
+          </div>
+
+          <div className="grid gap-lg md:grid-cols-2 lg:grid-cols-4">
+            <BenefitCard
+              icon={<Users className="h-5 w-5 text-primary" />}
+              title="Клиенты"
+              items={["История обслуживания", "Напоминания о ТО", "База автомобилей"]}
+            />
+            <BenefitCard
+              icon={<Calendar className="h-5 w-5 text-status-progress" />}
+              title="Планирование"
+              items={["Календарь записи", "Загрузка мастеров", "План работ"]}
+            />
+            <BenefitCard
+              icon={<BarChart3 className="h-5 w-5 text-status-active" />}
+              title="Склад"
+              items={["Контроль остатков", "Движение запчастей", "Быстрый поиск"]}
+            />
+            <BenefitCard
+              icon={<DollarSign className="h-5 w-5 text-status-pending" />}
+              title="Финансы"
+              items={["Счета и платежи", "Отчётность", "Прозрачная прибыль"]}
+            />
+          </div>
+        </section>
+
+        {/* SPEED / HOTKEYS */}
+        <section className="mt-section">
+          <Card className="transition-shadow hover:shadow-card-hover">
+            <CardHeader>
+              <div className="flex items-center gap-sm">
+                <Keyboard className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base">Скорость — часть продукта</CardTitle>
+              </div>
+              <CardDescription>
+                Быстрые действия вместо лишних экранов. Горячие клавиши — чтобы не “тыкать мышкой”.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-sm">
+              <HotkeyRow label="Поиск" keys={["Ctrl/⌘", "K"]} />
+              <HotkeyRow label="Создать" keys={["Ctrl/⌘", "N"]} />
+              <HotkeyRow label="Подтвердить в форме" keys={["Ctrl/⌘", "Enter"]} />
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* FAQ */}
+        <section id="faq" className="mt-section grid gap-lg">
+          <div className="grid gap-sm text-center">
+            <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">FAQ</h2>
+            <p className="text-muted-foreground">Коротко о самом важном.</p>
+          </div>
+
+          <div className="grid gap-lg md:grid-cols-2">
+            <FaqCard
+              q="Можно импортировать данные из Excel?"
+              a="Да. Базовые сценарии импорта поддерживаем. Если структура сложная — поможем настроить."
+            />
+            <FaqCard
+              q="Это безопасно?"
+              a="Да: роли и права, контроль сессий, строгая модель доступа. Без “магических” прав у всех."
+            />
+            <FaqCard
+              q="Можно ли начать без обучения?"
+              a="Да. Интерфейс проектируется как инструмент управления — без перегруза и скрытых действий."
+            />
+            <FaqCard
+              q="Зачем нужно приглашение?"
+              a="Приглашение нужно только сотрудникам, чтобы войти в уже созданную компанию. Владелец регистрирует компанию обычной регистрацией."
+            />
+          </div>
+        </section>
+
+        {/* CTA (внизу делаем secondary, чтобы не было 2 Primary на странице) */}
+        <section className="mt-section">
+          <Card className="transition-shadow hover:shadow-card-hover">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl md:text-3xl">
+                Готовы модернизировать <span className="text-primary">ваш автосервис</span>?
+              </CardTitle>
+              <CardDescription className="mx-auto max-w-2xl">
+                Начните с первого заказа — и дальше система сама поддержит порядок в данных.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-sm">
+                <Button asChild size="lg" variant="secondary" disabled={isLoading}>
+                  <Link href={primaryCtaHref}>
+                    {primaryCtaLabel}
+                    <ArrowRight className="h-4 w-4" />
                   </Link>
-                  {!isAuthenticated && (
-                    <Link href="/login">
-                      <Button size="lg" className="rounded-2xl btn-outline-fixed px-8 py-6 text-lg">
-                        У меня есть аккаунт
-                      </Button>
-                    </Link>
-                  )}
-                </div>
+                </Button>
+
+                {!isAuthenticated && (
+                  <Button asChild size="lg" variant="ghost" disabled={isLoading}>
+                    <Link href="/login">У меня есть аккаунт</Link>
+                  </Button>
+                )}
               </div>
-            </Card>
-          </div>
-        </div>
+            </CardContent>
+          </Card>
+        </section>
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 container mx-auto px-6 py-12 mt-20 border-t border-border/30">
-        <div className="text-center space-y-4">
-          <div className="flex items-center justify-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
-              <Building2 className="w-4 h-4 text-white" />
+      <footer className="border-t border-border/60">
+        <div className="mx-auto w-full max-w-6xl px-xl py-xxl">
+          <div className="flex flex-col items-center gap-sm text-center">
+            <div className="flex items-center gap-sm">
+              <div className="grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground">
+                <Building2 className="h-4 w-4" />
+              </div>
+              <span className="text-sm font-semibold">DriveCare</span>
             </div>
-            <span className="text-lg font-semibold text-gradient-primary">DriveCare</span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            © 2025 DriveCare. Все права защищены.
-          </p>
-          <div className="flex items-center justify-center gap-6 text-sm">
-            <a href="mailto:support@drivecare.com" className="text-muted-foreground hover:text-primary transition-colors duration-300">
-              Поддержка
-            </a>
-            <a href="#" className="text-muted-foreground hover:text-primary transition-colors duration-300">
-              Политика конфиденциальности
-            </a>
-            <a href="#" className="text-muted-foreground hover:text-primary transition-colors duration-300">
-              Условия использования
-            </a>
+
+            <div className="text-xs text-muted-foreground">
+              © 2026 DriveCare. Все права защищены.
+            </div>
           </div>
         </div>
       </footer>
+    </div>
+  )
+}
+
+function ProductPreview() {
+  const [tab, setTab] = React.useState<"dashboard" | "orders">("dashboard")
+
+  const src = tab === "dashboard" ? "/demo-dashboard-page.png" : "/demo-roders-page.png"
+  const alt = tab === "dashboard" ? "DriveCare — Дашборд" : "DriveCare — Заказы"
+
+  return (
+    <Card className="transition-shadow hover:shadow-card-hover">
+      <CardHeader className="gap-md">
+        <div className="flex items-start justify-between gap-lg">
+          <div className="min-w-0">
+            <CardTitle className="text-base">Интерфейс DriveCare</CardTitle>
+            <CardDescription>
+              Реальные экраны продукта — чтобы сразу было понятно, как всё выглядит.
+            </CardDescription>
+          </div>
+
+          <div className="shrink-0 inline-flex rounded-md border border-border/60 bg-card p-xs">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setTab("dashboard")}
+              aria-pressed={tab === "dashboard"}
+              className={tab === "dashboard" ? "bg-surface-2 text-foreground" : undefined}
+            >
+              Дашборд
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setTab("orders")}
+              aria-pressed={tab === "orders"}
+              className={tab === "orders" ? "bg-surface-2 text-foreground" : undefined}
+            >
+              Заказы
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        <div className="overflow-hidden rounded-md border border-border/60 bg-surface-2">
+          <Image
+            src={src}
+            alt={alt}
+            width={1600}
+            height={900}
+            priority={tab === "dashboard"}
+            sizes="(min-width: 1024px) 560px, (min-width: 768px) 720px, 100vw"
+            className="h-auto w-full"
+          />
+        </div>
+
+        <div className="mt-md text-xs text-muted-foreground">
+          Владелец регистрирует компанию сам. Сотрудников можно пригласить позже по ссылке из кабинета.
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function BenefitCard({
+  icon,
+  title,
+  items,
+}: {
+  icon: React.ReactNode
+  title: string
+  items: string[]
+}) {
+  return (
+    <Card className="transition-shadow hover:shadow-card-hover">
+      <CardHeader>
+        <div className="grid h-10 w-10 place-items-center rounded-md border border-border/60 bg-surface-2">
+          {icon}
+        </div>
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+
+      <CardContent className="grid gap-sm">
+        {items.map((t) => (
+          <div key={t} className="flex items-center gap-sm text-sm text-muted-foreground">
+            <Check className="h-4 w-4 text-primary" />
+            <span>{t}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
+function StepCard({
+  icon,
+  title,
+  text,
+}: {
+  icon: React.ReactNode
+  title: string
+  text: string
+}) {
+  return (
+    <Card className="transition-shadow hover:shadow-card-hover">
+      <CardHeader>
+        <div className="grid h-10 w-10 place-items-center rounded-md border border-border/60 bg-surface-2">
+          {icon}
+        </div>
+        <CardTitle className="text-base">{title}</CardTitle>
+        <CardDescription>{text}</CardDescription>
+      </CardHeader>
+    </Card>
+  )
+}
+
+function FaqCard({ q, a }: { q: string; a: string }) {
+  return (
+    <Card className="transition-shadow hover:shadow-card-hover">
+      <CardHeader>
+        <CardTitle className="text-base">{q}</CardTitle>
+        <CardDescription>{a}</CardDescription>
+      </CardHeader>
+    </Card>
+  )
+}
+
+function HotkeyRow({ label, keys }: { label: string; keys: string[] }) {
+  return (
+    <div className="flex items-center justify-between gap-lg rounded-md border border-border/60 bg-card px-md py-sm">
+      <div className="text-sm text-muted-foreground">{label}</div>
+      <div className="flex items-center gap-xs">
+        {keys.map((k) => (
+          <kbd
+            key={k}
+            className="inline-flex h-7 items-center rounded-md border border-border/60 bg-surface-2 px-sm text-xs text-foreground"
+          >
+            {k}
+          </kbd>
+        ))}
+      </div>
     </div>
   )
 }

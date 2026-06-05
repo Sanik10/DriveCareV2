@@ -1,362 +1,523 @@
-// path: apps/frontend/app/dashboard/payment-methods/page.tsx
-'use client';
+"use client"
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { AppLayout } from '@/components/app/AppLayout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
-import { useAuth } from '@/lib/hooks/use-auth';
-import { paymentMethodsAPI } from '@/lib/api/payment-methods';
-import type { PaymentMethodResponse } from '@/lib/types/payment-methods';
-import { cn } from '@/lib/utils';
-import { 
-  CreditCard, 
-  Plus, 
-  RefreshCw, 
-  Settings,
-  DollarSign,
-  Bitcoin,
-  Banknote,
-  Smartphone,
-  Zap,
-  CheckCircle,
-  AlertTriangle,
-  Building
-} from 'lucide-react';
+import * as React from "react"
+import { useRouter } from "next/navigation"
+import { CreditCard, Plus, RefreshCw, Search, Zap, CheckCircle, CircleOff, Settings } from "lucide-react"
 
-const METHOD_ICONS = {
-  cash: Banknote,
-  card: CreditCard,
-  bank_transfer: DollarSign,
-  digital_wallet: Smartphone,
-  cryptocurrency: Bitcoin,
-  installments: CreditCard,
-  corporate: Building,
-} as const;
+import { AppLayout } from "@/components/app/AppLayout"
+import { NavigationHeader } from "@/components/platform/NavigationHeader"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
 
-const METHOD_COLORS = {
-  cash: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', icon: 'text-emerald-500' },
-  card: { bg: 'bg-blue-500/10', border: 'border-blue-500/20', icon: 'text-blue-500' },
-  bank_transfer: { bg: 'bg-indigo-500/10', border: 'border-indigo-500/20', icon: 'text-indigo-500' },
-  digital_wallet: { bg: 'bg-purple-500/10', border: 'border-purple-500/20', icon: 'text-purple-500' },
-  cryptocurrency: { bg: 'bg-amber-500/10', border: 'border-amber-500/20', icon: 'text-amber-500' },
-  installments: { bg: 'bg-teal-500/10', border: 'border-teal-500/20', icon: 'text-teal-500' },
-  corporate: { bg: 'bg-slate-500/10', border: 'border-slate-500/20', icon: 'text-slate-500' },
-} as const;
+import { PageFiltersCard, PageFiltersRow } from "@/components/app/PageFiltersCard"
+import { PageContentCard } from "@/components/app/PageContentCard"
+import { StatsCard, StatsGrid } from "@/components/app/StatsCard"
+import { PaginationControls } from "@/components/app/PaginationControls"
+
+import { useAuth } from "@/lib/hooks/use-auth"
+import { paymentMethodsAPI } from "@/lib/api/payment-methods"
+import type { PaginatedPaymentMethodsUI, PaymentMethodResponse, PaymentMethodType } from "@/lib/types/payment-methods"
+import { cn } from "@/lib/utils"
+
+const METHOD_TYPES: { value: PaymentMethodType; label: string }[] = [
+  { value: "cash", label: "Наличные" },
+  { value: "card", label: "Карта" },
+  { value: "bank_transfer", label: "Банковский перевод" },
+  { value: "digital_wallet", label: "Электронный кошелёк" },
+  { value: "cryptocurrency", label: "Криптовалюта" },
+  { value: "installments", label: "Рассрочка" },
+  { value: "corporate", label: "Корпоративный" },
+]
 
 function requiresIntegration(type?: string): boolean {
-  const t = String(type || '').toLowerCase();
-  return t === 'card' || t === 'digital_wallet' || t === 'cryptocurrency';
+  const t = String(type || "").toLowerCase()
+  return t === "card" || t === "digital_wallet" || t === "cryptocurrency"
+}
+
+function typeLabel(type?: string) {
+  const t = String(type || "").toLowerCase() as PaymentMethodType
+  return METHOD_TYPES.find((x) => x.value === t)?.label || type || "—"
 }
 
 export default function PaymentMethodsPage() {
-  const router = useRouter();
-  const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<PaymentMethodResponse[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter()
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth()
 
-  const roleName = user?.role?.name || '';
-  const canCreate = ['company_owner', 'company_admin'].includes(roleName);
-  const canToggle = canCreate;
-  const canTest = ['company_owner', 'company_admin', 'manager'].includes(roleName);
+  const [isMounted, setIsMounted] = React.useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await paymentMethodsAPI.getPaymentMethods({});
-      setItems(res.items || []);
-    } catch (e: unknown) {
-      setError((e as Error)?.message || 'Не удалось загрузить способы оплаты');
-    } finally {
-      setLoading(false);
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [data, setData] = React.useState<PaginatedPaymentMethodsUI | null>(null)
+
+  const [search, setSearch] = React.useState("")
+  const [type, setType] = React.useState<string>("all")
+  const [status, setStatus] = React.useState<string>("all") // all | active | inactive
+
+  const [page, setPage] = React.useState(1)
+  const [limit, setLimit] = React.useState(12)
+
+  const [toggleBusy, setToggleBusy] = React.useState<Record<string, boolean>>({})
+  const [testBusy, setTestBusy] = React.useState<Record<string, boolean>>({})
+  const [flash, setFlash] = React.useState<{ kind: "ok" | "warn" | "error"; text: string } | null>(null)
+
+  React.useEffect(() => setIsMounted(true), [])
+
+  const roleObj = (user as unknown as { role?: string | { name?: string } } | null)?.role
+  const roleName = (typeof roleObj === "string" ? roleObj : roleObj?.name || "").toLowerCase()
+
+  const canCreate = ["company_owner", "company_admin"].includes(roleName)
+  const canToggle = canCreate
+  const canTest = ["company_owner", "company_admin", "manager"].includes(roleName)
+
+  const query = React.useMemo(() => {
+    return {
+      search: search || undefined,
+      page,
+      limit,
+      type: type !== "all" ? type : undefined,
+      isActive: status === "active" ? true : status === "inactive" ? false : undefined,
+      sortBy: "createdAt" as const,
+      sortOrder: "DESC" as const,
     }
-  }, []);
+  }, [search, page, limit, type, status])
 
-  const goToCreate = useCallback(() => {
-    router.push('/dashboard/payment-methods/new');
-  }, [router]);
+  const items = React.useMemo(() => data?.items || [], [data])
 
-  const goToDetails = useCallback((id: string) => {
-    router.push(`/dashboard/payment-methods/${id}`);
-  }, [router]);
+  const stats = React.useMemo(() => {
+    const total = data?.total ?? items.length
+    const active = items.filter((i) => i.isActive).length
+    const inactive = items.filter((i) => !i.isActive).length
+    const needsSetup = items.filter((i) => requiresIntegration(i.type) && i.integrationStatus?.isConfigured !== true).length
+    return { total, active, inactive, needsSetup }
+  }, [data, items])
 
-  const toggleMethod = useCallback(async (id: string) => {
-    if (!canToggle) return;
+  const load = React.useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
     try {
-      const updated = await paymentMethodsAPI.toggleStatus(id);
-      setItems(prev => prev.map(item => item.id === id ? updated : item));
-    } catch (e: unknown) {
-      alert((e as Error)?.message || 'Не удалось изменить статус способа оплаты');
-    }
-  }, [canToggle]);
-
-  const testPayment = useCallback(async (id: string) => {
-    if (!canTest) return;
-    try {
-      const result = await paymentMethodsAPI.testIntegration(id);
-      if (result.ok) {
-        alert(`✅ ${result.message || 'Интеграция работает корректно'}`);
-      } else {
-        alert(`⚠️ ${result.message || 'Обнаружены проблемы с интеграцией'}`);
+      const res = await paymentMethodsAPI.getPaymentMethods(query)
+      setData(res)
+    } catch (e) {
+      try {
+        const parsed = JSON.parse((e as Error).message) as { message?: string; correlationId?: string }
+        const msg = parsed.correlationId
+          ? `${parsed.message || "Ошибка загрузки способов оплаты"} (corrId: ${parsed.correlationId})`
+          : parsed.message || "Ошибка загрузки способов оплаты"
+        setError(msg)
+      } catch {
+        setError((e as Error)?.message || "Ошибка загрузки способов оплаты")
       }
-    } catch (e: unknown) {
-      alert((e as Error)?.message || 'Ошибка тестирования интеграции');
+    } finally {
+      setLoading(false)
     }
-  }, [canTest]);
+  }, [query])
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  React.useEffect(() => {
+    if (!isMounted) return
+    if (authLoading) return
 
-  const configuredCount = useMemo(() => {
-    return items.filter((item) => requiresIntegration(item.type) ? item.integrationStatus?.isConfigured === true : true).length;
-  }, [items]);
+    if (!isAuthenticated || !user) {
+      router.push("/login")
+      return
+    }
+
+    let cancelled = false
+    const DEBOUNCE_MS = 250
+
+    const t = setTimeout(async () => {
+      if (cancelled) return
+      await load()
+    }, DEBOUNCE_MS)
+
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [isMounted, authLoading, isAuthenticated, user, router, load])
+
+  const handleRefresh = React.useCallback(() => {
+    setPage(1)
+    setFlash(null)
+    setError(null)
+
+    setLoading(true)
+    paymentMethodsAPI
+      .getPaymentMethods({ ...query, page: 1 })
+      .then(setData)
+      .catch(() => setError("Ошибка загрузки способов оплаты"))
+      .finally(() => setLoading(false))
+  }, [query])
+
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
+        if (!canCreate) return
+        e.preventDefault()
+        router.push("/dashboard/payment-methods/new")
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [router, canCreate])
+
+  const toggleMethod = React.useCallback(
+    async (id: string) => {
+      if (!canToggle) return
+      if (toggleBusy[id]) return
+
+      setToggleBusy((m) => ({ ...m, [id]: true }))
+      setFlash(null)
+
+      try {
+        const updated = await paymentMethodsAPI.toggleStatus(id)
+        setData((prev) => {
+          if (!prev) return prev
+          return { ...prev, items: prev.items.map((x) => (x.id === id ? updated : x)) }
+        })
+      } catch (e: unknown) {
+        setFlash({ kind: "error", text: (e as Error)?.message || "Не удалось изменить статус" })
+      } finally {
+        setToggleBusy((m) => ({ ...m, [id]: false }))
+      }
+    },
+    [canToggle, toggleBusy]
+  )
+
+  const testIntegration = React.useCallback(
+    async (id: string) => {
+      if (!canTest) return
+      if (testBusy[id]) return
+
+      setTestBusy((m) => ({ ...m, [id]: true }))
+      setFlash(null)
+
+      try {
+        const res = await paymentMethodsAPI.testIntegration(id)
+        setFlash({
+          kind: res.ok ? "ok" : "warn",
+          text: res.message || (res.ok ? "Интеграция работает корректно" : "Обнаружены проблемы с интеграцией"),
+        })
+      } catch (e: unknown) {
+        setFlash({ kind: "error", text: (e as Error)?.message || "Ошибка тестирования интеграции" })
+      } finally {
+        setTestBusy((m) => ({ ...m, [id]: false }))
+      }
+    },
+    [canTest, testBusy]
+  )
+
+  if (!isMounted) return null
+  if (authLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-sm">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-muted-foreground">Загрузка...</span>
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
+  if (!isAuthenticated || !user) return null
 
   const headerActions = (
-    <div className="flex items-center gap-2">
-      <Button variant="outline" onClick={load} className="rounded-2xl btn-outline-fixed">
-        <RefreshCw className="w-4 h-4 mr-2" />
+    <div className="flex items-center gap-sm">
+      <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={loading}>
+        <RefreshCw className="w-4 h-4 mr-xs" />
         Обновить
       </Button>
+
       {canCreate && (
-        <Button className="rounded-2xl bg-gradient-primary hover:opacity-90 transition-all duration-300 hover:scale-[1.02]" onClick={goToCreate}>
-          <Plus className="w-4 h-4 mr-2" />
-          Добавить метод
+        <Button variant="primary" size="sm" onClick={() => router.push("/dashboard/payment-methods/new")}>
+          <Plus className="w-4 h-4 mr-xs" />
+          Новый способ
         </Button>
       )}
     </div>
-  );
+  )
 
   return (
-    <AppLayout
-      title="Способы оплаты"
-      description="Интерактивные переключатели методов оплаты"
-      icon={CreditCard}
-      actions={headerActions}
-    >
-      <div className="container mx-auto px-6 py-6 space-y-6">
-        <Card className="p-4 glass border-purple-500/20 bg-gradient-to-r from-purple-500/5 to-primary/5 rounded-3xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-r from-purple-500 to-primary">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-purple-600 dark:text-purple-400">Интерактивные переключатели методов</h3>
-              <p className="text-sm text-muted-foreground">Настраивайте доступные способы и проверяйте интеграции онлайн-оплат.</p>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/30">
-                <CheckCircle className="w-3 h-3 mr-1" />
-                Активно
-              </Badge>
-              <Badge variant="outline" className="bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/30">
-                <AlertTriangle className="w-3 h-3 mr-1" />
-                Отключено
-              </Badge>
-            </div>
-          </div>
-        </Card>
+    <AppLayout>
+      <div className="container mx-auto px-lg py-xl flex flex-col gap-lg">
+        <NavigationHeader
+          title="Способы оплаты"
+          subtitle="Настройка доступных способов оплаты для клиентов"
+          icon={<CreditCard className="w-5 h-5" />}
+          actions={headerActions}
+        />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {loading ? (
-            [...Array(6)].map((_, i) => (
-              <Card key={i} className="p-6 glass border-border/30 rounded-3xl">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-surface-1/40 rounded-2xl animate-pulse" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-surface-1/40 rounded animate-pulse" />
-                      <div className="h-3 bg-surface-1/40 rounded animate-pulse w-2/3" />
-                    </div>
-                  </div>
-                  <div className="h-10 bg-surface-1/40 rounded-xl animate-pulse" />
-                </div>
-              </Card>
-            ))
-          ) : error ? (
-            <div className="col-span-full p-8 text-center">
-              <div className="flex items-center justify-center gap-3 text-destructive mb-4">
-                <AlertTriangle className="w-6 h-6" />
-                <p className="text-lg font-medium">{error}</p>
-              </div>
-              <Button onClick={load} className="rounded-2xl">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Повторить
-              </Button>
+        <StatsGrid cols={4}>
+          <StatsCard title="Всего" value={stats.total} icon={CreditCard} />
+          <StatsCard title="Активных" value={stats.active} icon={CheckCircle} meta="на странице" />
+          <StatsCard title="Отключены" value={stats.inactive} icon={CircleOff} meta="на странице" />
+          <StatsCard title="Требуют настройки" value={stats.needsSetup} icon={Settings} meta="на странице" />
+        </StatsGrid>
+
+        {flash && (
+          <div
+            className={cn(
+              "rounded-md border p-md text-sm",
+              flash.kind === "ok" && "border-status-active/30 bg-status-active/10 text-status-active",
+              flash.kind === "warn" && "border-status-pending/30 bg-status-pending/10 text-status-pending",
+              flash.kind === "error" && "border-status-error/30 bg-status-error/10 text-status-error"
+            )}
+          >
+            {flash.text}
+          </div>
+        )}
+
+        <PageFiltersCard>
+          <PageFiltersRow>
+            <div className="relative w-full lg:max-w-lg">
+              <label htmlFor="pm-search" className="sr-only">
+                Поиск способов оплаты
+              </label>
+              <Input
+                id="pm-search"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setPage(1)
+                }}
+                placeholder="Поиск по названию..."
+                className="pl-[36px]"
+              />
+              <Search className="w-4 h-4 absolute left-md top-1/2 -translate-y-1/2 text-muted-foreground" />
             </div>
-          ) : items.length === 0 ? (
-            <div className="col-span-full p-10 text-center text-muted-foreground">
-              <CreditCard className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <h3 className="font-semibold mb-2">Способы оплаты не найдены</h3>
-              <p className="text-sm mb-4">Добавьте первый способ оплаты для приёма платежей</p>
-              {canCreate && (
-                <Button className="rounded-2xl bg-gradient-primary hover:opacity-90" onClick={goToCreate}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Добавить метод
-                </Button>
-              )}
+
+            <div className="flex items-center gap-sm flex-wrap justify-end">
+              <label className="sr-only" htmlFor="pm-type">
+                Тип
+              </label>
+              <select
+                id="pm-type"
+                value={type}
+                onChange={(e) => {
+                  setType(e.target.value)
+                  setPage(1)
+                }}
+                className={cn(
+                  "h-10 rounded-md border border-input bg-background text-sm px-md",
+                  "text-foreground hover:border-border/80"
+                )}
+              >
+                <option value="all">Все типы</option>
+                {METHOD_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+
+              <label className="sr-only" htmlFor="pm-status">
+                Статус
+              </label>
+              <select
+                id="pm-status"
+                value={status}
+                onChange={(e) => {
+                  setStatus(e.target.value)
+                  setPage(1)
+                }}
+                className={cn(
+                  "h-10 rounded-md border border-input bg-background text-sm px-md",
+                  "text-foreground hover:border-border/80"
+                )}
+              >
+                <option value="all">Все</option>
+                <option value="active">Активные</option>
+                <option value="inactive">Отключенные</option>
+              </select>
+
+              <label className="sr-only" htmlFor="pm-limit">
+                На странице
+              </label>
+              <select
+                id="pm-limit"
+                value={limit}
+                onChange={(e) => {
+                  setLimit(parseInt(e.target.value, 10))
+                  setPage(1)
+                }}
+                className={cn(
+                  "h-10 rounded-md border border-input bg-background text-sm px-md",
+                  "text-foreground hover:border-border/80"
+                )}
+              >
+                {[12, 24, 48].map((n) => (
+                  <option key={n} value={n}>
+                    {n} / стр
+                  </option>
+                ))}
+              </select>
             </div>
-          ) : (
-            items.map((method) => (
-              <PaymentMethodCard 
-                key={method.id}
-                method={method}
+          </PageFiltersRow>
+        </PageFiltersCard>
+
+        <PageContentCard
+          loading={loading}
+          error={error}
+          empty={items.length === 0}
+          emptyState={{
+            icon: CreditCard,
+            title: "Способы оплаты не найдены",
+            description:
+              search || type !== "all" || status !== "all"
+                ? "Попробуйте изменить фильтры."
+                : "Добавьте первый способ оплаты.",
+            action: canCreate
+              ? {
+                  label: "Добавить способ",
+                  onClick: () => router.push("/dashboard/payment-methods/new"),
+                  icon: Plus,
+                  variant: "secondary",
+                }
+              : undefined,
+          }}
+          onRetry={handleRefresh}
+          loadingRows={6}
+          containerVariant="ghost"
+          contentClassName="p-0"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-md">
+            {items.map((m) => (
+              <PaymentMethodEntityCard
+                key={m.id}
+                method={m}
                 canToggle={canToggle}
                 canTest={canTest}
-                onToggle={toggleMethod}
-                onTest={testPayment}
-                onConfigure={() => goToDetails(method.id)}
+                toggleLoading={!!toggleBusy[m.id]}
+                testLoading={!!testBusy[m.id]}
+                onOpen={() => router.push(`/dashboard/payment-methods/${m.id}`)}
+                onToggle={() => toggleMethod(m.id)}
+                onTest={() => testIntegration(m.id)}
               />
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        </PageContentCard>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="p-4 glass border-border/30 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-primary/20">
-                <CreditCard className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Всего методов</div>
-                <div className="text-xl font-bold">{items.length}</div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4 glass border-border/30 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-emerald-500/20">
-                <CheckCircle className="w-5 h-5 text-emerald-500" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Активных</div>
-                <div className="text-xl font-bold">
-                  {items.filter(item => item.isActive).length}
-                </div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4 glass border-border/30 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-amber-500/20">
-                <Settings className="w-5 h-5 text-amber-500" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Настроенных</div>
-                <div className="text-xl font-bold">{configuredCount}</div>
-              </div>
-            </div>
-          </Card>
-        </div>
+        <PaginationControls
+          page={page}
+          totalPages={data?.totalPages || 1}
+          total={data?.total || 0}
+          showing={items.length}
+          onPageChange={setPage}
+          itemLabel="способов"
+        />
       </div>
     </AppLayout>
-  );
+  )
 }
 
-function PaymentMethodCard({
+function PaymentMethodEntityCard({
   method,
   canToggle,
   canTest,
+  toggleLoading,
+  testLoading,
+  onOpen,
   onToggle,
   onTest,
-  onConfigure,
 }: {
-  method: PaymentMethodResponse;
-  canToggle: boolean;
-  canTest: boolean;
-  onToggle: (id: string) => void;
-  onTest: (id: string) => void;
-  onConfigure: () => void;
+  method: PaymentMethodResponse
+  canToggle: boolean
+  canTest: boolean
+  toggleLoading: boolean
+  testLoading: boolean
+  onOpen: () => void
+  onToggle: () => void
+  onTest: () => void
 }) {
-  const IconComponent = METHOD_ICONS[method.type as keyof typeof METHOD_ICONS] || CreditCard;
-  const colors = METHOD_COLORS[method.type as keyof typeof METHOD_COLORS] || METHOD_COLORS.card;
+  const needsIntegration = requiresIntegration(method.type as string)
+  const isConfigured = needsIntegration ? method.integrationStatus?.isConfigured === true : true
+  const isTestMode = needsIntegration ? method.integrationStatus?.testMode === true : false
 
-  const [isToggling, setIsToggling] = useState(false);
-
-  const handleToggle = async (checked: boolean) => {
-    if (!canToggle || isToggling || checked === method.isActive) return;
-    setIsToggling(true);
-    try {
-      await onToggle(method.id);
-    } finally {
-      setTimeout(() => setIsToggling(false), 300);
-    }
-  };
-
-  const needsIntegration = requiresIntegration(method.type as string);
-  const isConfigured = needsIntegration ? method.integrationStatus?.isConfigured === true : true;
-  const isTestMode = needsIntegration ? !!method.integrationStatus?.testMode : false;
+  const meta: string[] = []
+  meta.push(typeLabel(method.type))
+  if (typeof method.processingFeePercent === "number") meta.push(`Комиссия: ${method.processingFeePercent}%`)
+  if (method.limits?.minAmount || method.limits?.maxAmount) {
+    meta.push(`Лимиты: ${method.limits?.minAmount ?? 0} — ${method.limits?.maxAmount ?? "∞"} ₽`)
+  }
 
   return (
-    <Card className={cn(
-      "p-6 glass border-border/30 rounded-3xl transition-all duration-500 hover:scale-[1.02] group",
-      "hover:shadow-glass-lg hover:-translate-y-1",
-      method.isActive && "ring-1 ring-primary/20 bg-primary/5"
-    )}>
-      <div className="flex items-start justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className={cn("p-3 rounded-2xl transition-all duration-300 group-hover:scale-105", colors.bg, colors.border, "border")}>
-            <IconComponent className={cn("w-6 h-6", colors.icon)} />
+    <div
+      className={cn("rounded-md border bg-card p-lg transition-colors hover:bg-surface-2 cursor-pointer")}
+      onClick={onOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onOpen()
+      }}
+    >
+      <div className="flex items-start justify-between gap-md">
+        <div className="flex items-start gap-md min-w-0">
+          <div className="w-10 h-10 rounded-md bg-surface-2 border flex items-center justify-center shrink-0">
+            <CreditCard className="w-4 h-4 text-muted-foreground" />
           </div>
-          <div>
-            <h3 className="font-semibold text-lg">{method.name}</h3>
-            <p className="text-sm text-muted-foreground">{method.description}</p>
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-sm flex-wrap">
+              <div className="text-sm font-medium text-foreground truncate max-w-[320px]">{method.name}</div>
+
+              <Badge variant={method.isActive ? "active" : "draft"}>{method.isActive ? "Активен" : "Отключен"}</Badge>
+
+              {needsIntegration && (
+                <Badge variant={isConfigured ? "active" : "pending"}>{isConfigured ? "Интеграция" : "Нужна настройка"}</Badge>
+              )}
+
+              {isTestMode && <Badge variant="pending">Тест</Badge>}
+            </div>
+
+            <div className="mt-xs text-xs text-muted-foreground line-clamp-2">
+              {method.description || meta.join(" · ")}
+            </div>
           </div>
         </div>
-        <div className={cn("w-3 h-3 rounded-full transition-all duration-300", method.isActive ? "bg-emerald-500 shadow-lg shadow-emerald-500/30" : "bg-muted", method.isActive && "animate-pulse")} />
+
+        <div
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+          }}
+        >
+          <Switch
+            checked={method.isActive}
+            disabled={!canToggle || toggleLoading}
+            onCheckedChange={() => onToggle()}
+            className={cn(toggleLoading && "opacity-60")}
+          />
+        </div>
       </div>
 
-      <div className="mb-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Badge variant={isConfigured ? "default" : "secondary"} className="text-xs">
-            {isConfigured ? (<><CheckCircle className="w-3 h-3 mr-1" /> Настроен</>) : (<><Settings className="w-3 h-3 mr-1" /> Требует настройки</>)}
-          </Badge>
-          {method.processingFeePercent ? (
-            <Badge variant="outline" className="text-xs">Комиссия: {method.processingFeePercent}%</Badge>
-          ) : null}
-          {isTestMode && (
-            <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/30">
+      <div className="mt-md flex items-center justify-between gap-sm">
+        <div className="text-xs text-muted-foreground truncate">
+          {needsIntegration ? (isConfigured ? "Можно тестировать" : "Настройте интеграцию") : "Без интеграции"}
+        </div>
+
+        <div
+          className="flex items-center gap-sm"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+          }}
+        >
+          <Button variant="secondary" size="sm" onClick={onOpen}>
+            <Settings className="w-4 h-4 mr-xs" />
+            Настроить
+          </Button>
+
+          {needsIntegration && (
+            <Button variant="ghost" size="sm" disabled={!canTest || !isConfigured || testLoading} onClick={onTest}>
+              <Zap className="w-4 h-4 mr-xs" />
               Тест
-            </Badge>
+            </Button>
           )}
         </div>
-
-        {method.limits && (
-          <div className="text-xs text-muted-foreground">
-            Лимиты: {method.limits.minAmount || 0} — {method.limits.maxAmount || '∞'} ₽
-          </div>
-        )}
       </div>
-
-      <div className="flex items-center justify-between p-3 rounded-2xl bg-surface-1/40 mb-4">
-        <div className="flex items-center gap-2">
-          <Zap className={cn("w-4 h-4 transition-colors duration-300", method.isActive ? "text-primary" : "text-muted-foreground")} />
-          <span className="text-sm font-medium">{method.isActive ? 'Активен' : 'Отключен'}</span>
-        </div>
-        <Switch checked={method.isActive} onCheckedChange={handleToggle} disabled={!canToggle || isToggling} className={cn("transition-all duration-300", isToggling && "opacity-50")} />
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <Button variant="outline" size="sm" className="rounded-xl text-xs" onClick={onConfigure}>
-          <Settings className="w-3 h-3 mr-1" />
-          Настроить
-        </Button>
-        <Button variant="outline" size="sm" className="rounded-xl text-xs" disabled={!canTest || !needsIntegration || !isConfigured} onClick={() => onTest(method.id)}>
-          <Zap className="w-3 h-3 mr-1" />
-          Тест
-        </Button>
-      </div>
-
-      {method.isActive && (
-        <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10" />
-      )}
-    </Card>
-  );
+    </div>
+  )
 }

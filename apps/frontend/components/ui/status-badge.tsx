@@ -1,10 +1,15 @@
 // path: apps/frontend/components/ui/status-badge.tsx
-"use client";
+"use client"
 
-import * as React from "react";
-import { cn } from "@/lib/utils";
+import * as React from "react"
+import { Badge } from "@/components/ui/badge"
 
-export type OrderStatus = "new" | "in_progress" | "awaiting_parts" | "completed" | "canceled";
+export type OrderStatus =
+  | "new"
+  | "in_progress"
+  | "awaiting_parts"
+  | "completed"
+  | "canceled"
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   new: "Новый",
@@ -12,42 +17,37 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
   awaiting_parts: "Ожидание запчастей",
   completed: "Завершен",
   canceled: "Отменен",
-};
+}
 
-const STATUS_STYLES: Record<OrderStatus, { text: string; bg: string; ring?: string; border?: string }> = {
-  new: { text: "text-sky-400", bg: "bg-sky-500/10", ring: "ring-1 ring-sky-400/20", border: "border-sky-500/20" },
-  in_progress: { text: "text-blue-400", bg: "bg-blue-500/10", ring: "ring-1 ring-blue-400/20", border: "border-blue-500/20" },
-  awaiting_parts: { text: "text-amber-400", bg: "bg-amber-500/10", ring: "ring-1 ring-amber-400/20", border: "border-amber-500/20" },
-  completed: { text: "text-emerald-400", bg: "bg-emerald-500/10", ring: "ring-1 ring-emerald-400/20", border: "border-emerald-500/20" },
-  canceled: { text: "text-rose-400", bg: "bg-rose-500/10", ring: "ring-1 ring-rose-400/20", border: "border-rose-500/20" },
-};
+// Жестко мапим бизнес-статусы заказа на 5 разрешенных системных статусов
+const STATUS_MAPPING: Record<
+  OrderStatus,
+  "draft" | "progress" | "pending" | "active" | "error"
+> = {
+  new: "draft", // Новый -> Серый (Черновик)
+  in_progress: "progress", // В работе -> Синий (Прогресс)
+  awaiting_parts: "pending", // Ожидание -> Желтый (Пендинг)
+  completed: "active", // Завершен -> Зеленый (Активен/Успех)
+  canceled: "error", // Отменен -> Красный (Ошибка/Отказ)
+}
 
 export function orderStatusLabel(status: OrderStatus): string {
-  return STATUS_LABELS[status] || status;
+  return STATUS_LABELS[status] ?? String(status)
 }
 
 type Props = {
-  status: OrderStatus;
-  variant?: "badge" | "pill";
-  className?: string;
-};
+  status: OrderStatus
+  className?: string
+}
 
-export function StatusBadge({ status, variant = "badge", className }: Props) {
-  const s = STATUS_STYLES[status];
+// StatusBadge использует системный Badge. Никакого дублирования кода и стилей.
+export function StatusBadge({ status, className }: Props) {
+  const variant = STATUS_MAPPING[status] ?? "draft"
+  const label = STATUS_LABELS[status] ?? String(status)
+
   return (
-    <span
-      className={cn(
-        "inline-flex items-center",
-        variant === "badge"
-          ? "px-2 py-0.5 rounded-md text-xs border"
-          : "px-2 py-0.5 rounded-full text-[11px] border",
-        s.text,
-        s.bg,
-        s.border,
-        className
-      )}
-    >
-      {STATUS_LABELS[status]}
-    </span>
-  );
+    <Badge variant={variant} className={className}>
+      {label}
+    </Badge>
+  )
 }

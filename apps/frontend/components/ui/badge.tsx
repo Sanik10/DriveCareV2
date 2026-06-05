@@ -2,34 +2,36 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
+// DriveCare V1.1: 5 строгих статусов.
+// Активен (Зеленый), Ожидание (Желтый), В работе (Синий), Ошибка (Красный), Черновик (Серый)
 const badgeVariants = {
-  default: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
-  secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80", 
-  destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-  outline: "text-foreground border-border",
-  success: "border-transparent bg-emerald-500/20 text-emerald-600 border-emerald-500/30",
-  warning: "border-transparent bg-amber-500/20 text-amber-600 border-amber-500/30",
-  info: "border-transparent bg-blue-500/20 text-blue-600 border-blue-500/30",
-  new: "border-transparent bg-sky-500/20 text-sky-600 border-sky-500/30",
-  inProgress: "border-transparent bg-blue-500/20 text-blue-600 border-blue-500/30",
-  awaitingParts: "border-transparent bg-amber-500/20 text-amber-600 border-amber-500/30",
-  completed: "border-transparent bg-emerald-500/20 text-emerald-600 border-emerald-500/30",
-  canceled: "border-transparent bg-rose-500/20 text-rose-600 border-rose-500/30",
+  // Базовые UI-состояния
+  default: "bg-primary/10 text-primary border-primary/20",
+  secondary: "bg-secondary text-secondary-foreground border-border",
+  outline: "bg-transparent text-foreground border-border",
+
+  // Системные статусы (цвета берутся из tailwind.config.ts)
+  active: "bg-status-active/10 text-status-active border-status-active/20",
+  pending: "bg-status-pending/10 text-status-pending border-status-pending/20",
+  progress: "bg-status-progress/10 text-status-progress border-status-progress/20",
+  error: "bg-status-error/10 text-status-error border-status-error/20",
+  draft: "bg-status-draft/10 text-status-draft border-status-draft/20",
 }
 
-export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
+export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: keyof typeof badgeVariants
 }
 
 function Badge({ className, variant = "default", ...props }: BadgeProps) {
   return (
-    <div 
+    <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+        // Строго: никаких случайных px/py. Высота фикс, боковые отступы по шкале.
+        "inline-flex h-5 items-center rounded-md border px-sm text-xs font-medium leading-none whitespace-nowrap select-none",
         badgeVariants[variant],
         className
-      )} 
-      {...props} 
+      )}
+      {...props}
     />
   )
 }

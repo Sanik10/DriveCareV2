@@ -7,61 +7,77 @@ const config: Config = {
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
+  // Поддержка темной темы по классу (standard для Next.js + next-themes)
+  darkMode: 'class',
   theme: {
     extend: {
+      // СТРОГАЯ ШКАЛА ОТСТУПОВ (DriveCare Design System v1.1)
+      // Важно: мы ДОБАВЛЯЕМ токены, не ломая стандартную шкалу Tailwind (w-4, h-4 и т.д.)
+      spacing: {
+        xs: '4px',
+        sm: '8px',
+        md: '12px',
+        lg: '16px',
+        xl: '24px',
+        xxl: '32px',
+        section: '48px',
+      },
+
       colors: {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
+
         primary: 'hsl(var(--primary))',
         'primary-foreground': 'hsl(var(--primary-foreground))',
+
         secondary: 'hsl(var(--secondary))',
         'secondary-foreground': 'hsl(var(--secondary-foreground))',
+
         muted: 'hsl(var(--muted))',
         'muted-foreground': 'hsl(var(--muted-foreground))',
+
         accent: 'hsl(var(--accent))',
         'accent-foreground': 'hsl(var(--accent-foreground))',
+
         destructive: 'hsl(var(--destructive))',
         'destructive-foreground': 'hsl(var(--destructive-foreground))',
+
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
+
         card: 'hsl(var(--card))',
         'card-foreground': 'hsl(var(--card-foreground))',
-        
-        // NeoCarbon Refined v0.3 extended colors
+
         'surface-1': 'hsl(var(--surface-1))',
         'surface-2': 'hsl(var(--surface-2))',
-        
-        // Service status colors
-        'service-ok': 'hsl(142 76% 36%)',      // emerald-600 - ТО актуально
-        'service-soon': 'hsl(45 93% 47%)',     // amber-500 - ТО скоро
-        'service-overdue': 'hsl(0 84% 60%)',   // red-500 - ТО просрочено
+
+        // Системные статусы (DriveCare V1.1)
+        'status-active': 'hsl(142 76% 36%)', // Зеленый
+        'status-pending': 'hsl(45 93% 47%)', // Желтый
+        'status-progress': 'hsl(199 89% 48%)', // Синий
+        'status-error': 'hsl(0 84% 60%)', // Красный
+        'status-draft': 'hsl(215 16% 47%)', // Серый
       },
-      backgroundImage: {
-        'gradient-primary': 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 50%, hsl(var(--accent)) 100%)',
-        'gradient-surface': 'radial-gradient(ellipse at top, hsl(var(--primary) / 0.05) 0%, transparent 50%)',
-      },
+
       fontFamily: {
         sans: ['var(--font-geist-sans)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-geist-mono)', 'monospace'],
       },
+
+      // Строгие формы - убираем слишком большие скругления
       borderRadius: {
-        '3xl': '24px',  // Карточки
-        '2xl': '14px',  // Кнопки основные
-        'xl': '12px',   // Кнопки вторичные
+        lg: '10px',
+        md: '8px',
+        sm: '6px',
       },
-      animation: {
-        'glow-pulse': 'glow-pulse 2s ease-in-out infinite',
-      },
-      keyframes: {
-        'glow-pulse': {
-          '0%, 100%': { 
-            boxShadow: '0 0 0 rgba(239, 68, 68, 0)',
-          },
-          '50%': { 
-            boxShadow: '0 0 20px rgba(239, 68, 68, 0.3), 0 0 40px rgba(239, 68, 68, 0.1)',
-          },
-        },
+
+      boxShadow: {
+        // Минималистичные тени в стиле Linear/Vercel
+        card: '0 1px 2px rgba(0, 0, 0, 0.05)',
+        'card-hover': '0 4px 12px rgba(0, 0, 0, 0.08)',
+        'dark-card':
+          '0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 1px 2px rgba(0, 0, 0, 0.5)',
       },
     },
   },

@@ -1,221 +1,293 @@
-// path: apps/frontend/app/dashboard/payment-methods/[id]/page.tsx
-'use client';
+"use client"
 
-import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import * as React from "react"
+import { useParams, useRouter } from "next/navigation"
+import {
+  CreditCard,
+  RefreshCw,
+  Save,
+  Power,
+  Trash2,
+  Lock,
+  Wrench,
+  Calculator,
+  Settings,
+} from "lucide-react"
+import { toast } from "sonner"
 
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { useAuth } from '@/lib/hooks/use-auth';
+import { AppLayout } from "@/components/app/AppLayout"
+import { NavigationHeader } from "@/components/platform/NavigationHeader"
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 
-import { CreditCard, ArrowLeft, Home, RefreshCw, Save, Power, Trash2, Lock, Wrench, Calculator } from 'lucide-react';
-import { paymentMethodsAPI } from '@/lib/api/payment-methods';
+import { useAuth } from "@/lib/hooks/use-auth"
+import { paymentMethodsAPI } from "@/lib/api/payment-methods"
 import type {
   PaymentMethodResponse,
   PaymentMethodType,
   PaymentMethodUpdateRequest,
-} from '@/lib/types/payment-methods';
-import { toast } from 'sonner';
+  CalculateFeeResponse,
+} from "@/lib/types/payment-methods"
+import { cn } from "@/lib/utils"
 
 const TYPES: { value: PaymentMethodType; label: string }[] = [
-  { value: 'cash', label: 'Наличные' },
-  { value: 'card', label: 'Банковская карта' },
-  { value: 'bank_transfer', label: 'Банковский перевод' },
-  { value: 'installments', label: 'Рассрочка' },
-  { value: 'corporate', label: 'Корпоративный' },
-  { value: 'digital_wallet', label: 'Цифровой кошелёк' },
-  { value: 'cryptocurrency', label: 'Криптовалюта' },
-];
+  { value: "cash", label: "Наличные" },
+  { value: "card", label: "Банковская карта" },
+  { value: "bank_transfer", label: "Банковский перевод" },
+  { value: "installments", label: "Рассрочка" },
+  { value: "corporate", label: "Корпоративный" },
+  { value: "digital_wallet", label: "Цифровой кошелёк" },
+  { value: "cryptocurrency", label: "Криптовалюта" },
+]
 
 function requiresIntegration(type?: string): boolean {
-  const t = String(type || '').toLowerCase();
-  return t === 'card' || t === 'digital_wallet' || t === 'cryptocurrency';
+  const t = String(type || "").toLowerCase()
+  return t === "card" || t === "digital_wallet" || t === "cryptocurrency"
+}
+
+function typeLabel(type?: string) {
+  const t = String(type || "").toLowerCase() as PaymentMethodType
+  return TYPES.find((x) => x.value === t)?.label || type || "—"
 }
 
 function toNumber(v: string): number | undefined {
-  if (v == null) return undefined;
-  const s = String(v).trim();
-  if (!s) return undefined;
-  const num = Number(s.replace(',', '.'));
-  return Number.isFinite(num) ? num : undefined;
+  if (v == null) return undefined
+  const s = String(v).trim()
+  if (!s) return undefined
+  const num = Number(s.replace(",", "."))
+  return Number.isFinite(num) ? num : undefined
+}
+
+function toDateTimeRU(iso?: string) {
+  if (!iso) return "—"
+  try {
+    return new Date(iso).toLocaleString("ru-RU")
+  } catch {
+    return "—"
+  }
+}
+
+function formatCurrency(value: unknown, currency = "RUB") {
+  const n = typeof value === "number" ? value : Number(String(value ?? "").replace(",", "."))
+  if (!Number.isFinite(n)) return "—"
+
+  try {
+    return n.toLocaleString("ru-RU", { style: "currency", currency })
+  } catch {
+    return `${n} ${currency}`
+  }
 }
 
 export default function PaymentMethodEditPage() {
-  const params = useParams<{ id: string }>();
-  const id = useMemo(() => (Array.isArray(params?.id) ? params.id[0] : params?.id) as string, [params]);
-  const router = useRouter();
-  const { isAuthenticated, user, isLoading: authLoading } = useAuth();
+  const params = useParams<{ id: string }>()
+  const id = React.useMemo(() => (Array.isArray(params?.id) ? params.id[0] : params?.id) as string, [params])
+  const router = useRouter()
 
-  const roleName = user?.role?.name || '';
-  const canManage = ['company_owner', 'company_admin', 'owner', 'admin'].includes(roleName);
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth()
 
-  const [isMounted, setIsMounted] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [toggling, setToggling] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [openDelete, setOpenDelete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = React.useState(false)
 
-  const [testing, setTesting] = useState(false);
-  const [calcLoading, setCalcLoading] = useState(false);
+  const [loading, setLoading] = React.useState(true)
+  const [saving, setSaving] = React.useState(false)
+  const [toggling, setToggling] = React.useState(false)
+  const [deleting, setDeleting] = React.useState(false)
+  const [openDelete, setOpenDelete] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
 
-  const [method, setMethod] = useState<PaymentMethodResponse | null>(null);
+  const [testing, setTesting] = React.useState(false)
+
+  // calculate fee dialog
+  const [openCalc, setOpenCalc] = React.useState(false)
+  const [calcAmount, setCalcAmount] = React.useState<string>("1000")
+  const [calcLoading, setCalcLoading] = React.useState(false)
+  const [calcError, setCalcError] = React.useState<string | null>(null)
+  const [calcResult, setCalcResult] = React.useState<CalculateFeeResponse | null>(null)
+
+  const [method, setMethod] = React.useState<PaymentMethodResponse | null>(null)
 
   // form
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [type, setType] = useState<PaymentMethodType>('card');
-  const [processingFeePercent, setProcessingFeePercent] = useState<string>('');
-  const [isActive, setIsActive] = useState(true);
-  const [requiresVerification, setRequiresVerification] = useState(false);
-  const [supportsRefunds, setSupportsRefunds] = useState(true);
+  const [name, setName] = React.useState("")
+  const [description, setDescription] = React.useState("")
+  const [type, setType] = React.useState<PaymentMethodType>("card")
+  const [processingFeePercent, setProcessingFeePercent] = React.useState<string>("")
+  const [isActive, setIsActive] = React.useState(true)
+  const [requiresVerification, setRequiresVerification] = React.useState(false)
+  const [supportsRefunds, setSupportsRefunds] = React.useState(true)
 
   // limits
-  const [minAmount, setMinAmount] = useState<string>('');
-  const [maxAmount, setMaxAmount] = useState<string>('');
-  const [dailyLimit, setDailyLimit] = useState<string>('');
+  const [minAmount, setMinAmount] = React.useState<string>("")
+  const [maxAmount, setMaxAmount] = React.useState<string>("")
+  const [dailyLimit, setDailyLimit] = React.useState<string>("")
 
   // installment
-  const showInstallment = type === 'installments';
-  const [maxPeriodMonths, setMaxPeriodMonths] = useState<string>('');
-  const [interestRate, setInterestRate] = useState<string>('');
-  const [minDownPaymentPercent, setMinDownPaymentPercent] = useState<string>('');
+  const showInstallment = type === "installments"
+  const [maxPeriodMonths, setMaxPeriodMonths] = React.useState<string>("")
+  const [interestRate, setInterestRate] = React.useState<string>("")
+  const [minDownPaymentPercent, setMinDownPaymentPercent] = React.useState<string>("")
 
-  // integration (секреты не приходят — заполняются вручную при обновлении)
-  const [gatewayType, setGatewayType] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [merchantId, setMerchantId] = useState('');
-  const [webhookUrl, setWebhookUrl] = useState('');
-  const [testMode, setTestMode] = useState(false);
+  // integration
+  const [gatewayType, setGatewayType] = React.useState("")
+  const [apiKey, setApiKey] = React.useState("")
+  const [merchantId, setMerchantId] = React.useState("")
+  const [webhookUrl, setWebhookUrl] = React.useState("")
+  const [testMode, setTestMode] = React.useState(false)
 
-  useEffect(() => setIsMounted(true), []);
-  useEffect(() => {
-    if (!isMounted) return;
-    if (authLoading) return;
+  React.useEffect(() => setIsMounted(true), [])
+
+  const roleObj = (user as unknown as { role?: string | { name?: string } } | null)?.role
+  const roleName = (typeof roleObj === "string" ? roleObj : roleObj?.name || "").toLowerCase()
+  const canManage = ["company_owner", "company_admin", "owner", "admin"].includes(roleName)
+  const readOnly = !canManage
+
+  React.useEffect(() => {
+    if (!isMounted) return
+    if (authLoading) return
+
     if (!isAuthenticated || !user) {
-      router.push('/login');
-      return;
+      router.push("/login")
+      return
     }
-    if (!id) return;
+    if (!id) return
 
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
+    let cancelled = false
+
+    ;(async () => {
+      setLoading(true)
+      setError(null)
+
       try {
-        const m = await paymentMethodsAPI.getPaymentMethod(id);
-        if (cancelled) return;
-        setMethod(m);
-        setName(m.name || '');
-        setDescription(m.description || '');
-        setType((m.type as PaymentMethodType) || 'card');
-        setProcessingFeePercent(typeof m.processingFeePercent === 'number' ? String(m.processingFeePercent) : '');
-        setIsActive(!!m.isActive);
-        setRequiresVerification(!!m.requiresVerification);
-        setSupportsRefunds(m.supportsRefunds !== false);
+        const m = await paymentMethodsAPI.getPaymentMethod(id)
+        if (cancelled) return
 
-        setMinAmount(m.limits?.minAmount != null ? String(m.limits.minAmount) : '');
-        setMaxAmount(m.limits?.maxAmount != null ? String(m.limits.maxAmount) : '');
-        setDailyLimit(m.limits?.dailyTransactionLimit != null ? String(m.limits.dailyTransactionLimit) : '');
+        setMethod(m)
+
+        setName(m.name || "")
+        setDescription(m.description || "")
+        setType((m.type as PaymentMethodType) || "card")
+        setProcessingFeePercent(typeof m.processingFeePercent === "number" ? String(m.processingFeePercent) : "")
+        setIsActive(!!m.isActive)
+        setRequiresVerification(!!m.requiresVerification)
+        setSupportsRefunds(m.supportsRefunds !== false)
+
+        setMinAmount(m.limits?.minAmount != null ? String(m.limits.minAmount) : "")
+        setMaxAmount(m.limits?.maxAmount != null ? String(m.limits.maxAmount) : "")
+        setDailyLimit(m.limits?.dailyTransactionLimit != null ? String(m.limits.dailyTransactionLimit) : "")
 
         if (m.installmentConfig) {
-          setMaxPeriodMonths(m.installmentConfig.maxPeriodMonths != null ? String(m.installmentConfig.maxPeriodMonths) : '');
-          setInterestRate(m.installmentConfig.interestRate != null ? String(m.installmentConfig.interestRate) : '');
-          setMinDownPaymentPercent(m.installmentConfig.minDownPaymentPercent != null ? String(m.installmentConfig.minDownPaymentPercent) : '');
+          setMaxPeriodMonths(m.installmentConfig.maxPeriodMonths != null ? String(m.installmentConfig.maxPeriodMonths) : "")
+          setInterestRate(m.installmentConfig.interestRate != null ? String(m.installmentConfig.interestRate) : "")
+          setMinDownPaymentPercent(
+            m.installmentConfig.minDownPaymentPercent != null ? String(m.installmentConfig.minDownPaymentPercent) : ""
+          )
+        } else {
+          setMaxPeriodMonths("")
+          setInterestRate("")
+          setMinDownPaymentPercent("")
         }
 
-        const needs = requiresIntegration(m.type as string);
+        const needs = requiresIntegration(m.type as string)
         if (needs && m.integrationStatus) {
-          setGatewayType(m.integrationStatus.gatewayType || '');
-          setTestMode(!!m.integrationStatus.testMode);
+          setGatewayType(m.integrationStatus.gatewayType || "")
+          setTestMode(!!m.integrationStatus.testMode)
         } else {
-          setGatewayType('');
-          setTestMode(false);
+          setGatewayType("")
+          setTestMode(false)
         }
+
+        // секреты всегда пустые на загрузке
+        setApiKey("")
+        setMerchantId("")
+        setWebhookUrl("")
       } catch (e) {
         try {
-          const parsed = JSON.parse((e as Error).message) as { message?: string };
-          setError(parsed.message || 'Ошибка загрузки способа оплаты');
+          const parsed = JSON.parse((e as Error).message) as { message?: string }
+          setError(parsed.message || "Ошибка загрузки способа оплаты")
         } catch {
-          setError('Ошибка загрузки способа оплаты');
+          setError("Ошибка загрузки способа оплаты")
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoading(false)
       }
-    })();
+    })()
 
     return () => {
-      cancelled = true;
-    };
-  }, [isMounted, authLoading, isAuthenticated, user, router, id]);
+      cancelled = true
+    }
+  }, [isMounted, authLoading, isAuthenticated, user, router, id])
 
-  if (!isMounted) return null;
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
-  }
-  if (!isAuthenticated || !user) return null;
+  const needsIntegration = requiresIntegration(type)
 
   const handleRefresh = async () => {
-    if (!id) return;
-    setLoading(true);
+    if (!id) return
+    setLoading(true)
+    setError(null)
     try {
-      const m = await paymentMethodsAPI.getPaymentMethod(id);
-      setMethod(m);
-      // Обновим derived поля из свежих данных
-      setIsActive(!!m.isActive);
-      setRequiresVerification(!!m.requiresVerification);
-      setSupportsRefunds(m.supportsRefunds !== false);
+      const m = await paymentMethodsAPI.getPaymentMethod(id)
+      setMethod(m)
+
+      // обновим только то, что может поменяться без формы
+      setIsActive(!!m.isActive)
+      setRequiresVerification(!!m.requiresVerification)
+      setSupportsRefunds(m.supportsRefunds !== false)
+
+      toast.success("Обновлено")
+    } catch (e) {
+      setError((e as Error)?.message || "Не удалось обновить данные")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const onSave = async () => {
-    if (!canManage) return;
-    if (!id) return;
+    if (!canManage || !id) return
     if (!name.trim()) {
-      setError('Укажите название');
-      return;
+      setError("Укажите название")
+      return
     }
+
     const payload: PaymentMethodUpdateRequest = {
       name: name.trim(),
       description: description.trim() || undefined,
-      type, // не меняется UI, но отправляем для явной консистентности
+      type,
       isActive,
-      processingFeePercent: processingFeePercent ? Number(processingFeePercent) : undefined,
+      processingFeePercent: toNumber(processingFeePercent),
       requiresVerification,
       supportsRefunds,
-    };
-
-    const limits: Record<string, number> = {};
-    const min = toNumber(minAmount);
-    const max = toNumber(maxAmount);
-    const daily = toNumber(dailyLimit);
-    if (min !== undefined) limits.minAmount = min;
-    if (max !== undefined) limits.maxAmount = max;
-    if (daily !== undefined) limits.dailyTransactionLimit = daily;
-    if (Object.keys(limits).length > 0) payload.limits = limits;
-
-    if (showInstallment) {
-      const inst: Record<string, number> = {};
-      const maxM = toNumber(maxPeriodMonths);
-      const rate = toNumber(interestRate);
-      const down = toNumber(minDownPaymentPercent);
-      if (maxM !== undefined) inst.maxPeriodMonths = maxM;
-      if (rate !== undefined) inst.interestRate = rate;
-      if (down !== undefined) inst.minDownPaymentPercent = down;
-      if (Object.keys(inst).length > 0) payload.installmentConfig = inst;
     }
 
-    // Интеграция — только для online типов и если указан gatewayType
+    const limits: Record<string, number> = {}
+    const min = toNumber(minAmount)
+    const max = toNumber(maxAmount)
+    const daily = toNumber(dailyLimit)
+    if (min !== undefined) limits.minAmount = min
+    if (max !== undefined) limits.maxAmount = max
+    if (daily !== undefined) limits.dailyTransactionLimit = daily
+    if (Object.keys(limits).length > 0) payload.limits = limits
+
+    if (showInstallment) {
+      const inst: Record<string, number> = {}
+      const maxM = toNumber(maxPeriodMonths)
+      const rate = toNumber(interestRate)
+      const down = toNumber(minDownPaymentPercent)
+      if (maxM !== undefined) inst.maxPeriodMonths = maxM
+      if (rate !== undefined) inst.interestRate = rate
+      if (down !== undefined) inst.minDownPaymentPercent = down
+      if (Object.keys(inst).length > 0) payload.installmentConfig = inst
+    }
+
     if (requiresIntegration(type) && gatewayType.trim()) {
       payload.integrationConfig = {
         gatewayType: gatewayType.trim(),
@@ -223,238 +295,409 @@ export default function PaymentMethodEditPage() {
         merchantId: merchantId.trim() || undefined,
         webhookUrl: webhookUrl.trim() || undefined,
         testMode,
-      };
+      }
     }
 
-    setSaving(true);
-    setError(null);
+    setSaving(true)
+    setError(null)
     try {
-      const updated = await paymentMethodsAPI.update(id, payload);
-      // Обновим локальный стейт по ответу, чтобы изменения были видны без ухода со страницы
-      setMethod(updated);
-      setIsActive(!!updated.isActive);
-      setRequiresVerification(!!updated.requiresVerification);
-      setSupportsRefunds(updated.supportsRefunds !== false);
-      toast.success('Сохранено');
+      const updated = await paymentMethodsAPI.update(id, payload)
+      setMethod(updated)
+      setIsActive(!!updated.isActive)
+      setRequiresVerification(!!updated.requiresVerification)
+      setSupportsRefunds(updated.supportsRefunds !== false)
+      toast.success("Сохранено")
     } catch (e) {
       try {
-        const parsed = JSON.parse((e as Error).message) as { message?: string };
-        setError(parsed.message || 'Не удалось обновить способ оплаты');
+        const parsed = JSON.parse((e as Error).message) as { message?: string }
+        setError(parsed.message || "Не удалось обновить способ оплаты")
       } catch {
-        setError('Не удалось обновить способ оплаты');
+        setError("Не удалось обновить способ оплаты")
       }
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   const onToggle = async () => {
-    if (!canManage) return;
-    if (!id) return;
-    setToggling(true);
-    setError(null);
+    if (!canManage || !id) return
+    setToggling(true)
+    setError(null)
     try {
-      const updated = await paymentMethodsAPI.toggleStatus(id);
-      setIsActive(!!updated.isActive);
-      setMethod(updated);
+      const updated = await paymentMethodsAPI.toggleStatus(id)
+      setIsActive(!!updated.isActive)
+      setMethod(updated)
+      toast.success(updated.isActive ? "Активировано" : "Отключено")
     } catch (e) {
       try {
-        const parsed = JSON.parse((e as Error).message) as { message?: string };
-        setError(parsed.message || 'Не удалось изменить статус');
+        const parsed = JSON.parse((e as Error).message) as { message?: string }
+        setError(parsed.message || "Не удалось изменить статус")
       } catch {
-        setError('Не удалось изменить статус');
+        setError("Не удалось изменить статус")
       }
     } finally {
-      setToggling(false);
+      setToggling(false)
     }
-  };
+  }
 
   const onDelete = async () => {
-    if (!canManage) return;
-    if (!id) return;
-    setDeleting(true);
-    setError(null);
+    if (!canManage || !id) return
+    setDeleting(true)
+    setError(null)
     try {
-      await paymentMethodsAPI.remove(id);
-      router.push('/dashboard/payment-methods');
+      await paymentMethodsAPI.remove(id)
+      router.push("/dashboard/payment-methods")
     } catch (e) {
       try {
-        const parsed = JSON.parse((e as Error).message) as { message?: string };
-        setError(parsed.message || 'Не удалось удалить способ оплаты');
+        const parsed = JSON.parse((e as Error).message) as { message?: string }
+        setError(parsed.message || "Не удалось удалить способ оплаты")
       } catch {
-        setError('Не удалось удалить способ оплаты');
+        setError("Не удалось удалить способ оплаты")
       }
     } finally {
-      setDeleting(false);
-      setOpenDelete(false);
+      setDeleting(false)
+      setOpenDelete(false)
     }
-  };
+  }
 
   const onTestIntegration = async () => {
-    if (!canManage || !id) return;
+    if (!canManage || !id) return
     if (!requiresIntegration(type)) {
-      toast.info('Интеграция не требуется для этого типа способа');
-      return;
+      toast.info("Интеграция не требуется для этого типа")
+      return
     }
-    setTesting(true);
+
+    setTesting(true)
     try {
-      const res = await paymentMethodsAPI.testIntegration(id);
-      const status = (res.status || '').toString().toLowerCase();
+      const res = await paymentMethodsAPI.testIntegration(id)
+      const status = (res.status || "").toString().toLowerCase()
       const message =
         res.message ||
-        (status === 'ok'
-          ? 'Интеграция проверена: OK'
-          : status === 'warning'
-          ? 'Проверка завершена с предупреждениями'
-          : 'Ошибка интеграции');
-      if (res.ok || status === 'ok') toast.success(message);
-      else if (status === 'warning') toast.warning(message);
-      else toast.error(message);
+        (status === "ok"
+          ? "Интеграция проверена: OK"
+          : status === "warning"
+            ? "Проверка завершена с предупреждениями"
+            : "Ошибка интеграции")
+
+      if (res.ok || status === "ok") toast.success(message)
+      else if (status === "warning") toast.warning(message)
+      else toast.error(message)
     } catch (e) {
       try {
-        const parsed = JSON.parse((e as Error).message) as { message?: string };
-        toast.error(parsed.message || 'Не удалось выполнить проверку интеграции');
+        const parsed = JSON.parse((e as Error).message) as { message?: string }
+        toast.error(parsed.message || "Не удалось выполнить проверку интеграции")
       } catch {
-        toast.error('Не удалось выполнить проверку интеграции');
+        toast.error("Не удалось выполнить проверку интеграции")
       }
     } finally {
-      setTesting(false);
+      setTesting(false)
     }
-  };
+  }
 
-  const onCalculateFee = async () => {
-    if (!canManage || !id) return;
-    const amountStr = prompt('Введите сумму для расчёта комиссии (в рублях):', '1000');
-    if (amountStr == null) return;
-    const amount = Number(String(amountStr).replace(',', '.'));
-    if (!isFinite(amount) || amount <= 0) {
-      toast.error('Некорректная сумма');
-      return;
+  const openCalculateFee = () => {
+    setCalcError(null)
+    setCalcResult(null)
+    setOpenCalc(true)
+  }
+
+  const runCalculateFee = async () => {
+    if (!canManage || !id) return
+
+    const amount = toNumber(calcAmount)
+    if (amount == null || amount <= 0) {
+      setCalcError("Введите корректную сумму")
+      return
     }
-    setCalcLoading(true);
+
+    setCalcLoading(true)
+    setCalcError(null)
+    setCalcResult(null)
+
     try {
-      const res = await paymentMethodsAPI.calculateFee(id, amount);
-      const currency = res.currency || 'RUB';
-      const fmt = (n: number) => {
-        try {
-          return n.toLocaleString('ru-RU', { style: 'currency', currency });
-        } catch {
-          return `${n.toFixed(2)} ${currency}`;
-        }
-      };
-      toast.success(
-        `Комиссия: ${fmt(res.fee)}${typeof res.percent === 'number' ? ` (${res.percent.toFixed(2)}%)` : ''}. Итого: ${fmt(
-          res.total
-        )}`
-      );
+      const res = await paymentMethodsAPI.calculateFee(id, amount)
+      const normalized = {
+        amount: Number(res?.amount),
+        fee: Number(res?.fee),
+        total: Number(res?.total),
+        percent:
+          typeof res?.percent === "number"
+            ? res.percent
+            : res?.percent != null
+              ? Number(res.percent)
+              : undefined,
+        currency: typeof res?.currency === "string" ? res.currency : "RUB",
+      }
+
+      if (![normalized.amount, normalized.fee, normalized.total].every(Number.isFinite)) {
+        setCalcError("Ответ сервера не содержит корректные числа для расчёта комиссии")
+        setCalcResult(null)
+        return
+      }
+
+      setCalcResult(normalized)
     } catch (e) {
       try {
-        const parsed = JSON.parse((e as Error).message) as { message?: string };
-        toast.error(parsed.message || 'Не удалось рассчитать комиссию');
+        const parsed = JSON.parse((e as Error).message) as { message?: string }
+        setCalcError(parsed.message || "Не удалось рассчитать комиссию")
       } catch {
-        toast.error('Не удалось рассчитать комиссию');
+        setCalcError("Не удалось рассчитать комиссию")
       }
     } finally {
-      setCalcLoading(false);
+      setCalcLoading(false)
     }
-  };
+  }
 
-  const readOnly = !canManage;
-  const needsIntegration = requiresIntegration(type);
+  React.useEffect(() => {
+    if (!openCalc) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault()
+        runCalculateFee()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openCalc, calcAmount, id, canManage])
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-surface-1">
-      <div className="fixed inset-0 bg-gradient-surface -z-10"></div>
-      <div className="fixed top-0 right-0 w-96 h-96 bg-gradient-primary opacity-5 rounded-full blur-3xl -z-10"></div>
-      <div className="fixed bottom-0 left-0 w-64 h-64 bg-secondary/10 rounded-full blur-3xl -z-10"></div>
+  if (!isMounted) return null
 
-      <header className="border-b border-border/50 backdrop-blur-sm">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard/payment-methods">
-              <Button variant="ghost">
-                <ArrowLeft className="w-4 h-4 mr-2" /> Назад
-              </Button>
-            </Link>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-indigo-500/20">
-                <CreditCard className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              <h1 className="text-xl font-bold">Редактирование способа оплаты</h1>
-            </div>
-            {!canManage && (
-              <span className="ml-3 inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <Lock className="w-3.5 h-3.5" />
-                Только просмотр
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard">
-              <Button variant="ghost">
-                <Home className="w-4 h-4 mr-2" /> В дашборд
-              </Button>
-            </Link>
-            <Button variant="outline" onClick={handleRefresh}>
-              <RefreshCw className="w-4 h-4 mr-2" /> Обновить
-            </Button>
-            {canManage && (
-              <>
-                <Button variant={isActive ? 'outline' : 'default'} onClick={onToggle} disabled={toggling}>
-                  <Power className="w-4 h-4 mr-2" /> {isActive ? 'Отключить' : 'Активировать'}
-                </Button>
-
-                <Button variant="outline" onClick={onTestIntegration} disabled={testing || !needsIntegration} title="Проверить подключение и конфигурацию">
-                  {testing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Wrench className="w-4 h-4 mr-2" />}
-                  Проверить интеграцию
-                </Button>
-
-                <Button variant="outline" onClick={onCalculateFee} disabled={calcLoading} title="Рассчитать комиссию для суммы">
-                  {calcLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Calculator className="w-4 h-4 mr-2" />}
-                  Рассчитать комиссию
-                </Button>
-
-                <Button variant="destructive" onClick={() => setOpenDelete(true)}>
-                  <Trash2 className="w-4 h-4 mr-2" /> Удалить
-                </Button>
-                <Button onClick={onSave} disabled={saving}>
-                  <Save className="w-4 h-4 mr-2" />
-                  Сохранить
-                </Button>
-              </>
-            )}
+  if (authLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-sm">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-muted-foreground">Загрузка...</span>
           </div>
         </div>
-      </header>
+      </AppLayout>
+    )
+  }
 
-      <main className="container mx-auto px-6 py-6 space-y-6">
-        {error && <Card className="p-4 text-destructive">{error}</Card>}
+  if (!isAuthenticated || !user) return null
+
+  const headerActions = (
+    <div className="flex items-center gap-sm">
+      <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={loading}>
+        <RefreshCw className="w-4 h-4 mr-xs" />
+        Обновить
+      </Button>
+
+      {canManage && (
+        <>
+          <Button variant="secondary" size="sm" onClick={onToggle} disabled={toggling || loading}>
+            <Power className="w-4 h-4 mr-xs" />
+            {isActive ? "Отключить" : "Активировать"}
+          </Button>
+
+          <Button variant="danger" size="sm" onClick={() => setOpenDelete(true)} disabled={loading}>
+            <Trash2 className="w-4 h-4 mr-xs" />
+            Удалить
+          </Button>
+
+          <Button variant="primary" size="sm" onClick={onSave} disabled={saving || loading}>
+            <Save className="w-4 h-4 mr-xs" />
+            Сохранить
+          </Button>
+        </>
+      )}
+    </div>
+  )
+
+  const pageTitle = method?.name || "Способ оплаты"
+
+  return (
+    <AppLayout>
+      <div className="container mx-auto px-lg py-xl flex flex-col gap-lg">
+        <NavigationHeader
+          title={pageTitle}
+          subtitle="Настройки способа оплаты"
+          icon={<CreditCard className="w-5 h-5" />}
+          backHref="/dashboard/payment-methods"
+          backLabel="Способы оплаты"
+          actions={headerActions}
+        />
+
+        {!canManage && (
+          <Card className="p-md border border-border bg-card">
+            <div className="flex items-center gap-sm text-sm text-muted-foreground">
+              <Lock className="w-4 h-4 shrink-0" />
+              Только просмотр. Изменения доступны администратору компании.
+            </div>
+          </Card>
+        )}
+
+        {error && (
+          <Card className="p-md border border-status-error/30 bg-status-error/10 text-status-error text-sm">
+            {error}
+          </Card>
+        )}
 
         {loading ? (
-          <div className="space-y-4">
-            <div className="h-24 bg-surface-1 rounded-md animate-pulse" />
-            <div className="h-40 bg-surface-1 rounded-md animate-pulse" />
+          <div className="grid gap-lg">
+            <Card className="p-lg">
+              <Skeleton className="h-5 w-[240px]" />
+              <div className="mt-sm flex gap-sm">
+                <Skeleton className="h-5 w-[110px]" />
+                <Skeleton className="h-5 w-[140px]" />
+              </div>
+              <div className="mt-md grid grid-cols-2 md:grid-cols-4 gap-md">
+                <Skeleton className="h-14 rounded-md" />
+                <Skeleton className="h-14 rounded-md" />
+                <Skeleton className="h-14 rounded-md" />
+                <Skeleton className="h-14 rounded-md" />
+              </div>
+            </Card>
+
+            <Card className="p-lg">
+              <Skeleton className="h-5 w-[160px]" />
+              <div className="mt-md grid md:grid-cols-2 gap-md">
+                <Skeleton className="h-10 rounded-md" />
+                <Skeleton className="h-10 rounded-md" />
+                <Skeleton className="h-10 rounded-md md:col-span-2" />
+              </div>
+            </Card>
           </div>
         ) : !method ? (
-          <Card className="p-6 text-center text-muted-foreground">Способ оплаты не найден</Card>
+          <Card className="p-lg text-sm text-muted-foreground">Способ оплаты не найден</Card>
         ) : (
-          <Card className="p-6 backdrop-blur-sm bg-card/80 border-border/50 space-y-6">
+          <>
+            {/* Summary */}
+            <Card className="p-lg">
+              <div className="flex items-start justify-between gap-lg">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground truncate">{method.name}</div>
+                  <div className="mt-xs text-xs text-muted-foreground truncate">{method.description || "—"}</div>
+
+                  <div className="mt-md flex flex-wrap items-center gap-sm">
+                    <Badge variant={isActive ? "active" : "draft"}>{isActive ? "Активен" : "Отключен"}</Badge>
+                    <Badge variant="outline">{typeLabel(method.type)}</Badge>
+
+                    {needsIntegration && (
+                      <Badge variant={method.integrationStatus?.isConfigured ? "active" : "pending"}>
+                        {method.integrationStatus?.isConfigured ? "Интеграция настроена" : "Требует настройки"}
+                      </Badge>
+                    )}
+
+                    {needsIntegration && method.integrationStatus?.testMode && <Badge variant="pending">Тест</Badge>}
+                  </div>
+                </div>
+
+                <div className="shrink-0 text-right">
+                  <div className="text-xs text-muted-foreground">Статус</div>
+                  <div
+                    className="mt-xs"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                    }}
+                  >
+                    <Switch
+                      checked={isActive}
+                      disabled={!canManage || toggling}
+                      onCheckedChange={(checked) => {
+                        if (checked === isActive) return
+                        onToggle()
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-lg grid grid-cols-2 md:grid-cols-4 gap-md">
+                <div className="rounded-md border p-md">
+                  <div className="text-xs text-muted-foreground">Комиссия</div>
+                  <div className="text-sm font-medium tabular-nums mt-xs">
+                    {typeof method.processingFeePercent === "number" ? `${method.processingFeePercent}%` : "—"}
+                  </div>
+                </div>
+
+                <div className="rounded-md border p-md">
+                  <div className="text-xs text-muted-foreground">Шлюз</div>
+                  <div className="text-sm font-medium tabular-nums mt-xs">
+                    {needsIntegration ? (method.integrationStatus?.gatewayType || "—") : "—"}
+                  </div>
+                </div>
+
+                <div className="rounded-md border p-md">
+                  <div className="text-xs text-muted-foreground">Проверка связи</div>
+                  <div className="text-sm font-medium tabular-nums mt-xs">
+                    {needsIntegration ? toDateTimeRU(method.integrationStatus?.lastConnectionCheck) : "—"}
+                  </div>
+                </div>
+
+                <div className="rounded-md border p-md">
+                  <div className="text-xs text-muted-foreground">Обновлён</div>
+                  <div className="text-sm font-medium tabular-nums mt-xs">{toDateTimeRU(method.updatedAt)}</div>
+                </div>
+              </div>
+            </Card>
+
+            {/* Tools */}
+            {canManage && (
+              <Card className="p-lg">
+                <div className="flex items-center gap-sm mb-md">
+                  <Wrench className="w-4 h-4 text-muted-foreground" />
+                  <h2 className="text-sm font-semibold text-foreground">Инструменты</h2>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-md">
+                  {needsIntegration ? (
+                    <div className="rounded-md border p-md flex items-center justify-between gap-md">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-foreground">Проверить интеграцию</div>
+                        <div className="text-xs text-muted-foreground">Проверка подключения и конфигурации</div>
+                      </div>
+                      <Button variant="secondary" size="sm" onClick={onTestIntegration} disabled={testing}>
+                        {testing ? <RefreshCw className="w-4 h-4 mr-xs animate-spin" /> : <Wrench className="w-4 h-4 mr-xs" />}
+                        Проверить
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="rounded-md border p-md text-sm text-muted-foreground">
+                      Для этого типа способа интеграция не требуется.
+                    </div>
+                  )}
+
+                  <div className="rounded-md border p-md flex items-center justify-between gap-md">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-foreground">Рассчитать комиссию</div>
+                      <div className="text-xs text-muted-foreground">Быстрая проверка настроек комиссии по сумме</div>
+                    </div>
+                    <Button variant="secondary" size="sm" onClick={openCalculateFee}>
+                      <Calculator className="w-4 h-4 mr-xs" />
+                      Рассчитать
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+
             {/* Основное */}
-            <section>
-              <div className="text-lg font-semibold mb-4">Основное</div>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-muted-foreground">Название</label>
+            <Card className="p-lg">
+              <div className="flex items-center gap-sm mb-md">
+                <Settings className="w-4 h-4 text-muted-foreground" />
+                <h2 className="text-sm font-semibold text-foreground">Основное</h2>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-md">
+                <div className="min-w-0">
+                  <label className="text-sm text-muted-foreground">Название *</label>
                   <Input value={name} onChange={(e) => setName(e.target.value)} disabled={readOnly} />
                 </div>
-                <div>
+
+                <div className="min-w-0">
                   <label className="text-sm text-muted-foreground">Тип</label>
                   <select
                     value={type}
                     onChange={() => {}}
-                    className="w-full h-9 rounded-md border border-border bg-background text-sm px-3"
                     disabled
                     title="Тип менять нельзя"
+                    className={cn(
+                      "w-full h-10 rounded-md border border-input bg-background text-sm px-md",
+                      "text-foreground hover:border-border/80 disabled:opacity-70"
+                    )}
                   >
                     {TYPES.map((t) => (
                       <option key={t.value} value={t.value}>
@@ -463,7 +706,8 @@ export default function PaymentMethodEditPage() {
                     ))}
                   </select>
                 </div>
-                <div className="md:col-span-2">
+
+                <div className="md:col-span-2 min-w-0">
                   <label className="text-sm text-muted-foreground">Описание</label>
                   <Input
                     value={description}
@@ -472,98 +716,91 @@ export default function PaymentMethodEditPage() {
                     disabled={readOnly}
                   />
                 </div>
-                <div>
+
+                <div className="min-w-0">
                   <label className="text-sm text-muted-foreground">Комиссия, %</label>
                   <Input
                     value={processingFeePercent}
                     onChange={(e) => setProcessingFeePercent(e.target.value)}
                     placeholder="Напр., 2.5"
                     disabled={readOnly}
+                    inputMode="decimal"
                   />
                 </div>
-                <div className="flex items-center gap-2 pt-6">
-                  <input
-                    id="isActive"
-                    type="checkbox"
-                    className="h-4 w-4"
-                    checked={isActive}
-                    onChange={(e) => setIsActive(e.target.checked)}
-                    disabled={readOnly}
-                  />
-                  <label htmlFor="isActive" className="text-sm">Активен</label>
-                </div>
-                <div className="flex items-center gap-2 pt-6">
-                  <input
-                    id="requiresVerification"
-                    type="checkbox"
-                    className="h-4 w-4"
-                    checked={requiresVerification}
-                    onChange={(e) => setRequiresVerification(e.target.checked)}
-                    disabled={readOnly}
-                  />
-                  <label htmlFor="requiresVerification" className="text-sm">Требует верификации</label>
-                </div>
-                <div className="flex items-center gap-2 pt-6">
-                  <input
-                    id="supportsRefunds"
-                    type="checkbox"
-                    className="h-4 w-4"
-                    checked={supportsRefunds}
-                    onChange={(e) => setSupportsRefunds(e.target.checked)}
-                    disabled={readOnly}
-                  />
-                  <label htmlFor="supportsRefunds" className="text-sm">Поддерживает возвраты</label>
+
+                <div className="grid gap-sm md:col-span-2">
+                  <div className="flex items-center justify-between gap-md rounded-md border p-md">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-foreground">Требует верификации</div>
+                      <div className="text-xs text-muted-foreground">Доп. подтверждение перед оплатой</div>
+                    </div>
+                    <Switch checked={requiresVerification} onCheckedChange={setRequiresVerification} disabled={readOnly} />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-md rounded-md border p-md">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-foreground">Поддерживает возвраты</div>
+                      <div className="text-xs text-muted-foreground">Можно оформить возврат (если поддерживается)</div>
+                    </div>
+                    <Switch checked={supportsRefunds} onCheckedChange={setSupportsRefunds} disabled={readOnly} />
+                  </div>
                 </div>
               </div>
-            </section>
+            </Card>
 
             {/* Лимиты */}
-            <section>
-              <div className="text-lg font-semibold mb-4">Лимиты</div>
-              <div className="grid md:grid-cols-3 gap-4">
-                <div>
+            <Card className="p-lg">
+              <h2 className="text-sm font-semibold text-foreground mb-md">Лимиты</h2>
+              <div className="grid md:grid-cols-3 gap-md">
+                <div className="min-w-0">
                   <label className="text-sm text-muted-foreground">Мин. сумма</label>
-                  <Input value={minAmount} onChange={(e) => setMinAmount(e.target.value)} disabled={readOnly} />
+                  <Input value={minAmount} onChange={(e) => setMinAmount(e.target.value)} disabled={readOnly} inputMode="decimal" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="text-sm text-muted-foreground">Макс. сумма</label>
-                  <Input value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} disabled={readOnly} />
+                  <Input value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} disabled={readOnly} inputMode="decimal" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="text-sm text-muted-foreground">Транзакций в день</label>
-                  <Input value={dailyLimit} onChange={(e) => setDailyLimit(e.target.value)} disabled={readOnly} />
+                  <Input value={dailyLimit} onChange={(e) => setDailyLimit(e.target.value)} disabled={readOnly} inputMode="numeric" />
                 </div>
               </div>
-            </section>
+            </Card>
 
             {/* Рассрочка */}
-            {type === 'installments' && (
-              <section>
-                <div className="text-lg font-semibold mb-4">Настройки рассрочки</div>
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div>
+            {type === "installments" && (
+              <Card className="p-lg">
+                <h2 className="text-sm font-semibold text-foreground mb-md">Настройки рассрочки</h2>
+                <div className="grid md:grid-cols-3 gap-md">
+                  <div className="min-w-0">
                     <label className="text-sm text-muted-foreground">Макс. период (мес)</label>
-                    <Input value={maxPeriodMonths} onChange={(e) => setMaxPeriodMonths(e.target.value)} disabled={readOnly} />
+                    <Input value={maxPeriodMonths} onChange={(e) => setMaxPeriodMonths(e.target.value)} disabled={readOnly} inputMode="numeric" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label className="text-sm text-muted-foreground">Процентная ставка</label>
-                    <Input value={interestRate} onChange={(e) => setInterestRate(e.target.value)} disabled={readOnly} />
+                    <Input value={interestRate} onChange={(e) => setInterestRate(e.target.value)} disabled={readOnly} inputMode="decimal" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label className="text-sm text-muted-foreground">Мин. первый взнос, %</label>
-                    <Input value={minDownPaymentPercent} onChange={(e) => setMinDownPaymentPercent(e.target.value)} disabled={readOnly} />
+                    <Input
+                      value={minDownPaymentPercent}
+                      onChange={(e) => setMinDownPaymentPercent(e.target.value)}
+                      disabled={readOnly}
+                      inputMode="decimal"
+                    />
                   </div>
                 </div>
-              </section>
+              </Card>
             )}
 
-            {/* Интеграция — только для online типов */}
-            {requiresIntegration(type) && (
-              <section>
-                <div className="text-lg font-semibold mb-4">Интеграция</div>
+            {/* Интеграция */}
+            {needsIntegration && (
+              <Card className="p-lg">
+                <h2 className="text-sm font-semibold text-foreground mb-md">Интеграция</h2>
+
                 {canManage ? (
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
+                  <div className="grid md:grid-cols-2 gap-md">
+                    <div className="min-w-0">
                       <label className="text-sm text-muted-foreground">Платёжный шлюз</label>
                       <Input
                         value={gatewayType}
@@ -575,18 +812,16 @@ export default function PaymentMethodEditPage() {
                         spellCheck={false}
                       />
                     </div>
-                    <div className="flex items-center gap-2 pt-6">
-                      <input
-                        id="testMode"
-                        type="checkbox"
-                        className="h-4 w-4"
-                        checked={testMode}
-                        onChange={(e) => setTestMode(e.target.checked)}
-                        disabled={readOnly}
-                      />
-                      <label htmlFor="testMode" className="text-sm">Тестовый режим</label>
+
+                    <div className="flex items-center justify-between gap-md rounded-md border p-md md:mt-6">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-foreground">Тестовый режим</div>
+                        <div className="text-xs text-muted-foreground">Песочница/тестовые ключи</div>
+                      </div>
+                      <Switch checked={testMode} onCheckedChange={setTestMode} disabled={readOnly} />
                     </div>
-                    <div>
+
+                    <div className="min-w-0">
                       <label className="text-sm text-muted-foreground">API Key</label>
                       <Input
                         type="password"
@@ -599,7 +834,8 @@ export default function PaymentMethodEditPage() {
                         spellCheck={false}
                       />
                     </div>
-                    <div>
+
+                    <div className="min-w-0">
                       <label className="text-sm text-muted-foreground">Merchant ID</label>
                       <Input
                         value={merchantId}
@@ -611,7 +847,8 @@ export default function PaymentMethodEditPage() {
                         spellCheck={false}
                       />
                     </div>
-                    <div className="md:col-span-2">
+
+                    <div className="md:col-span-2 min-w-0">
                       <label className="text-sm text-muted-foreground">Webhook URL</label>
                       <Input
                         value={webhookUrl}
@@ -629,11 +866,84 @@ export default function PaymentMethodEditPage() {
                     Интеграционные параметры скрыты. Обратитесь к администратору компании.
                   </div>
                 )}
-              </section>
+              </Card>
             )}
-          </Card>
+          </>
         )}
-      </main>
+      </div>
+
+      <Dialog
+        open={openCalc}
+        onOpenChange={(v) => {
+          setOpenCalc(v)
+          if (!v) {
+            setCalcError(null)
+            setCalcResult(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Расчёт комиссии</DialogTitle>
+            <DialogDescription>
+              Это проверка расчёта комиссии для суммы. Платёж не создаётся.
+              {method?.processingFeePercent != null ? ` Текущая комиссия: ${method.processingFeePercent}%.` : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-sm">
+            <label htmlFor="calc-amount" className="text-sm text-muted-foreground">
+              Сумма (₽) *
+            </label>
+            <Input
+              id="calc-amount"
+              value={calcAmount}
+              onChange={(e) => setCalcAmount(e.target.value)}
+              placeholder="Напр., 1000"
+              inputMode="decimal"
+              autoFocus
+            />
+            {calcError && <div className="text-xs text-status-error">{calcError}</div>}
+          </div>
+
+          {calcResult && (
+            <Card className="p-md">
+              <div className="grid gap-xs text-sm">
+                <div className="flex items-center justify-between gap-md">
+                  <span className="text-muted-foreground">Сумма</span>
+                  <span className="tabular-nums">
+                    {formatCurrency(calcResult.amount, calcResult.currency || "RUB")}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-md">
+                  <span className="text-muted-foreground">
+                    Комиссия{typeof calcResult.percent === "number" ? ` (${calcResult.percent.toFixed(2)}%)` : ""}
+                  </span>
+                  <span className="tabular-nums">
+                    {formatCurrency(calcResult.fee, calcResult.currency || "RUB")}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-md">
+                  <span className="text-muted-foreground">Итого</span>
+                  <span className="tabular-nums font-medium">
+                    {formatCurrency(calcResult.total, calcResult.currency || "RUB")}
+                  </span>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setOpenCalc(false)} disabled={calcLoading}>
+              Закрыть
+            </Button>
+            <Button variant="primary" onClick={runCalculateFee} disabled={calcLoading}>
+              {calcLoading ? <RefreshCw className="w-4 h-4 mr-xs animate-spin" /> : <Calculator className="w-4 h-4 mr-xs" />}
+              Рассчитать
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={openDelete}
@@ -645,6 +955,6 @@ export default function PaymentMethodEditPage() {
         loading={deleting}
         onConfirm={onDelete}
       />
-    </div>
-  );
+    </AppLayout>
+  )
 }

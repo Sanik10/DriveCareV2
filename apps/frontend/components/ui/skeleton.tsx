@@ -6,25 +6,22 @@ export interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   radius?: "sm" | "md" | "lg" | "xl" | "full";
 }
 
-/**
- * Локальный Skeleton без зависимостей от Mantine.
- * Устраняет ошибку "MantineProvider was not found..." и подходит для shadcn/Tailwind.
- */
 const radiusMap: Record<NonNullable<SkeletonProps["radius"]>, string> = {
-  sm: "rounded-md",
-  md: "rounded-lg",
-  lg: "rounded-xl",
-  xl: "rounded-2xl",
+  sm: "rounded-sm",
+  md: "rounded-md",
+  lg: "rounded-lg",
+  xl: "rounded-xl",
   full: "rounded-full",
 };
 
 const Skeleton = React.forwardRef<HTMLDivElement, SkeletonProps>(
-  ({ className, radius = "xl", ...props }, ref) => {
+  // По умолчанию используем строгое скругление "md" (8px), а не огромное "xl"
+  ({ className, radius = "md", ...props }, ref) => {
     return (
       <div
         ref={ref}
         className={cn(
-          "animate-pulse bg-gray-200/40 dark:bg-gray-700/30",
+          "animate-pulse bg-muted", // Системный цвет вместо хардкода gray-200
           radiusMap[radius],
           className
         )}

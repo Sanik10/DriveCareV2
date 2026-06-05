@@ -46,6 +46,9 @@ export class Order {
   @Column({ type: 'uuid' })
   vehicleId: string;
 
+  @Column({ type: 'uuid', nullable: true })
+  updatedBy: string | null;
+
   @Column({ type: 'varchar', length: 50 })
   orderNumber: string;
 
@@ -119,6 +122,10 @@ export class Order {
   @ManyToOne(() => User, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'assignedTo' })
   assignedToUser: User;
+
+  @ManyToOne(() => User, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'updatedBy' })
+  updatedByUser: User;
 
   @OneToMany(() => OrderService, (orderService) => orderService.order)
   orderServices: OrderService[];

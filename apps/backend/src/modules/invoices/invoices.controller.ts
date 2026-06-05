@@ -156,7 +156,7 @@ export class InvoicesController {
   }
 
   @Patch(':id/status')
-  @Roles('company_owner', 'company_admin', 'manager') // cashier убран
+  @Roles('company_owner', 'company_admin', 'manager')
   @ApiOperation({
     summary: 'Изменение статуса счета',
     description: 'Изменение статуса счета в рамках workflow. Доступно manager+.',
